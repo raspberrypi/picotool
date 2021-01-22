@@ -1242,7 +1242,7 @@ uint32_t find_binary_start(range_map<size_t>& rmap) {
 }
 
 file_memory_access get_file_memory_access() {
-    FILE *file = get_file("r");
+    FILE *file = get_file("rb");
     range_map<size_t> rmap;
     uint32_t binary_start;
     try {
