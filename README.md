@@ -373,19 +373,19 @@ gives
 ... more macro call stack of doom
 ```
 
-## Setting common fields from Cmake
+## Setting common fields from CMake
 
 You can use 
 
 ```cmake
 pico_set_program_name(foo "not foo") # as "foo" would be the default
 pico_set_program_description(foo "this is a foo")
-pico_set_prorgam_version_string(foo "0.00001a")
+pico_set_program_version_string(foo "0.00001a")
 pico_set_program_url(foo "www.plinth.com/foo")
 ```
 
 Note all of these are passed as command line arguments to the compilation, so if you plan to use
-quotes, newlines etc you may have better luck defining vi bi_decl in the code.
+quotes, newlines etc you may have better luck defining via bi_decl in the code.
 
 ## Additional binary information/picotool features
 
