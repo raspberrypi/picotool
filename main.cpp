@@ -837,28 +837,28 @@ private:
 
 static void read_and_check_elf32_header(FILE *in, elf32_header& eh_out) {
     if (1 != fread(&eh_out, sizeof(eh_out), 1, in)) {
-        fail(ERROR_FORMAT, "'" + settings.filename +" is not an ELF file");
+        fail(ERROR_FORMAT, "'" + settings.filename +"' is not an ELF file");
     }
     if (eh_out.common.magic != ELF_MAGIC) {
-        fail(ERROR_FORMAT, "'" + settings.filename +" is not an ELF file");
+        fail(ERROR_FORMAT, "'" + settings.filename +"' is not an ELF file");
     }
     if (eh_out.common.version != 1 || eh_out.common.version2 != 1) {
-        fail(ERROR_FORMAT, "'" + settings.filename +" has an unsupported  ELF version");
+        fail(ERROR_FORMAT, "'" + settings.filename +"' has an unsupported  ELF version");
     }
     if (eh_out.common.arch_class != 1 || eh_out.common.endianness != 1) {
-        fail(ERROR_INCOMPATIBLE, "'" + settings.filename +" is not a 32 bit little-endian ELF");
+        fail(ERROR_INCOMPATIBLE, "'" + settings.filename +"' is not a 32 bit little-endian ELF");
     }
     if (eh_out.eh_size != sizeof(struct elf32_header)) {
-        fail(ERROR_FORMAT, "'" + settings.filename + "is not valid");
+        fail(ERROR_FORMAT, "'" + settings.filename + "' is not valid");
     }
     if (eh_out.common.machine != EM_ARM) {
-        fail(ERROR_FORMAT, "'" + settings.filename +" is not an ARM executable");
+        fail(ERROR_FORMAT, "'" + settings.filename +"' is not an ARM executable");
     }
     if (eh_out.common.abi != 0) {
-        fail(ERROR_INCOMPATIBLE, "'" + settings.filename +" has the wrong architecture");
+        fail(ERROR_INCOMPATIBLE, "'" + settings.filename +"' has the wrong architecture");
     }
     if (eh_out.flags & EF_ARM_ABI_FLOAT_HARD) {
-        fail(ERROR_INCOMPATIBLE, "'" + settings.filename  +" has the wrong architecture (hard float)");
+        fail(ERROR_INCOMPATIBLE, "'" + settings.filename  +"' has the wrong architecture (hard float)");
     }
 }
 
