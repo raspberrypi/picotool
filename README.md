@@ -16,7 +16,7 @@ cmake ..
 make
 ```
 
-for Windows non mingw/lsw:
+for Windows non MinGW/WSL:
 
 ```bash
 mkdir build
