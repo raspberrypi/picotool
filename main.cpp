@@ -2025,7 +2025,7 @@ int main(int argc, char **argv) {
                                 std::cout << bus_device_string(d.first) << description << "\n";
                             }
                         };
-                        printer(dr_vidpid_bootrom_cant_connect, " appears to be a RP2040 device in BOOTSEL mode, but picotool was unable to connect");
+                        printer(dr_vidpid_bootrom_cant_connect, " appears to be a RP2040 device in BOOTSEL mode, but picotool was unable to connect. Try again with sudo.");
                         printer(dr_vidpid_picoprobe, " appears to be a RP2040 PicoProbe device not in BOOTSEL mode.");
                         printer(dr_vidpid_micropython, " appears to be a RP2040 MicroPython device not in BOOTSEL mode.");
                         rc = ERROR_NO_DEVICE;
