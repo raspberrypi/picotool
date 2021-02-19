@@ -1318,7 +1318,7 @@ void info_guts(memory_access &raw_access) {
             map<string, vector<string>> named_feature_group_values;
 
             string program_name, program_build_date, program_version, program_url, program_description;
-            string pico_board, sdk_version;
+            string pico_board, sdk_version, boot2_name;
             vector<string> program_features, build_attributes;
             
             uint32_t binary_end = 0;
@@ -1359,6 +1359,7 @@ void info_guts(memory_access &raw_access) {
                 else if (id == BINARY_INFO_ID_RP_PROGRAM_BUILD_ATTRIBUTE) build_attributes.push_back(value);
                 else if (id == BINARY_INFO_ID_RP_PICO_BOARD) pico_board = value;
                 else if (id == BINARY_INFO_ID_RP_SDK_VERSION) sdk_version = value;
+                else if (id == BINARY_INFO_ID_RP_BOOT2_NAME) boot2_name = value;
             });
             visitor.pin([&](uint pin, const string &name) {
                 pins[pin].push_back(name);
@@ -1434,6 +1435,7 @@ void info_guts(memory_access &raw_access) {
                 select_group(build_info);
                 info_pair("sdk version", sdk_version);
                 info_pair("pico_board", pico_board);
+                info_pair("boot2_name", boot2_name);
                 info_pair("build date", program_build_date);
                 info_pair("build attributes", cli::join(build_attributes, "\n"));
             }
