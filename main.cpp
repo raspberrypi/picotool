@@ -1615,7 +1615,7 @@ void save_command::execute(device_map &devices) {
         }
     } else {
         end = FLASH_START + guess_flash_size(raw_access);
-        if (end == 0) {
+        if (end <= FLASH_START) {
             fail(ERROR_NOT_POSSIBLE, "Cannot determine the flash size, so cannot save the entirety of flash, try --range.");
         }
     }
