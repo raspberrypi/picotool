@@ -1550,7 +1550,7 @@ void info_guts(memory_access &raw_access) {
                     }
                     for(const auto& item : info) {
                         fos.first_column(1);
-                        fos << (item.first + ":");;
+                        fos << (item.first + ":");
                         fos.first_column(1 + tab);
                         fos << (item.second + "\n");
                     }
@@ -1820,12 +1820,20 @@ bool load_command::execute(device_map &devices) {
         }
     }
     auto ranges = get_colaesced_ranges(file_access);
+    bool uses_flash = false;
+    uint32_t flash_min = std::numeric_limits<uint32_t>::max();
+    uint32_t flash_max = std::numeric_limits<uint32_t>::min();
     for (auto mem_range : ranges) {
         enum memory_type t1 = get_memory_type(mem_range.from);
         enum memory_type t2 = get_memory_type(mem_range.to);
         if (t1 != t2 || t1 == invalid || t1 == rom) {
             fail(ERROR_FORMAT, "File to load contained an invalid memory range 0x%08x-0x%08x", mem_range.from,
                  mem_range.to);
+        }
+        if (t1 == flash) {
+            uses_flash = true;
+            flash_min = std::min(flash_min, mem_range.from);
+            flash_max = std::max(flash_max, mem_range.to);
         }
         if (settings.load.no_overwrite && mem_range.intersects(flash_binary_range)) {
             if (flash_binary_end_unknown) {
@@ -1835,6 +1843,18 @@ bool load_command::execute(device_map &devices) {
             } else {
                 fail(ERROR_NOT_POSSIBLE, "-n option specified, and the loaded data range clashes with the existing flash binary range %08x->%08x",
                      flash_binary_range.from, flash_binary_range.to);
+            }
+        }
+    }
+    if (uses_flash) {
+        int32_t size_guess = guess_flash_size(raw_access);
+        if (size_guess > 0) {
+            assert(flash_max > flash_min);
+            uint32_t flash_data_size = flash_max - flash_min;
+            assert(flash_min >= FLASH_START);
+            uint32_t flash_start_offset = flash_min - FLASH_START;
+            if ((flash_start_offset + flash_data_size) > size_guess) {
+                fail(ERROR_NOT_POSSIBLE, "File to load is too big to fit in flash");
             }
         }
     }
