@@ -15,19 +15,19 @@ Windows: download from here https://libusb.info/
 If you are on Windows, set LIBUSB_ROOT environment variable to the install directory
 
 ```console
-$ mkdir build
-$ cd build
-$ cmake ..
-$ make
+mkdir build
+cd build
+cmake ..
+make
 ```
 
 for Windows non mingw/lsw:
 
 ```console
-$ mkdir build
-$ cd build
-$ cmake -G "NMake Makefiles" ..
-$ nmake
+mkdir build
+cd build
+cmake -G "NMake Makefiles" ..
+nmake
 ```
 ## Overview
 
