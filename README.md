@@ -255,7 +255,7 @@ could trivially add "MicroPython libraries:" etc to the `picotool` output withou
 
 ### Pins
 
-This is certainly handy when you have an execute called 'hello_world.elf' but you forgot what board it is built for...
+This is certainly handy when you have an executable called 'hello_world.elf' but you forgot what board it is built for...
 
 Static (fixed) pin assignments can be recorded in the binary in very compact form:
 
@@ -313,8 +313,8 @@ bi_decl_if_func_used(bi_pin_mask_with_name(0x1f << (PICO_SCANVIDEO_COLOR_PIN_BAS
 
 ### Details
 
-Things are designed to waste as little space as possible, but you can turn everything of with preprocessor var `PICO_NO_BINARY_INFO=1`. Additionally
-any SDK code that inserts binary info cane be separately excluded by its own preprocesor var.
+Things are designed to waste as little space as possible, but you can turn everything off with preprocessor var `PICO_NO_BINARY_INFO=1`. Additionally
+any SDK code that inserts binary info can be separately excluded by its own preprocesor var.
 
 You need
 ```c
@@ -397,7 +397,7 @@ a version number in a header
 ### Block devices
 
 MicroPython and CircuitPython, eventually the SDK and others may support one or more storage devices in flash. We already
-have macros to define these although picotool doesn't do wanything with them yet... but backup/restore/file copy and even fuse mount
+have macros to define these although picotool doesn't do anything with them yet... but backup/restore/file copy and even fuse mount
 in the future might be interesting.
 
 I suggest we tag these now... 
@@ -433,11 +433,11 @@ enum {
 ### USB device descriptors
 
 Seems like tagging these might be nice (we just need to store the pointer to it assuming - as is often the case -
-the descriptor is just a linear chunk of memory) ... I assume there is a tool out there to prettyify such a think if picotool dumps the descriptor
-in binary.. 
+the descriptor is just a linear chunk of memory) ... I assume there is a tool out there to prettyify such a thing if picotool dumps the descriptor
+in binary.
 
 ### Issues
 
 If you ctrl+c out of the middle of a long operation, then libusb seems to get a bit confused, which means we aren't able
 to unlock our lockout of USB MSD writes (we have turned them off so the user doesn't step on their own toes). Simply running
-`picotool info` again will unlock it properly the nex time (or you can reboot the device).
+`picotool info` again will unlock it properly the next time (or you can reboot the device).
