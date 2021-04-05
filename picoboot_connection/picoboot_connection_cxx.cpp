@@ -8,6 +8,11 @@
 #include <system_error>
 #include <map>
 #include <algorithm>
+#include <cstdint>
+#include "pico/platform.h"
+#define le_uint16_t stored_little_endian<uint16_t>
+#define le_uint32_t stored_little_endian<uint32_t>
+#define le_int32_t stored_little_endian<int32_t>
 #include "picoboot_connection_cxx.h"
 
 using picoboot::connection;
