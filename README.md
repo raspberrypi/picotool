@@ -440,4 +440,4 @@ in binary..
 
 If you ctrl+c out of the middle of a long operation, then libusb seems to get a bit confused, which means we aren't able
 to unlock our lockout of USB MSD writes (we have turned them off so the user doesn't step on their own toes). Simply running
-`picotool info` again will unlock it properly the nex time (or you can reboot the device).
+`picotool info` again will unlock it properly the next time (or you can reboot the device).
