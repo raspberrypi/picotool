@@ -19,11 +19,16 @@
 #include <array>
 #include <cstring>
 #include <cstdarg>
+#include <cstdint>
 #include <algorithm>
 #include <iomanip>
 #include <numeric>
 #include <memory>
 #include <functional>
+#include "pico/platform.h"
+#define le_uint16_t stored_little_endian<uint16_t>
+#define le_uint32_t stored_little_endian<uint32_t>
+#define le_int32_t stored_little_endian<int32_t>
 #include "boot/uf2.h"
 #include "picoboot_connection_cxx.h"
 #include "pico/binary_info.h"
@@ -587,6 +592,12 @@ int parse(const int argc, char **argv) {
     return 0;
 }
 
+// This is an le_uint32_t which can be initialized (but not put in a packed struct)
+class instruction_t : le_uint32_t {
+public:
+  instruction_t(uint32_t i) { *this = i; }
+};
+
 template <typename T> struct raw_type_mapping {
 };
 
@@ -599,8 +610,9 @@ template <typename T> struct raw_type_mapping {
 // these types may be filled directly from byte representation
 SAFE_MAPPING(uint8_t);
 SAFE_MAPPING(char);
-SAFE_MAPPING(uint16_t);
-SAFE_MAPPING(uint32_t);
+SAFE_MAPPING(le_uint16_t);
+SAFE_MAPPING(le_uint32_t);
+SAFE_MAPPING(instruction_t);
 SAFE_MAPPING(binary_info_core_t);
 SAFE_MAPPING(binary_info_id_and_int_t);
 SAFE_MAPPING(binary_info_id_and_string_t);
@@ -624,14 +636,14 @@ struct memory_access {
 
     uint32_t read_int(uint32_t addr) {
         assert(!(addr & 3u));
-        uint32_t rc;
+        le_uint32_t rc;
         read(addr, (uint8_t *)&rc, 4);
         return rc;
     }
 
     uint32_t read_short(uint32_t addr) {
         assert(!(addr & 1u));
-        uint16_t rc;
+        le_uint16_t rc;
         read(addr, (uint8_t *)&rc, 2);
         return rc;
     }
@@ -713,7 +725,7 @@ struct picoboot_memory_access : public memory_access {
             // read by memcpy instead
             uint program_base = SRAM_START + 0x4000;
             // program is "return memcpy(SRAM_BASE, 0, 0x4000);"
-            std::vector<uint32_t> program = {
+            std::vector<instruction_t> program = {
                     0x07482101, // movs r1, #1;       lsls r0, r1, #29
                     0x2100038a, // lsls r2, r1, #14;  movs r1, #0
                     0x47184b00, // ldr  r3, [pc, #0]; bx r3
@@ -881,7 +893,7 @@ static void __noreturn fail_write_error() {
 }
 
 struct binary_info_header {
-    vector<uint32_t> bi_addr;
+    vector<le_uint32_t> bi_addr;
     range_map<uint32_t> reverse_copy_mapping;
 };
 
@@ -891,7 +903,7 @@ bool find_binary_info(memory_access& access, binary_info_header &hdr) {
         fail(ERROR_FORMAT, "UF2 file does not contain a valid RP2 executable image");
     }
     if (base == FLASH_START) base += 0x100;
-    vector<uint32_t> buffer = access.read_vector<uint32_t>(base, 64);
+    vector<le_uint32_t> buffer = access.read_vector<le_uint32_t>(base, 64);
     for(uint i=0;i<64;i++) {
         if (buffer[i] == BINARY_INFO_MARKER_START) {
             if (i + 4 < 64 && buffer[i+4] == BINARY_INFO_MARKER_END) {
@@ -905,9 +917,9 @@ bool find_binary_info(memory_access& access, binary_info_header &hdr) {
                         is_size_aligned(to, 4)) {
                     access.read_into_vector(from, (to - from) / 4, hdr.bi_addr);
                     uint32_t cpy_table = buffer[i+3];
-                    vector<uint32_t> mapping;
+                    vector<le_uint32_t> mapping;
                     do {
-                        mapping = access.read_vector<uint32_t>(cpy_table, 3);
+                        mapping = access.read_vector<le_uint32_t>(cpy_table, 3);
                         if (!mapping[0]) break;
                         // from, to_start, to_end
                         hdr.reverse_copy_mapping.insert(range(mapping[1], mapping[2]), mapping[0]);
@@ -1042,11 +1054,11 @@ struct bi_visitor_base {
     }
 
     virtual void zero_terminated_bi_list(memory_access& access, const binary_info_core_t &bi_core, uint32_t addr) {
-        uint32_t bi_addr;
-        access.read_raw<uint32_t>(addr,bi_addr);
+        le_uint32_t bi_addr;
+        access.read_raw<le_uint32_t>(addr,bi_addr);
         while (bi_addr) {
             visit(access, addr);
-            access.read_raw<uint32_t>(addr,bi_addr);
+            access.read_raw<le_uint32_t>(addr,bi_addr);
         }
     }
 
@@ -1918,7 +1930,7 @@ void reboot_command::execute(device_map &devices) {
     } else {
         picoboot_memory_access raw_access(con);
         uint program_base = SRAM_START;
-        std::vector<uint32_t> program = {
+        std::vector<instruction_t> program = {
                 0x20002100, // movs r0, #0;       movs r1, #0
                 0x47104a00, // ldr  r2, [pc, #0]; bx r2
                 bootrom_func_lookup(raw_access, rom_table_code('U','B'))

@@ -7,6 +7,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <stdint.h>
+
+#define le_uint16_t le_uint16_t
+#define le_uint32_t le_uint32_t
+#define le_int32_t le_int32_t
+
+typedef struct { uint8_t v[2]; } le_uint16_t;
+typedef struct { uint8_t v[4]; } le_uint32_t;
+typedef le_uint32_t le_int32_t;
 
 #include "picoboot_connection.h"
 
@@ -24,6 +33,16 @@ static bool verbose;
 #define PRODUCT_ID_RP2_USBBOOT 0x0003u
 #define PRODUCT_ID_PICOPROBE   0x0004u
 #define PRODUCT_ID_MICROPYTHON 0x0005u
+
+static uint32_t le32_to_host(le_uint32_t le)
+{
+  return le.v[0] | (le.v[1] << 8) | (le.v[2] << 16) | (le.v[3] << 24);
+}
+
+static le_uint32_t host_to_le32(uint32_t host)
+{
+  return (le_uint32_t){{ host, host>>8, host>>16, host>>24 }};
+}
 
 uint32_t crc32_for_byte(uint32_t remainder) {
     const uint32_t POLYNOMIAL = 0x4C11DB7;
@@ -200,8 +219,8 @@ int picoboot_cmd(libusb_device_handle *usb_device, struct picoboot_cmd *cmd, uin
     int ret;
 
     static int token = 1;
-    cmd->dMagic = PICOBOOT_MAGIC;
-    cmd->dToken = token++;
+    cmd->dMagic = host_to_le32(PICOBOOT_MAGIC);
+    cmd->dToken = host_to_le32(token++);
     ret = libusb_bulk_transfer(usb_device, out_ep, (uint8_t *) cmd, sizeof(struct picoboot_cmd), &sent, 3000);
 
     if (ret != 0 || sent != sizeof(struct picoboot_cmd)) {
@@ -214,22 +233,22 @@ int picoboot_cmd(libusb_device_handle *usb_device, struct picoboot_cmd *cmd, uin
         timeout = one_time_bulk_timeout;
         one_time_bulk_timeout = 0;
     }
-    if (cmd->dTransferLength != 0) {
-        assert(buf_size >= cmd->dTransferLength);
+    if (le32_to_host(cmd->dTransferLength) != 0) {
+        assert(buf_size >= le32_to_host(cmd->dTransferLength));
         if (cmd->bCmdId & 0x80u) {
-            if (verbose) output("  receive %d...\n", cmd->dTransferLength);
+            if (verbose) output("  receive %d...\n", (int)le32_to_host(cmd->dTransferLength));
             int received = 0;
-            ret = libusb_bulk_transfer(usb_device, in_ep, buffer, cmd->dTransferLength, &received, timeout);
-            if (ret != 0 || received != (int) cmd->dTransferLength) {
-                output("  ...failed to receive data %d %d/%d\n", ret, received, cmd->dTransferLength);
+            ret = libusb_bulk_transfer(usb_device, in_ep, buffer, le32_to_host(cmd->dTransferLength), &received, timeout);
+            if (ret != 0 || received != (int) le32_to_host(cmd->dTransferLength)) {
+                output("  ...failed to receive data %d %d/%d\n", ret, received, (int)le32_to_host(cmd->dTransferLength));
                 if (!ret) ret = 1;
                 return ret;
             }
         } else {
-            if (verbose) output("  send %d...\n", cmd->dTransferLength);
-            ret = libusb_bulk_transfer(usb_device, out_ep, buffer, cmd->dTransferLength, &sent, timeout);
-            if (ret != 0 || sent != (int) cmd->dTransferLength) {
-                output("  ...failed to send data %d %d/%d\n", ret, sent, cmd->dTransferLength);
+            if (verbose) output("  send %d...\n", (int)le32_to_host(cmd->dTransferLength));
+            ret = libusb_bulk_transfer(usb_device, out_ep, buffer, le32_to_host(cmd->dTransferLength), &sent, timeout);
+            if (ret != 0 || sent != (int) le32_to_host(cmd->dTransferLength)) {
+                output("  ...failed to send data %d %d/%d\n", ret, sent, (int)le32_to_host(cmd->dTransferLength));
                 if (!ret) ret = 1;
                 picoboot_cmd_status_verbose(usb_device, NULL, true);
                 return ret;
@@ -242,10 +261,10 @@ int picoboot_cmd(libusb_device_handle *usb_device, struct picoboot_cmd *cmd, uin
     uint8_t spoon[64];
     if (cmd->bCmdId & 0x80u) {
         if (verbose) output("zero length out\n");
-        ret = libusb_bulk_transfer(usb_device, out_ep, spoon, 1, &received, cmd->dTransferLength == 0 ? timeout : 3000);
+        ret = libusb_bulk_transfer(usb_device, out_ep, spoon, 1, &received, le32_to_host(cmd->dTransferLength) == 0 ? timeout : 3000);
     } else {
         if (verbose) output("zero length in\n");
-        ret = libusb_bulk_transfer(usb_device, in_ep, spoon, 1, &received, cmd->dTransferLength == 0 ? timeout : 3000);
+        ret = libusb_bulk_transfer(usb_device, in_ep, spoon, 1, &received, le32_to_host(cmd->dTransferLength) == 0 ? timeout : 3000);
     }
     return ret;
 }
@@ -256,7 +275,7 @@ int picoboot_exclusive_access(libusb_device_handle *usb_device, uint8_t exclusiv
     cmd.bCmdId = PC_EXCLUSIVE_ACCESS;
     cmd.exclusive_cmd.bExclusive = exclusive;
     cmd.bCmdSize = sizeof(struct picoboot_exclusive_cmd);
-    cmd.dTransferLength = 0;
+    cmd.dTransferLength = host_to_le32(0);
     return picoboot_cmd(usb_device, &cmd, NULL, 0);
 }
 
@@ -265,7 +284,7 @@ int picoboot_exit_xip(libusb_device_handle *usb_device) {
     if (verbose) output("EXIT_XIP\n");
     cmd.bCmdId = PC_EXIT_XIP;
     cmd.bCmdSize = 0;
-    cmd.dTransferLength = 0;
+    cmd.dTransferLength = host_to_le32(0);
     return picoboot_cmd(usb_device, &cmd, NULL, 0);
 }
 
@@ -274,7 +293,7 @@ int picoboot_enter_cmd_xip(libusb_device_handle *usb_device) {
     if (verbose) output("ENTER_CMD_XIP\n");
     cmd.bCmdId = PC_ENTER_CMD_XIP;
     cmd.bCmdSize = 0;
-    cmd.dTransferLength = 0;
+    cmd.dTransferLength = host_to_le32(0);
     return picoboot_cmd(usb_device, &cmd, NULL, 0);
 }
 
@@ -283,10 +302,10 @@ int picoboot_reboot(libusb_device_handle *usb_device, uint32_t pc, uint32_t sp, 
     if (verbose) output("REBOOT %08x %08x %u\n", (uint) pc, (uint) sp, (uint) delay_ms);
     cmd.bCmdId = PC_REBOOT;
     cmd.bCmdSize = sizeof(cmd.reboot_cmd);
-    cmd.dTransferLength = 0;
-    cmd.reboot_cmd.dPC = pc;
-    cmd.reboot_cmd.dSP = sp;
-    cmd.reboot_cmd.dDelayMS = delay_ms;
+    cmd.dTransferLength = host_to_le32(0);
+    cmd.reboot_cmd.dPC = host_to_le32(pc);
+    cmd.reboot_cmd.dSP = host_to_le32(sp);
+    cmd.reboot_cmd.dDelayMS = host_to_le32(delay_ms);
     return picoboot_cmd(usb_device, &cmd, NULL, 0);
 }
 
@@ -297,8 +316,8 @@ int picoboot_exec(libusb_device_handle *usb_device, uint32_t addr) {
     if (verbose) output("EXEC %08x\n", (uint) addr);
     cmd.bCmdId = PC_EXEC;
     cmd.bCmdSize = sizeof(cmd.address_only_cmd);
-    cmd.dTransferLength = 0;
-    cmd.address_only_cmd.dAddr = addr;
+    cmd.dTransferLength = host_to_le32(0);
+    cmd.address_only_cmd.dAddr = host_to_le32(addr);
     return picoboot_cmd(usb_device, &cmd, NULL, 0);
 }
 
@@ -307,9 +326,9 @@ int picoboot_flash_erase(libusb_device_handle *usb_device, uint32_t addr, uint32
     if (verbose) output("FLASH_ERASE %08x+%08x\n", (uint) addr, (uint) len);
     cmd.bCmdId = PC_FLASH_ERASE;
     cmd.bCmdSize = sizeof(cmd.range_cmd);
-    cmd.range_cmd.dAddr = addr;
-    cmd.range_cmd.dSize = len;
-    cmd.dTransferLength = 0;
+    cmd.range_cmd.dAddr = host_to_le32(addr);
+    cmd.range_cmd.dSize = host_to_le32(len);
+    cmd.dTransferLength = host_to_le32(0);
     return picoboot_cmd(usb_device, &cmd, NULL, 0);
 }
 
@@ -318,8 +337,8 @@ int picoboot_vector(libusb_device_handle *usb_device, uint32_t addr) {
     if (verbose) output("VECTOR %08x\n", (uint) addr);
     cmd.bCmdId = PC_VECTORIZE_FLASH;
     cmd.bCmdSize = sizeof(cmd.address_only_cmd);
-    cmd.range_cmd.dAddr = addr;
-    cmd.dTransferLength = 0;
+    cmd.range_cmd.dAddr = host_to_le32(addr);
+    cmd.dTransferLength = host_to_le32(0);
     return picoboot_cmd(usb_device, &cmd, NULL, 0);
 }
 
@@ -328,8 +347,8 @@ int picoboot_write(libusb_device_handle *usb_device, uint32_t addr, uint8_t *buf
     if (verbose) output("WRITE %08x+%08x\n", (uint) addr, (uint) len);
     cmd.bCmdId = PC_WRITE;
     cmd.bCmdSize = sizeof(cmd.range_cmd);
-    cmd.range_cmd.dAddr = addr;
-    cmd.range_cmd.dSize = cmd.dTransferLength = len;
+    cmd.range_cmd.dAddr = host_to_le32(addr);
+    cmd.range_cmd.dSize = cmd.dTransferLength = host_to_le32(len);
     return picoboot_cmd(usb_device, &cmd, buffer, len);
 }
 
@@ -339,8 +358,8 @@ int picoboot_read(libusb_device_handle *usb_device, uint32_t addr, uint8_t *buff
     struct picoboot_cmd cmd;
     cmd.bCmdId = PC_READ;
     cmd.bCmdSize = sizeof(cmd.range_cmd);
-    cmd.range_cmd.dAddr = addr;
-    cmd.range_cmd.dSize = cmd.dTransferLength = len;
+    cmd.range_cmd.dAddr = host_to_le32(addr);
+    cmd.range_cmd.dSize = cmd.dTransferLength = host_to_le32(len);
     int ret = picoboot_cmd(usb_device, &cmd, buffer, len);
     if (!ret && len < 256 && verbose) {
         for (uint32_t i = 0; i < len; i += 32) {
