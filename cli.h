@@ -18,6 +18,7 @@
 #include <iostream>
 #include <numeric>
 #include <sstream>
+#include <limits>
 
 /**
  * Note this is a hastily hacked together command line parser.
