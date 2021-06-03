@@ -272,13 +272,10 @@ auto device_selection =
         (option("--bus") & integer("bus").min_value(1).max_value(255).set(settings.bus)
             .if_missing([] { return "missing bus number"; })) % "Filter devices by USB bus number" +
         (option("--address") & integer("addr").min_value(1).max_value(127).set(settings.address)
-            .if_missing([] { return "missing address"; })) % "Filter devices by USB device address" +
-#if defined(_WIN32)
-        option('f', "--force").set(settings.force) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. Unless the command itself causes a reboot, the device will be rebooted back to application mode" +
+            .if_missing([] { return "missing address"; })) % "Filter devices by USB device address"
+#if !defined(_WIN32)
+        + option('f', "--force").set(settings.force) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. Unless the command itself causes a reboot, the device will be rebooted back to application mode" +
         option('F', "--force-no-reboot").set(settings.no_reboot_if_forced) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. Unless the command itself causes a reboot, the device will be left connected and accessible to picotool, but without the RPI-RP2 drive mounted"
-#else
-        option('f', "--force").set(settings.force) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. Unless the command itself causes a reboot, the device will be rebooted back to application mode. In either case the RPI-RP2 drive may briefly appear during the forced command" +
-        option('F', "--force-no-reboot").set(settings.no_reboot_if_forced) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. Unless the command itself causes a reboot, the device will be left connected and accessible to picotool, with the RPI-RP2 drive mounted"
 #endif
     ).min(0).doc_non_optional(true);
 
@@ -449,6 +446,9 @@ struct reboot_command : public cmd {
         (
             option('a', "--application").clear(settings.reboot_usb) % "Reboot back into the application (this is the default)" +
             option('u', "--usb").set(settings.reboot_usb) % "Reboot back into BOOTSEL mode "
+#if defined(_WIN32)
+            + option('f', "--force").set(settings.force) % "Force a device not in BOOTSEL mode but running compatible code to reboot."
+#endif
         ).min(0).doc_non_optional(true) % "Reboot type" +
         device_selection % "Selecting the device to reboot";
     }
@@ -2010,16 +2010,7 @@ static int reboot_device(libusb_device *device, bool bootsel, uint disable_mask=
 
 void reboot_command::execute(device_map &devices) {
     if (settings.force) {
-        // cannot
-#if !defined(_WIN32)
-        uint disable_mask = settings.reboot_usb ? 1 : 0; // this is bit 0 for the USB drive
-#else
-        // On Windows we cannot disable the USB drive as interface 0 changes type as as a result,
-        // and Windows starts breathing into a paper bag.
-        // The upshort is that on windows, the RPI-RP2 drive will briefly appear during forced commands
-        uint disable_mask = 0;
-#endif
-        reboot_device(devices[dr_vidpid_stdio_usb][0].first, disable_mask);
+        reboot_device(devices[dr_vidpid_stdio_usb][0].first, settings.reboot_usb);
     } else {
 
         // not exclusive, because restoring un-exclusive could fail; also if we're rebooting, we don't much
@@ -2156,8 +2147,13 @@ int main(int argc, char **argv) {
                                 " appears to be a RP2040 PicoProbe device not in BOOTSEL mode.");
                         printer(dr_vidpid_micropython,
                                 " appears to be a RP2040 MicroPython device not in BOOTSEL mode.");
+#if defined(_WIN32)
+                        printer(dr_vidpid_stdio_usb,
+                                " appears to be a RP2040 device with a USB serial connection, not in BOOTSEL mode. You can reset it into BOOTSEL mode via 'picotool reset -f' first.");
+#else
                         printer(dr_vidpid_stdio_usb,
                                 " appears to be a RP2040 device with a USB serial connection, so consider -f or -F.");
+#endif
                         rc = ERROR_NO_DEVICE;
                     } else if (supported == cmd::device_support::one) {
                         if (devices[dr_vidpid_bootrom_ok].size() > 1 ||
