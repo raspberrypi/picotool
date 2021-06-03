@@ -39,5 +39,7 @@ else()
             COMPILER_INFO="${COMPILER_INFO}"
             )
     target_include_directories(picotool PRIVATE ${LIBUSB_INCLUDE_DIR})
+    # todo, this is a bit of an abstraction failure; but don't want to rev the SDK just for this right now
+    target_include_directories(picotool PRIVATE ${PICO_SDK_PATH}/src/rp2_common/pico_stdio_usb/include)
     target_link_libraries(picotool pico_binary_info boot_uf2_headers boot_picoboot_headers pico_platform_headers picoboot_connection_cxx ${LIBUSB_LIBRARIES})
 endif()
