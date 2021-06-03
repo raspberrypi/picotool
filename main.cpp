@@ -2191,7 +2191,7 @@ int main(int argc, char **argv) {
                         devs = nullptr;
                         to_close.clear();
                         devices.clear();
-                        sleep_ms(500);
+                        sleep_ms(1200);
 
                         // we now clear settings.force, because we expect the device to have rebooted and be available.
                         // we also clear any filters, because the device may have moved, so the only way we can find it
