@@ -2149,10 +2149,10 @@ int main(int argc, char **argv) {
                                 " appears to be a RP2040 MicroPython device not in BOOTSEL mode.");
 #if defined(_WIN32)
                         printer(dr_vidpid_stdio_usb,
-                                " appears to be a RP2040 device with a USB serial connection, not in BOOTSEL mode. You can reset it into BOOTSEL mode via 'picotool reset -f' first.");
+                                " appears to be a RP2040 device with a USB serial connection, not in BOOTSEL mode. You can force reset it into BOOTSEL mode via 'picotool reboot -f -u' first.");
 #else
                         printer(dr_vidpid_stdio_usb,
-                                " appears to be a RP2040 device with a USB serial connection, so consider -f or -F.");
+                                " appears to be a RP2040 device with a USB serial connection, so consider -f (or -F) to force reset it in order to run the command.");
 #endif
                         rc = ERROR_NO_DEVICE;
                     } else if (supported == cmd::device_support::one) {
