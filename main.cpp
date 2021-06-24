@@ -62,7 +62,6 @@ using std::map;
 typedef map<enum picoboot_device_result,vector<pair<libusb_device *, libusb_device_handle *>>> device_map;
 
 typedef unsigned int uint;
-static libusb_context *ctx;
 
 auto memory_names = map<enum memory_type, string>{
         {memory_type::sram, "RAM"},
@@ -223,7 +222,6 @@ struct cmd {
     virtual bool force_requires_pre_reboot() { return true; }
     virtual void execute(device_map& devices) = 0;
     const string& name() { return _name; }
-    bool quiet;
 private:
     string _name;
 };
@@ -240,6 +238,7 @@ struct _settings {
     bool offset_set = false;
     bool range_set = false;
     bool reboot_usb = false;
+    bool reboot_app_specified = false;
     bool force = false;
     bool no_reboot_if_forced = false;
 
@@ -274,8 +273,8 @@ auto device_selection =
         (option("--address") & integer("addr").min_value(1).max_value(127).set(settings.address)
             .if_missing([] { return "missing address"; })) % "Filter devices by USB device address"
 #if !defined(_WIN32)
-        + option('f', "--force").set(settings.force) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. Unless the command itself causes a reboot, the device will be rebooted back to application mode" +
-        option('F', "--force-no-reboot").set(settings.no_reboot_if_forced) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. Unless the command itself causes a reboot, the device will be left connected and accessible to picotool, but without the RPI-RP2 drive mounted"
+        + option('f', "--force").set(settings.force) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode" +
+        option('F', "--force-no-reboot").set(settings.no_reboot_if_forced) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the RPI-RP2 drive mounted"
 #endif
     ).min(0).doc_non_optional(true);
 
@@ -438,13 +437,14 @@ struct version_command : public cmd {
 } version_cmd;
 
 struct reboot_command : public cmd {
+    bool quiet;
     reboot_command() : cmd("reboot") {}
     void execute(device_map &devices) override;
 
     group get_cli() override {
         return
         (
-            option('a', "--application").clear(settings.reboot_usb) % "Reboot back into the application (this is the default)" +
+            option('a', "--application").set(settings.reboot_app_specified) % "Reboot back into the application (this is the default)" +
             option('u', "--usb").set(settings.reboot_usb) % "Reboot back into BOOTSEL mode "
 #if defined(_WIN32)
             + option('f', "--force").set(settings.force) % "Force a device not in BOOTSEL mode but running compatible code to reboot."
@@ -1968,7 +1968,7 @@ void verify_command::execute(device_map &devices) {
 }
 
 static int reboot_device(libusb_device *device, bool bootsel, uint disable_mask=0) {
-    // ok, the device isn't in USB boot mode, let's try to reboot via baud rate hack
+    // ok, the device isn't in USB boot mode, let's try to reboot via vender interface
     struct libusb_config_descriptor *config;
     int ret = libusb_get_active_config_descriptor(device, &config);
     if (ret) {
@@ -2075,6 +2075,8 @@ void cancelled(int) {
 }
 
 int main(int argc, char **argv) {
+    libusb_context *ctx;
+
     int tw=0, th=0;
     get_terminal_size(tw, th);
     if (tw) {
@@ -2097,6 +2099,11 @@ int main(int argc, char **argv) {
     try {
         signal(SIGINT, cancelled);
         signal(SIGTERM, cancelled);
+
+        if (settings.reboot_usb && settings.reboot_app_specified) {
+            fail(ERROR_ARGS, "Cannot specify both -u and -a reboot options");
+        }
+
         if (selected_cmd->get_device_support() != cmd::none) {
             if (libusb_init(&ctx)) {
                 fail(ERROR_USB, "Failed to initialise libUSB\n");
@@ -2163,13 +2170,16 @@ int main(int argc, char **argv) {
                         if (!devices[dr_vidpid_bootrom_ok].empty()) {
                             settings.force = false; // we have a device, so we're not forcing
                         }
+                    } else if (supported == cmd::device_support::zero_or_more && settings.force && !devices[dr_vidpid_bootrom_ok].empty()) {
+                        // we have usable devices, so lets use them without force
+                        settings.force = false;
                     }
                     break;
                 default:
                     break;
             }
             if (!rc) {
-                if (settings.force && ctx) { // actually ctx should never be null if force is set, but still
+                if (settings.force && ctx) { // actually ctx should never be null as we are targeting device if force is set, but still
                     if (devices[dr_vidpid_stdio_usb].size() != 1) {
                         fail(ERROR_NOT_POSSIBLE,
                              "Forced command requires a single rebootable RP2040 device to be targeted.");
@@ -2201,7 +2211,7 @@ int main(int argc, char **argv) {
                 selected_cmd->execute(devices);
                 if (tries) {
                     if (settings.no_reboot_if_forced) {
-                        printf("The device has been left accessible, but without the drive mounted; use 'picotool reboot' to reboot into regular BOOTSEL mode or application mode.");
+                        std::cout << "The device has been left accessible, but without the drive mounted; use 'picotool reboot' to reboot into regular BOOTSEL mode or application mode.\n";
                     } else {
                         // can only really do this with one device
                         if (devices[dr_vidpid_bootrom_ok].size() == 1) {
