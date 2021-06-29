@@ -1968,7 +1968,7 @@ void verify_command::execute(device_map &devices) {
 }
 
 static int reboot_device(libusb_device *device, bool bootsel, uint disable_mask=0) {
-    // ok, the device isn't in USB boot mode, let's try to reboot via vender interface
+    // ok, the device isn't in USB boot mode, let's try to reboot via vendor interface
     struct libusb_config_descriptor *config;
     int ret = libusb_get_active_config_descriptor(device, &config);
     if (ret) {
@@ -2075,7 +2075,7 @@ void cancelled(int) {
 }
 
 int main(int argc, char **argv) {
-    libusb_context *ctx;
+    libusb_context *ctx = nullptr;
 
     int tw=0, th=0;
     get_terminal_size(tw, th);
