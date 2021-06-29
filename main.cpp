@@ -253,6 +253,10 @@ struct _settings {
     struct {
         bool all = false;
     } save;
+
+    struct {
+        bool semantic = false;
+    } version;
 };
 _settings settings;
 std::shared_ptr<cmd> selected_cmd;
@@ -399,6 +403,30 @@ struct help_command : public cmd {
     }
 } help_cmd;
 
+struct version_command : public cmd {
+    version_command() : cmd("version") {}
+    void execute(device_map &devices) override {
+        if (settings.version.semantic)
+            std::cout << PICOTOOL_VERSION << "\n";
+        else
+            std::cout << "picotool v" << PICOTOOL_VERSION << " (" << SYSTEM_VERSION << ":" << COMPILER_INFO << ")\n";
+    }
+
+    device_support get_device_support() override {
+        return device_support::none;
+    }
+
+    group get_cli() override {
+        return group(
+                option('s', "--semantic").set(settings.version.semantic) % "Output semantic version number only"
+        );
+    }
+
+    string get_doc() const override {
+        return "Display picotool version";
+    }
+} version_cmd;
+
 struct reboot_command : public cmd {
     reboot_command() : cmd("reboot") {}
     void execute(device_map &devices) override;
@@ -423,6 +451,7 @@ vector<std::shared_ptr<cmd>> commands {
         std::shared_ptr<cmd>(new save_command()),
         std::shared_ptr<cmd>(new verify_command()),
         std::shared_ptr<cmd>(new reboot_command()),
+        std::shared_ptr<cmd>(new version_command()),
         std::shared_ptr<cmd>(new help_command()),
 };
 

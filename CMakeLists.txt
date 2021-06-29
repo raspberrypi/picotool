@@ -30,6 +30,14 @@ else()
     add_subdirectory(${PICO_SDK_PATH}/src/host/pico_platform pico_platform)
 
     add_executable(picotool main.cpp)
+    set(PICOTOOL_VERSION 1.1.0-develop)
+    set(SYSTEM_VERSION "${CMAKE_SYSTEM_NAME} ${CMAKE_SYSTEM_VERSION}")
+    set(COMPILER_INFO "${CMAKE_C_COMPILER_ID}-${CMAKE_C_COMPILER_VERSION}-${CMAKE_BUILD_TYPE}")
+    target_compile_definitions(picotool PRIVATE
+            PICOTOOL_VERSION="${PICOTOOL_VERSION}"
+            SYSTEM_VERSION="${SYSTEM_VERSION}"
+            COMPILER_INFO="${COMPILER_INFO}"
+            )
     target_include_directories(picotool PRIVATE ${LIBUSB_INCLUDE_DIR})
     target_link_libraries(picotool pico_binary_info boot_uf2_headers boot_picoboot_headers pico_platform_headers picoboot_connection_cxx ${LIBUSB_LIBRARIES})
 endif()
