@@ -2013,7 +2013,6 @@ void reboot_command::execute(device_map &devices) {
     if (settings.force) {
         reboot_device(devices[dr_vidpid_stdio_usb][0].first, settings.reboot_usb);
     } else {
-
         // not exclusive, because restoring un-exclusive could fail; also if we're rebooting, we don't much
         // care what else is happening.
         auto con = get_single_bootsel_device_connection(devices, false);
@@ -2032,11 +2031,11 @@ void reboot_command::execute(device_map &devices) {
             try {
                 con.exec(program_base);
             } catch (picoboot::connection_error &e) {
-                if (e.libusb_code == LIBUSB_ERROR_NO_DEVICE) {
-                    // not unreasonable once it reboots
-                    return;
-                }
-                throw e;
+                // the reset_usb_boot above has a very short delay, so it frequently causes libusb to return
+                // fairly unpredictable errors... i think it is best to ignore them, because catching a rare
+                // case where the reboot command fails, is probably less important than potentially confusing
+                // the user with spurious error messages
+                return;
             }
         }
     }
