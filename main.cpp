@@ -32,6 +32,10 @@
 #include "pico/stdio_usb/reset_interface.h"
 #include "elf.h"
 
+#if defined(__unix__) || defined(__APPLE__)
+#include <unistd.h>
+#endif
+
 // tsk namespace is polluted on windows
 #ifdef _MSC_VER
 #undef min
@@ -418,7 +422,7 @@ struct version_command : public cmd {
         if (settings.version.semantic)
             std::cout << PICOTOOL_VERSION << "\n";
         else
-            std::cout << "picotool v" << PICOTOOL_VERSION << " (" << SYSTEM_VERSION << ":" << COMPILER_INFO << ")\n";
+            std::cout << "picotool v" << PICOTOOL_VERSION << " (" << SYSTEM_VERSION << ", " << COMPILER_INFO << ")\n";
     }
 
     device_support get_device_support() override {
@@ -492,11 +496,8 @@ std::basic_string<T> uppercase(const std::basic_string<T>& s)
 clipp::formatting_ostream<std::ostream> fos(std::cout);
 
 static void sleep_ms(int ms) {
-#ifdef __unix__
-    timespec tspec;
-    tspec.tv_sec = ms / 1000;
-    tspec.tv_nsec = (ms % 1000) * 1000000ull;
-    nanosleep( &tspec, nullptr);
+#if defined(__unix__) || defined(__APPLE__)
+    usleep(ms * 1000);
 #else
     Sleep(ms);
 #endif
