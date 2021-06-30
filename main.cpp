@@ -2165,7 +2165,7 @@ int main(int argc, char **argv) {
                         } else {
                             // special case message for what is actually just reboot (the only command that doesn't require reboot first)
                             printer(dr_vidpid_stdio_usb,
-                                    " appears to be a RP2040 device with a USB serial connection, so consider -f (or -F) to force reset it.");
+                                    " appears to be a RP2040 device with a USB serial connection, so consider -f to force reset it.");
                         }
                         rc = ERROR_NO_DEVICE;
                     } else if (supported == cmd::device_support::one) {
