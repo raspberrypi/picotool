@@ -1210,6 +1210,9 @@ void build_rmap_elf(FILE *file, range_map<size_t>& rmap) {
     }
     if (eh.ph_num) {
         vector<elf32_ph_entry> entries(eh.ph_num);
+        if (fseek(file, eh.ph_offset, SEEK_SET)) {
+            return fail_read_error();
+        }
         if (eh.ph_num != fread(&entries[0], sizeof(struct elf32_ph_entry), eh.ph_num, file)) {
             fail_read_error();
         }
