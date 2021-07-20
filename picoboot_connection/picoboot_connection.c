@@ -24,6 +24,7 @@ static bool verbose;
 #define PRODUCT_ID_RP2_USBBOOT 0x0003u
 #define PRODUCT_ID_PICOPROBE   0x0004u
 #define PRODUCT_ID_MICROPYTHON 0x0005u
+#define PRODUCT_ID_STDIO_USB   0x000au
 
 uint32_t crc32_for_byte(uint32_t remainder) {
     const uint32_t POLYNOMIAL = 0x4C11DB7;
@@ -72,6 +73,8 @@ enum picoboot_device_result picoboot_open_device(libusb_device *device, libusb_d
                 return dr_vidpid_micropython;
             case PRODUCT_ID_PICOPROBE:
                 return dr_vidpid_picoprobe;
+            case PRODUCT_ID_STDIO_USB:
+                return dr_vidpid_stdio_usb;
             case PRODUCT_ID_RP2_USBBOOT:
                 break;
             default:
