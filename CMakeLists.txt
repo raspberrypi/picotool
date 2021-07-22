@@ -40,4 +40,6 @@ else()
             )
     target_include_directories(picotool PRIVATE ${LIBUSB_INCLUDE_DIR})
     target_link_libraries(picotool pico_binary_info boot_uf2_headers boot_picoboot_headers pico_platform_headers picoboot_connection_cxx ${LIBUSB_LIBRARIES})
+    # allow `make install`
+    install(TARGETS picotool)
 endif()
