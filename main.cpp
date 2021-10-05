@@ -2216,8 +2216,13 @@ int main(int argc, char **argv) {
                                 fos << bus_device_string(d.first) << description << "\n";
                             }
                         };
+#if defined(__linux__) || defined(__APPLE__)
                         printer(dr_vidpid_bootrom_cant_connect,
                                 " appears to be a RP2040 device in BOOTSEL mode, but picotool was unable to connect");
+#else
+                        printer(dr_vidpid_bootrom_cant_connect,
+                                " appears to be a RP2040 device in BOOTSEL mode, but picotool was unable to connect. Maybe try 'sudo' or check your permissions.");
+#endif
                         printer(dr_vidpid_picoprobe,
                                 " appears to be a RP2040 PicoProbe device not in BOOTSEL mode.");
                         printer(dr_vidpid_micropython,
