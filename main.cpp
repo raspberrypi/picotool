@@ -140,7 +140,24 @@ struct range {
         to = other.clamp(to);
     }
 
+    bool intersects(const range& other) const {
+        return !(other.from >= to || other.to < from);
+    }
+
 };
+
+static void __noreturn fail(int code, string msg) {
+    throw command_failure(code, std::move(msg));
+}
+
+static void __noreturn fail(int code, const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    static char error_msg[512];
+    vsnprintf(error_msg, sizeof(error_msg), format, args);
+    va_end(args);
+    fail(code, string(error_msg));
+}
 
 // ranges should not overlap
 template <typename T> struct range_map {
@@ -150,19 +167,19 @@ template <typename T> struct range_map {
         const uint32_t max_offset;
     };
 
-    void check_overlap(uint32_t p) {
-        auto f = m.lower_bound(p);
-        if (f != m.end()) {
-            assert(p >= f->first);
-            assert(p < f->second.first);
-        }
-    }
-
     void insert(const range& r, T t) {
         if (r.to != r.from) {
             assert(r.to > r.from);
-            check_overlap(r.from);
-            check_overlap(r.to);
+            // check we don't overlap any existing map entries
+            auto f = m.lower_bound(r.to); // f is first element that starts after or on r.to
+            if (f != m.begin()) {
+                f--;
+            }
+            if (f != m.end()) {
+                // due to edge cases above, f is either the entry before
+                // or after r, so just check for any overlap
+                fail(ERROR_FORMAT, "Found overlapping memory ranges 0x%08x->0x%08x and 0x%08x->%08x\n", f->first, f->second.first, r.from, r.to);
+            }
             m.insert(std::make_pair(r.from, std::make_pair(r.to, t)));
         }
     }
@@ -248,6 +265,8 @@ struct _settings {
     struct {
         bool verify = false;
         bool execute = false;
+        bool no_overwrite = false;
+        bool no_overwrite_force = false;
     } load;
 
     struct {
@@ -367,6 +386,8 @@ struct load_command : public cmd {
     group get_cli() override {
         return (
             (
+                option('n', "--no-overwrite").set(settings.load.no_overwrite) % "When writing flash data, do not overwrite an existing program in flash. If picotool cannot determine the size/presence of the program in flash, the command fails" +
+                option('N', "--no-overwrite-unsafe").set(settings.load.no_overwrite_force) % "When writing flash data, do not overwrite an existing program in flash. If picotool cannot determine the size/presence of the program in flash, the load continues anyway" +
                 option('v', "--verify").set(settings.load.verify) % "Verify the data was written correctly" +
                 option('x', "--execute").set(settings.load.execute) % "Attempt to execute the downloaded file as a program after the load"
             ).min(0).doc_non_optional(true) % "Post load actions" +
@@ -695,10 +716,6 @@ struct memory_access {
     }
 };
 
-static void __noreturn fail(int code, string msg) {
-    throw command_failure(code, msg);
-}
-
 uint32_t bootrom_func_lookup(memory_access& access, uint16_t tag) {
     auto magic = access.read_int(BOOTROM_MAGIC_ADDR);
     magic &= 0xffffff; // ignore bootrom version
@@ -891,16 +908,6 @@ static void read_and_check_elf32_header(FILE *in, elf32_header& eh_out) {
     }
 }
 
-static char error_msg[512];
-
-static void __noreturn fail(int code, const char *format, ...) {
-    va_list args;
-    va_start(args, format);
-    vsnprintf(error_msg, sizeof(error_msg), format, args);
-    va_end(args);
-    fail(code, string(error_msg));
-}
-
 static void __noreturn fail_read_error() {
     fail(ERROR_READ_FAILED, "Failed to read input file");
 }
@@ -963,6 +970,12 @@ string read_string(memory_access &access, uint32_t addr) {
 }
 
 struct bi_visitor_base {
+    void visit(memory_access& access, const binary_info_header& hdr) {
+        for (const auto &a : hdr.bi_addr) {
+            visit(access, a);
+        }
+    }
+
     void visit(memory_access& access, uint32_t addr) {
         binary_info_core_t bi;
         access.read_raw(addr, bi);
@@ -1364,9 +1377,7 @@ void info_guts(memory_access &raw_access) {
                 named_feature_groups[std::make_pair(group_tag, group_id)] = std::make_pair(label, flags);
             });
 
-            for (const auto &a : hdr.bi_addr) {
-                visitor.visit(access, a);
-            }
+            visitor.visit(access, hdr);
 
             visitor = bi_visitor{};
             visitor.id_and_int([&](int tag, uint32_t id, uint32_t value) {
@@ -1412,9 +1423,7 @@ void info_guts(memory_access &raw_access) {
                 }
             });
 
-            for (const auto &a : hdr.bi_addr) {
-                visitor.visit(access, a);
-            }
+            visitor.visit(access, hdr);
 
             if (settings.info.show_basic || settings.info.all) {
                 select_group(program_info);
@@ -1635,9 +1644,7 @@ void save_command::execute(device_map &devices) {
                         return;
                     if (id == BINARY_INFO_ID_RP_BINARY_END) binary_end = value;
                 });
-                for (const auto &a : hdr.bi_addr) {
-                    visitor.visit(access, a);
-                }
+                visitor.visit(access, hdr);
             }
             if (binary_end == 0) {
                 fail(ERROR_NOT_POSSIBLE,
@@ -1751,6 +1758,25 @@ void load_command::execute(device_map &devices) {
     auto file_access = get_file_memory_access();
     auto con = get_single_usb_boot_device(devices);
     picoboot_memory_access raw_access(con);
+    range flash_binary_range(FLASH_START, FLASH_END);
+    bool flash_binary_end_unknown = true;
+    if (settings.load.no_overwrite_force) settings.load.no_overwrite = true;
+    if (settings.load.no_overwrite) {
+        binary_info_header hdr;
+        if (find_binary_info(raw_access, hdr)) {
+            auto access = remapped_memory_access(raw_access, hdr.reverse_copy_mapping);
+            auto visitor = bi_visitor{};
+            visitor.id_and_int([&](int tag, uint32_t id, uint32_t value) {
+                if (tag != BINARY_INFO_TAG_RASPBERRY_PI)
+                    return;
+                if (id == BINARY_INFO_ID_RP_BINARY_END) {
+                    flash_binary_range.to = value;
+                    flash_binary_end_unknown = false;
+                }
+            });
+            visitor.visit(access, hdr);
+        }
+    }
     auto ranges = get_colaesced_ranges(file_access);
     for (auto mem_range : ranges) {
         enum memory_type t1 = get_memory_type(mem_range.from);
@@ -1758,6 +1784,16 @@ void load_command::execute(device_map &devices) {
         if (t1 != t2 || t1 == invalid || t1 == rom) {
             fail(ERROR_FORMAT, "File to load contained an invalid memory range 0x%08x-0x%08x", mem_range.from,
                  mem_range.to);
+        }
+        if (settings.load.no_overwrite && mem_range.intersects(flash_binary_range)) {
+            if (flash_binary_end_unknown) {
+                if (!settings.load.no_overwrite_force) {
+                    fail(ERROR_NOT_POSSIBLE, "-n option specified, but the size/presence of an existing flash binary could not be detected; aborting. Consider using the -N option");
+                }
+            } else {
+                fail(ERROR_NOT_POSSIBLE, "-n option specified, and the loaded data range clashes with the existing flash binary range %08x->%08x",
+                     flash_binary_range.from, flash_binary_range.to);
+            }
         }
     }
     for (auto mem_range : ranges) {
