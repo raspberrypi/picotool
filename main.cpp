@@ -177,14 +177,15 @@ template <typename T> struct range_map {
         if (r.to != r.from) {
             assert(r.to > r.from);
             // check we don't overlap any existing map entries
-            auto f = m.lower_bound(r.to); // f is first element that starts after or on r.to
-            if (f != m.begin()) {
-                f--;
-            }
-            if (f != m.end()) {
-                // due to edge cases above, f is either the entry before
-                // or after r, so just check for any overlap
-                fail(ERROR_FORMAT, "Found overlapping memory ranges 0x%08x->0x%08x and 0x%08x->%08x\n", f->first, f->second.first, r.from, r.to);
+
+            auto f = m.upper_bound(r.from); // first element that starts after r.from
+            if (f != m.begin()) f--; // back up, to catch element that starts on or before r.from
+            for(; f != m.end() && f->first < r.to; f++) { // loop till we can't possibly overlap
+                range r2(f->first, f->second.first);
+                if (r2.intersects(r)) {
+                    fail(ERROR_FORMAT, "Found overlapping memory ranges 0x%08x->0x%08x and 0x%08x->%08x\n",
+                         r.from, r.to, r2.from, r2.to);
+                }
             }
             m.insert(std::make_pair(r.from, std::make_pair(r.to, t)));
         }
