@@ -1,15 +1,20 @@
 ## Building
 
-You need to set PICO_SDK_PATH in the environment, or pass it to cmake
-You need to install libusb-1.0.
+You need to set PICO_SDK_PATH in the environment, or pass it to cmake.
 
-Linux/Mac: use your favorite package tool
+You also need to install `libusb-1.0`.
+
+Linux/Mac: use your favorite package tool. For example, on Ubuntu:
+
+```console
+sudo apt install build-essential pkg-config libusb-1.0-0-dev
+```
 
 Windows: download from here https://libusb.info/
 
 If you are on Windows, set LIBUSB_ROOT environment variable to the install directory
 
-```bash
+```console
 mkdir build
 cd build
 cmake ..
@@ -18,7 +23,7 @@ make
 
 for Windows non MinGW/WSL:
 
-```bash
+```console
 mkdir build
 cd build
 cmake -G "NMake Makefiles" ..
