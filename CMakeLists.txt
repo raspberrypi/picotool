@@ -17,6 +17,11 @@ get_filename_component(PICO_SDK_PATH "${PICO_SDK_PATH}" REALPATH BASE_DIR "${CMA
 if (NOT EXISTS ${PICO_SDK_PATH})
     message(FATAL_ERROR "Directory '${PICO_SDK_PATH}' not found")
 endif ()
+include(${PICO_SDK_PATH}/pico_sdk_version.cmake)
+
+if (PICO_SDK_VERSION_STRING VERSION_LESS "1.3.0")
+    message(FATAL_ERROR "Raspberry Pi Pico SDK version 1.3.0 (or later) required. Your version is ${PICO_SDK_VERSION_STRING}")
+endif()
 
 set(CMAKE_CXX_STANDARD 14)
 
@@ -31,6 +36,7 @@ else()
     add_subdirectory(${PICO_SDK_PATH}/src/common/pico_binary_info pico_binary_info)
     add_subdirectory(${PICO_SDK_PATH}/src/common/boot_uf2 boot_uf2_headers)
     add_subdirectory(${PICO_SDK_PATH}/src/common/boot_picoboot boot_picoboot_headers)
+    add_subdirectory(${PICO_SDK_PATH}/src/common/pico_usb_reset_interface pico_usb_reset_interface)
     add_subdirectory(${PICO_SDK_PATH}/src/host/pico_platform pico_platform)
 
     add_executable(picotool main.cpp)
@@ -45,7 +51,14 @@ else()
     target_include_directories(picotool PRIVATE ${LIBUSB_INCLUDE_DIR})
     # todo, this is a bit of an abstraction failure; but don't want to rev the SDK just for this right now
     target_include_directories(picotool PRIVATE ${PICO_SDK_PATH}/src/rp2_common/pico_stdio_usb/include)
-    target_link_libraries(picotool pico_binary_info boot_uf2_headers boot_picoboot_headers pico_platform_headers picoboot_connection_cxx ${LIBUSB_LIBRARIES})
+    target_link_libraries(picotool
+            pico_binary_info
+            boot_uf2_headers
+            boot_picoboot_headers
+            pico_platform_headers
+            pico_usb_reset_interface_headers
+            picoboot_connection_cxx
+            ${LIBUSB_LIBRARIES})
     # allow `make install`
     install(TARGETS picotool)
 endif()
