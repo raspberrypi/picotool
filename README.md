@@ -38,7 +38,7 @@ PICOTOOL:
 SYNOPSYS:
     picotool info [-b] [-p] [-d] [-l] [-a] [--bus <bus>] [--address <addr>] [-f] [-F]
     picotool info [-b] [-p] [-d] [-l] [-a] <filename> [-t <type>]
-    picotool load [-v] [-x] <filename> [-t <type>] [-o <offset>] [--bus <bus>] [--address <addr>] [-f] [-F]
+    picotool load [-n] [-N] [-v] [-x] <filename> [-t <type>] [-o <offset>] [--bus <bus>] [--address <addr>] [-f] [-F]
     picotool save [-p] [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>]
     picotool save -a [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>]
     picotool save -r <from> <to> [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>]
@@ -99,12 +99,23 @@ TARGET SELECTION:
             Filter devices by USB bus number
         --address <addr>
             Filter devices by USB device address
+        -f, --force
+            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing
+            the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode
+        -F, --force-no-reboot
+            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing
+            the command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but
+            without the RPI-RP2 drive mounted
     To target a file
         <filename>
             The file name
         -t <type>
             Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
+
 ```
+
+Note the -f arguments vary slightly for Windows vs macOS / Unix platforms.
+
 e.g.
 
 ```text
@@ -174,9 +185,9 @@ SAVE:
     Save the program / memory stored in flash on the device to a file.
 
 SYNOPSYS:
-    picotool save [-p] [--bus <bus>] [--address <addr>] <filename> [-t <type>]
-    picotool save -a [--bus <bus>] [--address <addr>] <filename> [-t <type>]
-    picotool save -r <from> <to> [--bus <bus>] [--address <addr>] <filename> [-t <type>]
+    picotool save [-p] [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>]
+    picotool save -a [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>]
+    picotool save -r <from> <to> [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>]
 
 OPTIONS:
     Selection of data to save
@@ -185,7 +196,8 @@ OPTIONS:
         -a, --all
             Save all of flash memory
         -r, --range
-            Save a range of memory; note that the range is expanded to 256 byte boundaries
+            Save a range of memory. Note that UF2s always store complete 256 byte-aligned blocks of 256 bytes, and the range is
+            expanded accordingly
         <from>
             The lower address bound in hex
         <to>
@@ -195,6 +207,13 @@ OPTIONS:
             Filter devices by USB bus number
         --address <addr>
             Filter devices by USB device address
+        -f, --force
+            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing
+            the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode
+        -F, --force-no-reboot
+            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing
+            the command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but
+            without the RPI-RP2 drive mounted
     File to save to
         <filename>
             The file name
