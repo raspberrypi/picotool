@@ -210,7 +210,7 @@ template <typename T> struct range_map {
     uint32_t next(uint32_t p) {
         auto f = m.upper_bound(p);
         if (f == m.end()) {
-            std::numeric_limits<uint32_t>::max();
+            return std::numeric_limits<uint32_t>::max();
         }
         return f->first;
     }
