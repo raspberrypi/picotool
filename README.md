@@ -26,9 +26,9 @@ nmake
 ```
 ## Overview
 
-Picotool is a tool for inspecting RP2040 binaries, and interacting with RP2040 devices when they are in BOOTSEL mode.
+`picotool` is a tool for inspecting RP2040 binaries, and interacting with RP2040 devices when they are in BOOTSEL mode. (As of version 1.1 of `picotool` it is also possible to interact with RP2040 devices that are not in BOOTSEL mode, but are using USB stdio support from the Raspberry Pi Pico SDK by using the `-f` argument of `picotool`).
 
-Note for full documentation see https://rptl.io/pico-get-started
+Note for additional documentation see https://rptl.io/pico-get-started
 
 ```text
 $ picotool help

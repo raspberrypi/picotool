@@ -357,7 +357,7 @@ struct verify_command : public cmd {
                 (option('r', "--range").set(settings.range_set) % "Compare a sub range of memory only" &
                     hex("from").set(settings.from) % "The lower address bound in hex" &
                     hex("to").set(settings.to) % "The upper address bound in hex").force_expand_help(true) +
-                (option('o', "--offset").set(settings.offset_set) % "Specify a load address for a BIN file" &
+                (option('o', "--offset").set(settings.offset_set) % "Specify the load address when comparing with a BIN file" &
                     hex("offset").set(settings.offset) % "Load offset (memory address; default 0x10000000)").force_expand_help(true)
            ).min(0).doc_non_optional(true) % "Address options"
         );
@@ -408,7 +408,7 @@ struct load_command : public cmd {
             ).min(0).doc_non_optional(true) % "Post load actions" +
             file_selection % "File to load from" +
             (
-                option('o', "--offset").set(settings.offset_set) % "Specify a load address for a BIN file" &
+                option('o', "--offset").set(settings.offset_set) % "Specify the load address for a BIN file" &
                      hex("offset").set(settings.offset) % "Load offset (memory address; default 0x10000000)"
             ).force_expand_help(true) % "BIN file options" +
             device_selection % "Target device selection"
