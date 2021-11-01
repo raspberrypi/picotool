@@ -31,9 +31,9 @@ nmake
 ```
 ## Overview
 
-Picotool is a tool for inspecting RP2040 binaries, and interacting with RP2040 devices when they are in BOOTSEL mode.
+`picotool` is a tool for inspecting RP2040 binaries, and interacting with RP2040 devices when they are in BOOTSEL mode. (As of version 1.1 of `picotool` it is also possible to interact with RP2040 devices that are not in BOOTSEL mode, but are using USB stdio support from the Raspberry Pi Pico SDK by using the `-f` argument of `picotool`).
 
-Note for full documentation see https://rptl.io/pico-get-started
+Note for additional documentation see https://rptl.io/pico-get-started
 
 ```text
 $ picotool help
@@ -41,25 +41,26 @@ PICOTOOL:
     Tool for interacting with a RP2040 device in BOOTSEL mode, or with a RP2040 binary
 
 SYNOPSYS:
-    picotool info [-b] [-p] [-d] [-l] [-a] [--bus <bus>] [--address <addr>]
+    picotool info [-b] [-p] [-d] [-l] [-a] [--bus <bus>] [--address <addr>] [-f] [-F]
     picotool info [-b] [-p] [-d] [-l] [-a] <filename> [-t <type>]
-    picotool load [-v] [-r] <filename> [-t <type>] [--bus <bus>] [--address <addr>]
-    picotool save [-p] [--bus <bus>] [--address <addr>] <filename> [-t <type>]
-    picotool save -a [--bus <bus>] [--address <addr>] <filename> [-t <type>]
-    picotool save -r <from> <to> [--bus <bus>] [--address <addr>] <filename> [-t <type>]
-    picotool verify [--bus <bus>] [--address <addr>] <filename> [-t <type>] [-r <from> <to>]
-    picotool reboot [-a] [-u] [--bus <bus>] [--address <addr>]
+    picotool load [-n] [-N] [-v] [-x] <filename> [-t <type>] [-o <offset>] [--bus <bus>] [--address <addr>] [-f] [-F]
+    picotool save [-p] [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>]
+    picotool save -a [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>]
+    picotool save -r <from> <to> [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>]
+    picotool verify [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>] [-r <from> <to>] [-o <offset>]
+    picotool reboot [-a] [-u] [--bus <bus>] [--address <addr>] [-f] [-F]
+    picotool version [-s]
     picotool help [<cmd>]
 
 COMMANDS:
-    info     Display information from the target device(s) or file.
-             Without any arguments, this will display basic information for all connected RP2040 devices in
-             BOOTSEL mode
-    load     Load the program / memory range stored in a file onto the device.
-    save     Save the program / memory stored in flash on the device to a file.
-    verify   Check that the device contents match those in the file.
-    reboot   Reboot the device
-    help     Show general help or help for a specific command
+    info      Display information from the target device(s) or file.
+              Without any arguments, this will display basic information for all connected RP2040 devices in BOOTSEL mode
+    load      Load the program / memory range stored in a file onto the device.
+    save      Save the program / memory stored in flash on the device to a file.
+    verify    Check that the device contents match those in the file.
+    reboot    Reboot the device
+    version   Display picotool version
+    help      Show general help or help for a specific command
 
 Use "picotool help <cmd>" for more info
 ```
@@ -74,15 +75,14 @@ can find (See Binary Info section below). The info command is for reading this i
 The information can be either read from one or more connected RP2040 devices in BOOTSEL mode, or from 
 a file. This file can be an ELF, a UF2 or a BIN file.
 
-```asciidoc
+```text
 $ picotool help info
 INFO:
     Display information from the target device(s) or file.
-    Without any arguments, this will display basic information for all connected RP2040 devices in USB boot
-    mode
+    Without any arguments, this will display basic information for all connected RP2040 devices in BOOTSEL mode
 
 SYNOPSYS:
-    picotool info [-b] [-p] [-d] [-l] [-a] [--bus <bus>] [--address <addr>]
+    picotool info [-b] [-p] [-d] [-l] [-a] [--bus <bus>] [--address <addr>] [-f] [-F]
     picotool info [-b] [-p] [-d] [-l] [-a] <filename> [-t <type>]
 
 OPTIONS:
@@ -104,12 +104,22 @@ TARGET SELECTION:
             Filter devices by USB bus number
         --address <addr>
             Filter devices by USB device address
+        -f, --force
+            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing
+            the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode
+        -F, --force-no-reboot
+            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing
+            the command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but
+            without the RPI-RP2 drive mounted
     To target a file
         <filename>
             The file name
         -t <type>
             Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
+
 ```
+
+Note the -f arguments vary slightly for Windows vs macOS / Unix platforms.
 
 e.g.
 
@@ -180,9 +190,9 @@ SAVE:
     Save the program / memory stored in flash on the device to a file.
 
 SYNOPSYS:
-    picotool save [-p] [--bus <bus>] [--address <addr>] <filename> [-t <type>]
-    picotool save -a [--bus <bus>] [--address <addr>] <filename> [-t <type>]
-    picotool save -r <from> <to> [--bus <bus>] [--address <addr>] <filename> [-t <type>]
+    picotool save [-p] [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>]
+    picotool save -a [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>]
+    picotool save -r <from> <to> [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>]
 
 OPTIONS:
     Selection of data to save
@@ -191,7 +201,8 @@ OPTIONS:
         -a, --all
             Save all of flash memory
         -r, --range
-            Save a range of memory; note that the range is expanded to 256 byte boundaries
+            Save a range of memory. Note that UF2s always store complete 256 byte-aligned blocks of 256 bytes, and the range is
+            expanded accordingly
         <from>
             The lower address bound in hex
         <to>
@@ -201,6 +212,13 @@ OPTIONS:
             Filter devices by USB bus number
         --address <addr>
             Filter devices by USB device address
+        -f, --force
+            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing
+            the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode
+        -F, --force-no-reboot
+            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing
+            the command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but
+            without the RPI-RP2 drive mounted
     File to save to
         <filename>
             The file name
@@ -252,11 +270,7 @@ Basic information includes
 - program features - this is a list built from individual strings in the binary, that can be displayed (e.g. we will have one for UART stdio and one for USB stdio) in the SDK
 - build attributes - this is a similar list of strings, for things pertaining to the binary itself (e.g. Debug Build)
 
-Note it is my intention that things like MicroPython would include features for parts of the language/libraries they include.
-
-This might not be as a feature string per se, but could be another aggregating list (features/attributes are well known)
-but we can add another piece of binary info to name a list attribute that aggregates strings with a particular tag, so you
-could trivially add "MicroPython libraries:" etc to the `picotool` output without changing the tool itself. 
+The binary information is self-describing/extensible, so programs can include information picotool is not aware of (e.g. MicroPython includes a list of in-built libraries)
 
 ### Pins
 
@@ -394,11 +408,6 @@ quotes, newlines etc you may have better luck defining via bi_decl in the code.
 
 ## Additional binary information/picotool features
 
-### SDK version
-
-Should add this; git revision in general is hard since the user may not have the SDK checked out from git, so we'll have to stick
-a version number in a header
-
 ### Block devices
 
 MicroPython and CircuitPython, eventually the SDK and others may support one or more storage devices in flash. We already
@@ -438,7 +447,7 @@ enum {
 ### USB device descriptors
 
 Seems like tagging these might be nice (we just need to store the pointer to it assuming - as is often the case -
-the descriptor is just a linear chunk of memory) ... I assume there is a tool out there to prettyify such a thing if picotool dumps the descriptor
+the descriptor is just a linear chunk of memory) ... I assume there is a tool out there to prettify such a thing if picotool dumps the descriptor
 in binary.
 
 ### Issues
