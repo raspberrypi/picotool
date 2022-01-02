@@ -1862,7 +1862,6 @@ bool load_command::execute(device_map &devices) {
                     file_buf.insert(file_buf.end(), aligned_range.to - read_range.to, 0);
                     assert(file_buf.size() == FLASH_SECTOR_ERASE_SIZE);
 
-                    con.exit_xip();
                     bool skip = false;
                     if (settings.load.update) {
                       vector<uint8_t> read_device_buf;
@@ -1870,6 +1869,7 @@ bool load_command::execute(device_map &devices) {
                       skip = file_buf == read_device_buf;
                     }
                     if (!skip) {
+                      con.exit_xip();
                       con.flash_erase(aligned_range.from, FLASH_SECTOR_ERASE_SIZE);
                       raw_access.write_vector(aligned_range.from, file_buf);
                     }
