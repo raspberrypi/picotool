@@ -404,7 +404,7 @@ struct load_command : public cmd {
             (
                 option('n', "--no-overwrite").set(settings.load.no_overwrite) % "When writing flash data, do not overwrite an existing program in flash. If picotool cannot determine the size/presence of the program in flash, the command fails" +
                 option('N', "--no-overwrite-unsafe").set(settings.load.no_overwrite_force) % "When writing flash data, do not overwrite an existing program in flash. If picotool cannot determine the size/presence of the program in flash, the load continues anyway" +
-                option('u', "--update").set(settings.load.update) % "Skip flash writes when the data is already present" +
+                option('u', "--update").set(settings.load.update) % "Skip writing flash sectors that already contain identical data" +
                 option('v', "--verify").set(settings.load.verify) % "Verify the data was written correctly" +
                 option('x', "--execute").set(settings.load.execute) % "Attempt to execute the downloaded file as a program after the load"
             ).min(0).doc_non_optional(true) % "Post load actions" +
