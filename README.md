@@ -29,6 +29,13 @@ cd build
 cmake -G "NMake Makefiles" ..
 nmake
 ```
+
+On Linux you can add udev rules in order to use picotool without sudo:
+
+```console
+sudo cp udev/99-picotool.rules /etc/rules/99-picotool.rules
+```
+
 ## Overview
 
 `picotool` is a tool for inspecting RP2040 binaries, and interacting with RP2040 devices when they are in BOOTSEL mode. (As of version 1.1 of `picotool` it is also possible to interact with RP2040 devices that are not in BOOTSEL mode, but are using USB stdio support from the Raspberry Pi Pico SDK by using the `-f` argument of `picotool`).
