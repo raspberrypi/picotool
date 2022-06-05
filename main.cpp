@@ -1780,7 +1780,7 @@ bool save_command::execute(device_map &devices) {
     return false;
 }
 
-vector<range> get_colaesced_ranges(file_memory_access &file_access) {
+vector<range> get_coalesced_ranges(file_memory_access &file_access) {
     auto rmap = file_access.get_rmap();
     auto ranges = rmap.ranges();
     std::sort(ranges.begin(), ranges.end(), [](const range& a, const range &b) {
@@ -1826,7 +1826,7 @@ bool load_command::execute(device_map &devices) {
             visitor.visit(access, hdr);
         }
     }
-    auto ranges = get_colaesced_ranges(file_access);
+    auto ranges = get_coalesced_ranges(file_access);
     for (auto mem_range : ranges) {
         enum memory_type t1 = get_memory_type(mem_range.from);
         enum memory_type t2 = get_memory_type(mem_range.to);
@@ -1931,7 +1931,7 @@ bool verify_command::execute(device_map &devices) {
     auto file_access = get_file_memory_access();
     auto con = get_single_bootsel_device_connection(devices);
     picoboot_memory_access raw_access(con);
-    auto ranges = get_colaesced_ranges(file_access);
+    auto ranges = get_coalesced_ranges(file_access);
     if (settings.range_set) {
         range filter(settings.from, settings.to);
         for(auto& range : ranges) {
