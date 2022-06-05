@@ -854,14 +854,21 @@ struct file_memory_access : public memory_access {
 
     void read(uint32_t address, uint8_t *buffer, uint32_t size) override {
         while (size) {
-            auto result = rmap.get(address);
-            uint this_size = std::min(size, result.first.max_offset - result.first.offset);
-            assert( this_size);
-            fseek(file, result.second + result.first.offset, SEEK_SET);
-            fread(buffer, this_size, 1, file);
-            buffer += this_size;
-            address += this_size;
-            size -= this_size;
+            try {
+                auto result = rmap.get(address);
+                uint this_size = std::min(size, result.first.max_offset - result.first.offset);
+                assert( this_size);
+                fseek(file, result.second + result.first.offset, SEEK_SET);
+                fread(buffer, this_size, 1, file);
+                buffer += this_size;
+                address += this_size;
+                size -= this_size;
+            } catch (not_mapped_exception&) {
+                *buffer = 0;
+                buffer++;
+                address++;
+                size--;
+            }
         }
     }
 
