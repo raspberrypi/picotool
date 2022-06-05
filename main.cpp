@@ -201,7 +201,7 @@ template <typename T> struct range_map {
         }
         f--;
         assert(p >= f->first);
-        if (p > f->second.first) {
+        if (p >= f->second.first) {
             throw not_mapped_exception();
         }
         return std::make_pair(mapping(p - f->first, f->second.first - f->first), f->second.second);
