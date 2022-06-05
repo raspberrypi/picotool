@@ -1789,7 +1789,7 @@ vector<range> get_colaesced_ranges(file_memory_access &file_access) {
     // coalesce all the contiguous ranges
     for(auto i = ranges.begin(); i < ranges.end(); ) {
         if (i != ranges.end() - 1) {
-            if (i->to == (i+1)->from) {
+            if (i->to / FLASH_SECTOR_ERASE_SIZE == (i+1)->from / FLASH_SECTOR_ERASE_SIZE) {
                 i->to = (i+1)->to;
                 i = ranges.erase(i+1) - 1;
                 continue;
