@@ -278,6 +278,7 @@ struct _settings {
         bool execute = false;
         bool no_overwrite = false;
         bool no_overwrite_force = false;
+        bool update = false;
     } load;
 
     struct {
@@ -403,6 +404,7 @@ struct load_command : public cmd {
             (
                 option('n', "--no-overwrite").set(settings.load.no_overwrite) % "When writing flash data, do not overwrite an existing program in flash. If picotool cannot determine the size/presence of the program in flash, the command fails" +
                 option('N', "--no-overwrite-unsafe").set(settings.load.no_overwrite_force) % "When writing flash data, do not overwrite an existing program in flash. If picotool cannot determine the size/presence of the program in flash, the load continues anyway" +
+                option('u', "--update").set(settings.load.update) % "Skip writing flash sectors that already contain identical data" +
                 option('v', "--verify").set(settings.load.verify) % "Verify the data was written correctly" +
                 option('x', "--execute").set(settings.load.execute) % "Attempt to execute the downloaded file as a program after the load"
             ).min(0).doc_non_optional(true) % "Post load actions" +
@@ -1859,9 +1861,18 @@ bool load_command::execute(device_map &devices) {
                     file_buf.insert(file_buf.begin(), read_range.from - aligned_range.from, 0);
                     file_buf.insert(file_buf.end(), aligned_range.to - read_range.to, 0);
                     assert(file_buf.size() == FLASH_SECTOR_ERASE_SIZE);
-                    con.exit_xip();
-                    con.flash_erase(aligned_range.from, FLASH_SECTOR_ERASE_SIZE);
-                    raw_access.write_vector(aligned_range.from, file_buf);
+
+                    bool skip = false;
+                    if (settings.load.update) {
+                      vector<uint8_t> read_device_buf;
+                      raw_access.read_into_vector(aligned_range.from, batch_size, read_device_buf);
+                      skip = file_buf == read_device_buf;
+                    }
+                    if (!skip) {
+                      con.exit_xip();
+                      con.flash_erase(aligned_range.from, FLASH_SECTOR_ERASE_SIZE);
+                      raw_access.write_vector(aligned_range.from, file_buf);
+                    }
                     base = read_range.to; // about to add batch_size
                 } else {
                     file_access.read_into_vector(base, this_batch, file_buf);
