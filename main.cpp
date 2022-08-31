@@ -298,8 +298,8 @@ auto device_selection =
         (option("--address") & integer("addr").min_value(1).max_value(127).set(settings.address)
             .if_missing([] { return "missing address"; })) % "Filter devices by USB device address"
 #if !defined(_WIN32)
-        + option('f', "--force").set(settings.force) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode" +
-                option('F', "--force-no-reboot").set(settings.force_no_reboot) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the RPI-RP2 drive mounted"
+        + option('f', "--force").set(settings.force) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode. Make sure the device is using USB CDC (USB stdio)" +
+                option('F', "--force-no-reboot").set(settings.force_no_reboot) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the RPI-RP2 drive mounted. Make sure the device is using USB CDC (USB stdio)"
 #endif
     ).min(0).doc_non_optional(true);
 
@@ -1564,25 +1564,30 @@ void info_guts(memory_access &raw_access) {
 }
 
 string missing_device_string(bool wasRetry) {
-    char b[256];
+    const size_t bufferLen = 512;
+    char b[bufferLen];
     if (wasRetry) {
-        strcpy(b, "Despite the reboot attempt, no ");
+        strncpy(b, "Despite the reboot attempt, no ", bufferLen);
     } else {
-        strcpy(b, "No ");
+        strncpy(b, "No ", bufferLen);
     }
-    char *buf = b + strlen(b);
+    char *bufErrorMessage = b + strnlen(b, bufferLen);
     if (settings.address != -1) {
         if (settings.bus != -1) {
-            sprintf(buf, "accessible RP2040 device in BOOTSEL mode was found at bus %d, address %d.", settings.bus, settings.address);
+            snprintf(bufErrorMessage, bufferLen, "accessible RP2040 device in BOOTSEL mode was found at bus %d, address %d.", settings.bus, settings.address);
         } else {
-            sprintf(buf, "accessible RP2040 devices in BOOTSEL mode were found with address %d.", settings.address);
+            snprintf(bufErrorMessage, bufferLen, "accessible RP2040 devices in BOOTSEL mode were found with address %d.", settings.address);
         }
     } else {
         if (settings.bus != -1) {
-            sprintf(buf, "accessible RP2040 devices in BOOTSEL mode were found found on bus %d.", settings.bus);
+            snprintf(bufErrorMessage, bufferLen, "accessible RP2040 devices in BOOTSEL mode were found found on bus %d.", settings.bus);
         } else {
-            sprintf(buf, "accessible RP2040 devices in BOOTSEL mode were found.");
+            snprintf(bufErrorMessage, bufferLen, "accessible RP2040 devices in BOOTSEL mode were found.");
         }
+    }
+    if (settings.force) {
+        char* bufForceError = b + strnlen(b, bufferLen);
+        snprintf(bufForceError, bufferLen, "\nTo force a device into BOOTSEL mode, make sure the RP2040 is configured to use USB-CDC (USB stdio).");
     }
     return b;
 }

@@ -105,12 +105,13 @@ TARGET SELECTION:
         --address <addr>
             Filter devices by USB device address
         -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing
-            the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode
+            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
+            command (unless the command itself is a 'reboot') the device will be rebooted back to application mode. Make sure the device
+            is using USB CDC (USB stdio)
         -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing
-            the command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but
-            without the RPI-RP2 drive mounted
+            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
+            command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without
+            the RPI-RP2 drive mounted. Make sure the device is using USB CDC (USB stdio)
     To target a file
         <filename>
             The file name
@@ -213,12 +214,13 @@ OPTIONS:
         --address <addr>
             Filter devices by USB device address
         -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing
-            the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode
+            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
+            command (unless the command itself is a 'reboot') the device will be rebooted back to application mode. Make sure the device
+            is using USB CDC (USB stdio)
         -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing
-            the command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but
-            without the RPI-RP2 drive mounted
+            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
+            command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without
+            the RPI-RP2 drive mounted. Make sure the device is using USB CDC (USB stdio)
     File to save to
         <filename>
             The file name
