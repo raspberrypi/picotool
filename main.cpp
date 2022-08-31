@@ -298,8 +298,8 @@ auto device_selection =
         (option("--address") & integer("addr").min_value(1).max_value(127).set(settings.address)
             .if_missing([] { return "missing address"; })) % "Filter devices by USB device address"
 #if !defined(_WIN32)
-        + option('f', "--force").set(settings.force) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode. Make sure the device is using USB CDC (USB stdio)" +
-                option('F', "--force-no-reboot").set(settings.force_no_reboot) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the RPI-RP2 drive mounted. Make sure the device is using USB CDC (USB stdio)"
+        + option('f', "--force").set(settings.force) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode. Make sure the device is using USB-CDC (USB stdio)" +
+                option('F', "--force-no-reboot").set(settings.force_no_reboot) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the RPI-RP2 drive mounted. Make sure the device is using USB-CDC (USB stdio)"
 #endif
     ).min(0).doc_non_optional(true);
 
