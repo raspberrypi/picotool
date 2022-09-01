@@ -1581,7 +1581,7 @@ string missing_device_string(bool wasRetry) {
         }
     } else {
         if (settings.bus != -1) {
-            snprintf(bufErrorMessage, bufferLen - currentLength, "accessible RP2040 devices in BOOTSEL mode were found found on bus %d.", settings.bus);
+            snprintf(bufErrorMessage, bufferLen - currentLength, "accessible RP2040 devices in BOOTSEL mode were found on bus %d.", settings.bus);
         } else {
             snprintf(bufErrorMessage, bufferLen - currentLength, "accessible RP2040 devices in BOOTSEL mode were found.");
         }
