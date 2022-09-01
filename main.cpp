@@ -1571,23 +1571,25 @@ string missing_device_string(bool wasRetry) {
     } else {
         strncpy(b, "No ", bufferLen);
     }
-    char *bufErrorMessage = b + strnlen(b, bufferLen);
+    int currentLength = strnlen(b, bufferLen);
+    char *bufErrorMessage = b + currentLength;
     if (settings.address != -1) {
         if (settings.bus != -1) {
-            snprintf(bufErrorMessage, bufferLen, "accessible RP2040 device in BOOTSEL mode was found at bus %d, address %d.", settings.bus, settings.address);
+            snprintf(bufErrorMessage, bufferLen - currentLength, "accessible RP2040 device in BOOTSEL mode was found at bus %d, address %d.", settings.bus, settings.address);
         } else {
-            snprintf(bufErrorMessage, bufferLen, "accessible RP2040 devices in BOOTSEL mode were found with address %d.", settings.address);
+            snprintf(bufErrorMessage, bufferLen - currentLength, "accessible RP2040 devices in BOOTSEL mode were found with address %d.", settings.address);
         }
     } else {
         if (settings.bus != -1) {
-            snprintf(bufErrorMessage, bufferLen, "accessible RP2040 devices in BOOTSEL mode were found found on bus %d.", settings.bus);
+            snprintf(bufErrorMessage, bufferLen - currentLength, "accessible RP2040 devices in BOOTSEL mode were found found on bus %d.", settings.bus);
         } else {
-            snprintf(bufErrorMessage, bufferLen, "accessible RP2040 devices in BOOTSEL mode were found.");
+            snprintf(bufErrorMessage, bufferLen - currentLength, "accessible RP2040 devices in BOOTSEL mode were found.");
         }
     }
     if (settings.force) {
-        char* bufForceError = b + strnlen(b, bufferLen);
-        snprintf(bufForceError, bufferLen, "\nTo force a device into BOOTSEL mode, make sure the RP2040 is configured to use USB-CDC (USB stdio).");
+        currentLength = strnlen(b, bufferLen);
+        char* bufForceError = b + currentLength;
+        snprintf(bufForceError, bufferLen - currentLength, "\nTo force a device into BOOTSEL mode, make sure the RP2040 is configured to use USB-CDC (USB stdio).");
     }
     return b;
 }
