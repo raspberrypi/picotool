@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifdef _MSC_VER
+#ifdef _WIN32
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 
@@ -37,7 +37,7 @@
 #endif
 
 // tsk namespace is polluted on windows
-#ifdef _MSC_VER
+#ifdef _WIN32
 #undef min
 #undef max
 
@@ -2032,7 +2032,7 @@ static int reboot_device(libusb_device *device, bool bootsel, uint disable_mask=
     libusb_device_handle *dev_handle;
     ret = libusb_open(device, &dev_handle);
     if (ret) {
-#if _MSC_VER
+#if _WIN32
         fail(ERROR_USB, "Unable to access device to reboot it; Make sure there is a driver installed via Zadig\n", ret);
 #else
         fail(ERROR_USB, "Unable to access device to reboot it; Use sudo or setup a udev rule\n", ret);
