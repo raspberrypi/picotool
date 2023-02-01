@@ -1398,7 +1398,7 @@ void info_guts(memory_access &raw_access) {
             string program_name, program_build_date, program_version, program_url, program_description;
             string pico_board, sdk_version, boot2_name;
             vector<string> program_features, build_attributes;
-            
+
             uint32_t binary_end = 0;
 
             // do a pass first to find named groups
@@ -1839,11 +1839,14 @@ bool load_command::execute(device_map &devices) {
         }
     }
 
-    for (auto mem_range : ranges) {
-        enum memory_type type = get_memory_type(mem_range.from);
-        // new scope for progress bar
-        {
-            progress_bar bar("Loading into " + memory_names[type] + ": ");
+    size_t total_size = 0;
+    for (auto mem_range : ranges) { total_size += mem_range.to - mem_range.from; }
+
+    {
+        progress_bar bar("Loading:   ");
+        size_t loaded_size = 0;
+        for (auto mem_range : ranges) {
+            enum memory_type type = get_memory_type(mem_range.from);
             vector<uint8_t> file_buf;
             vector<uint8_t> device_buf;
             for (uint32_t base = mem_range.from; base < mem_range.to; ) {
@@ -1877,13 +1880,18 @@ bool load_command::execute(device_map &devices) {
                     raw_access.write_vector(base, file_buf);
                     base += this_batch;
                 }
-                bar.progress(base - mem_range.from, mem_range.to - mem_range.from);
+                loaded_size += this_batch;
+                bar.progress(loaded_size, total_size);
             }
         }
-        if (settings.load.verify) {
+    }
+
+    if (settings.load.verify) {
+        progress_bar bar("Verifying: ");
+        size_t verified_size = 0;
+        for (auto mem_range : ranges) {
             bool ok = true;
             {
-                progress_bar bar("Verifying " + memory_names[type] + ":    ");
                 uint32_t batch_size = 0x8000;
                 vector<uint8_t> file_buf;
                 vector<uint8_t> device_buf;
@@ -1902,14 +1910,12 @@ bool load_command::execute(device_map &devices) {
                     }
                     if (ok) {
                         pos = base + this_batch;
+                        verified_size += this_batch;
+                        bar.progress(verified_size, total_size);
                     }
-                    bar.progress(pos - mem_range.from, mem_range.to - mem_range.from);
                 }
             }
-            if (ok) {
-                std::cout << "  OK\n";
-            } else {
-                std::cout << "  FAILED\n";
+            if (!ok) {
                 fail(ERROR_VERIFICATION_FAILED, "The device contents did not match the file");
             }
         }
