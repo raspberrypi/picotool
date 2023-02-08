@@ -12,12 +12,12 @@ if (LIBUSB_INCLUDE_DIR AND LIBUSB_LIBRARIES)
     # in cache already
     set(LIBUSB_FOUND TRUE)
 else (LIBUSB_INCLUDE_DIR AND LIBUSB_LIBRARIES)
-    IF (NOT WIN32)
+    IF (NOT MSVC)
         # use pkg-config to get the directories and then use these values
         # in the FIND_PATH() and FIND_LIBRARY() calls
         find_package(PkgConfig)
         pkg_check_modules(PC_LIBUSB libusb-1.0)
-    ENDIF(NOT WIN32)
+    ENDIF ()
     FIND_PATH(LIBUSB_INCLUDE_DIR libusb.h
             HINTS $ENV{LIBUSB_ROOT}/include/libusb-1.0
             PATHS ${PC_LIBUSB_INCLUDEDIR} ${PC_LIBUSB_INCLUDE_DIRS})

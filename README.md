@@ -29,6 +29,20 @@ cd build
 cmake -G "NMake Makefiles" ..
 nmake
 ```
+
+Windows with MinGW in MSYS2:
+
+No need to download libusb separately or set LIBUSB_ROOT.
+
+```console
+pacman -S $MINGW_PACKAGE_PREFIX-{toolchain,cmake,libusb}
+mkdir build
+cd build
+MSYS2_ARG_CONV_EXCL=- cmake .. -G"MSYS Makefiles" -DCMAKE_INSTALL_PREFIX=$MINGW_PREFIX
+make
+make install DESTDIR=/  # optional
+```
+
 ## Overview
 
 `picotool` is a tool for inspecting RP2040 binaries, and interacting with RP2040 devices when they are in BOOTSEL mode. (As of version 1.1 of `picotool` it is also possible to interact with RP2040 devices that are not in BOOTSEL mode, but are using USB stdio support from the Raspberry Pi Pico SDK by using the `-f` argument of `picotool`).
