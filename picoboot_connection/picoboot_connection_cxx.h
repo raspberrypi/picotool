@@ -41,6 +41,7 @@ namespace picoboot {
         void exit_xip();
         void reboot(uint32_t pc, uint32_t sp, uint32_t delay_ms);
         void exec(uint32_t addr);
+        void flash_range_erase(uint32_t addr, uint32_t len, uint32_t block_size, uint8_t block_cmd);
         void flash_erase(uint32_t addr, uint32_t len);
         void vector(uint32_t addr);
         void write(uint32_t addr, uint8_t *buffer, uint32_t len);

@@ -39,6 +39,7 @@ int picoboot_enter_cmd_xip(libusb_device_handle *usb_device);
 int picoboot_exit_xip(libusb_device_handle *usb_device);
 int picoboot_reboot(libusb_device_handle *usb_device, uint32_t pc, uint32_t sp, uint32_t delay_ms);
 int picoboot_exec(libusb_device_handle *usb_device, uint32_t addr);
+int picoboot_flash_range_erase(libusb_device_handle *, uint32_t, uint32_t, uint32_t, uint8_t);
 int picoboot_flash_erase(libusb_device_handle *usb_device, uint32_t addr, uint32_t len);
 int picoboot_vector(libusb_device_handle *usb_device, uint32_t addr);
 int picoboot_write(libusb_device_handle *usb_device, uint32_t addr, uint8_t *buffer, uint32_t len);

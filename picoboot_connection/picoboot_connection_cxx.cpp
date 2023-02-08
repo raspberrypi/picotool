@@ -81,6 +81,12 @@ void connection::exec(uint32_t addr) {
     wrap_call([&] { return picoboot_exec(device, addr); });
 }
 
+void connection::flash_range_erase(uint32_t addr, uint32_t len,
+    uint32_t block_size, uint8_t block_cmd) {
+    wrap_call([&] { return picoboot_flash_range_erase(device, addr, len,
+      block_size, block_cmd); });
+}
+
 void connection::flash_erase(uint32_t addr, uint32_t len) {
     wrap_call([&] { return picoboot_flash_erase(device, addr, len); });
 }

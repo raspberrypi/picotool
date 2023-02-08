@@ -305,6 +305,28 @@ int picoboot_exec(libusb_device_handle *usb_device, uint32_t addr) {
     return picoboot_cmd(usb_device, &cmd, NULL, 0);
 }
 
+// Calls flash_range_erase in the bootrom.
+int picoboot_flash_range_erase(libusb_device_handle *usb_device,
+  uint32_t addr, uint32_t len, uint32_t block_size, uint8_t block_cmd)
+{
+    // These bytes come from `arm-none-eabi-as -al call.s`, with the function
+    // lookup code and function arguments appended.
+    uint8_t call_asm[] = {
+        0x10, 0xB5, 0x14, 0x24, 0x20, 0x88, 0x05, 0x49,
+        0xA4, 0x88, 0xA0, 0x47, 0x04, 0x1C, 0x04, 0x48,
+        0x04, 0x49, 0x05, 0x4A, 0x05, 0x4B, 0xA0, 0x47,
+        0x10, 0xBD, 0, 0,
+        'R', 'E', 0, 0,
+        addr, addr >> 8, addr >> 16, addr >> 24,
+        len, len >> 8, len >> 16, len >> 24,
+        block_size, block_size >> 8, block_size >> 16, block_size >> 24,
+        block_cmd, 0, 0, 0,
+    };
+    int ret = picoboot_write(usb_device, SRAM_START, call_asm, sizeof(call_asm));
+    if (ret) { return ret; }
+    return picoboot_exec(usb_device, SRAM_START);
+}
+
 int picoboot_flash_erase(libusb_device_handle *usb_device, uint32_t addr, uint32_t len) {
     struct picoboot_cmd cmd;
     if (verbose) output("FLASH_ERASE %08x+%08x\n", (uint) addr, (uint) len);
