@@ -60,5 +60,5 @@ else()
             picoboot_connection_cxx
             ${LIBUSB_LIBRARIES})
     # allow `make install`
-    install(TARGETS picotool)
+    install(TARGETS picotool RUNTIME DESTINATION bin)
 endif()
