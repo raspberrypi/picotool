@@ -20,7 +20,7 @@ sudo cp udev/99-picotool.rules /etc/udev/rules.d/
 
 ### Windows
 
-##### For Windows without MinGW/WSL
+##### For Windows without MinGW
 
 Download libUSB from here https://libusb.info/
 
