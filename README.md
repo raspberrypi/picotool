@@ -20,11 +20,24 @@ sudo cp udev/99-picotool.rules /etc/udev/rules.d/
 
 ### Windows
 
+##### For Windows without MinGW/WSL
+
+Download libUSB from here https://libusb.info/
+
+set LIBUSB_ROOT environment variable to the install directory.
+```console
+mkdir build
+cd build
+cmake -G "NMake Makefiles" ..
+nmake
+```
+
+##### For Windows with MinGW in WSL
+
 Download libUSB from here https://libusb.info/
 
 set LIBUSB_ROOT environment variable to the install directory.
 
-for Windows with MinGW/WSL:
 ```console
 mkdir build
 cd build
@@ -32,13 +45,17 @@ cmake ..
 make
 ```
 
-for Windows without MinGW/WSL:
+##### For Windows with MinGW in MSYS2:
+
+No need to download libusb separately or set LIBUSB_ROOT.
 
 ```console
+pacman -S $MINGW_PACKAGE_PREFIX-{toolchain,cmake,libusb}
 mkdir build
 cd build
-cmake -G "NMake Makefiles" ..
-nmake
+MSYS2_ARG_CONV_EXCL=- cmake .. -G"MSYS Makefiles" -DCMAKE_INSTALL_PREFIX=$MINGW_PREFIX
+make
+make install DESTDIR=/  # optional
 ```
 
 ## Overview

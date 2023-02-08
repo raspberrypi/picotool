@@ -40,7 +40,7 @@ else()
     add_subdirectory(${PICO_SDK_PATH}/src/host/pico_platform pico_platform)
 
     add_executable(picotool main.cpp)
-    set(PICOTOOL_VERSION 1.1.0)
+    set(PICOTOOL_VERSION 1.1.1-develop)
     set(SYSTEM_VERSION "${CMAKE_SYSTEM_NAME} ${CMAKE_SYSTEM_VERSION}")
     set(COMPILER_INFO "${CMAKE_C_COMPILER_ID}-${CMAKE_C_COMPILER_VERSION}, ${CMAKE_BUILD_TYPE}")
     target_compile_definitions(picotool PRIVATE
@@ -60,5 +60,5 @@ else()
             picoboot_connection_cxx
             ${LIBUSB_LIBRARIES})
     # allow `make install`
-    install(TARGETS picotool)
+    install(TARGETS picotool RUNTIME DESTINATION bin)
 endif()
