@@ -1854,11 +1854,12 @@ bool load_command::execute(device_map &devices) {
             bool ok = true;
             vector<uint8_t> file_buf;
             vector<uint8_t> device_buf;
-            for (uint32_t base = mem_range.from; base < mem_range.to && ok; ) {
+            for (uint32_t base = mem_range.from; base < mem_range.to && ok;) {
                 uint32_t this_batch = std::min(mem_range.to - base, batch_size);
                 if (type == flash) {
                     // we have to erase an entire page, so then fill with zeros
-                    range aligned_range(base & ~(FLASH_SECTOR_ERASE_SIZE - 1), (base & ~(FLASH_SECTOR_ERASE_SIZE - 1)) + FLASH_SECTOR_ERASE_SIZE);
+                    range aligned_range(base & ~(FLASH_SECTOR_ERASE_SIZE - 1),
+                                        (base & ~(FLASH_SECTOR_ERASE_SIZE - 1)) + FLASH_SECTOR_ERASE_SIZE);
                     range read_range(base, base + this_batch);
                     read_range.intersect(aligned_range);
                     file_access.read_into_vector(read_range.from, read_range.to - read_range.from, file_buf);
@@ -1869,14 +1870,14 @@ bool load_command::execute(device_map &devices) {
 
                     bool skip = false;
                     if (settings.load.update) {
-                      vector<uint8_t> read_device_buf;
-                      raw_access.read_into_vector(aligned_range.from, batch_size, read_device_buf);
-                      skip = file_buf == read_device_buf;
+                        vector<uint8_t> read_device_buf;
+                        raw_access.read_into_vector(aligned_range.from, batch_size, read_device_buf);
+                        skip = file_buf == read_device_buf;
                     }
                     if (!skip) {
-                      con.exit_xip();
-                      con.flash_erase(aligned_range.from, FLASH_SECTOR_ERASE_SIZE);
-                      raw_access.write_vector(aligned_range.from, file_buf);
+                        con.exit_xip();
+                        con.flash_erase(aligned_range.from, FLASH_SECTOR_ERASE_SIZE);
+                        raw_access.write_vector(aligned_range.from, file_buf);
                     }
                     base = read_range.to; // about to add batch_size
                 } else {
@@ -1887,6 +1888,9 @@ bool load_command::execute(device_map &devices) {
                 bar.progress(base - mem_range.from, mem_range.to - mem_range.from);
             }
         }
+    }
+    for (auto mem_range : ranges) {
+        enum memory_type type = get_memory_type(mem_range.from);
         if (settings.load.verify) {
             bool ok = true;
             {
