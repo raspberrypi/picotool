@@ -88,7 +88,7 @@ namespace cli {
 
         void add(const string& major_group, const string& minor_group, const string& option, const string& description) {
             auto &v = contents[major_group][minor_group];
-            // we don't want to repeated the same option
+            // we don't want to repeat the same option
             if (std::find_if(v.begin(), v.end(), [&](const auto &x) { return x.first == option; }) == v.end()) {
                 v.emplace_back(option, description);
             }
@@ -301,6 +301,7 @@ namespace cli {
 
         vector<string> synopsys() const override {
             string s = string("<") + this->_name + ">";
+            if (this->_max > 1) s += "..";
             return {s};
         }
 
