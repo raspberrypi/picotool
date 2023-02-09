@@ -344,7 +344,7 @@ struct info_command : public cmd {
     string get_doc() const override {
          return "Display information from the target device(s) or file.\nWithout any arguments, this will display basic information for all connected RP2040 devices in BOOTSEL mode";
     }
-} info_cmd;
+};
 
 struct verify_command : public cmd {
     verify_command() : cmd("verify") {}
@@ -367,7 +367,7 @@ struct verify_command : public cmd {
     string get_doc() const override {
         return "Check that the device contents match those in the file.";
     }
-} verify_cmd;
+};
 
 struct save_command : public cmd {
     save_command() : cmd("save") {}
@@ -393,7 +393,7 @@ struct save_command : public cmd {
     string get_doc() const override {
         return "Save the program / memory stored in flash on the device to a file.";
     }
-} save_cmd;
+};
 
 struct load_command : public cmd {
     load_command() : cmd("load") {}
@@ -420,7 +420,7 @@ struct load_command : public cmd {
     string get_doc() const override {
         return "Load the program / memory range stored in a file onto the device.";
     }
-} load_cmd;
+};
 
 struct help_command : public cmd {
     help_command() : cmd("help") {}
@@ -439,7 +439,7 @@ struct help_command : public cmd {
     string get_doc() const override {
         return "Show general help or help for a specific command";
     }
-} help_cmd;
+};
 
 struct version_command : public cmd {
     version_command() : cmd("version") {}
@@ -464,7 +464,7 @@ struct version_command : public cmd {
     string get_doc() const override {
         return "Display picotool version";
     }
-} version_cmd;
+};
 
 struct reboot_command : public cmd {
     bool quiet;
@@ -993,15 +993,19 @@ bool find_binary_info(memory_access& access, binary_info_header &hdr) {
 }
 
 string read_string(memory_access &access, uint32_t addr) {
-    const uint max_length = 256; // todo better incremental length handling
-    auto v = access.read_vector<char>(addr, 256);
-    uint length;
-    for (length = 0; length < max_length; length++) {
-        if (!v[length]) {
-            break;
+    // note this implementation is still wrong, it just tries a bit harder to not try to read off the end of the image (which causes
+    // an assertion failure)
+    uint max_length;
+    for(max_length = 8; max_length <= 1024; max_length *=2 ) {
+        auto v = access.read_vector<char>(addr, max_length);
+        uint length;
+        for (length = 0; length < max_length; length++) {
+            if (!v[length]) {
+                return string(v.data(), length);
+            }
         }
     }
-    return string(v.data(), length);
+    return "<failed to read string>";
 }
 
 struct bi_visitor_base {
@@ -1573,17 +1577,18 @@ string missing_device_string(bool wasRetry) {
         strcpy(b, "No ");
     }
     char *buf = b + strlen(b);
+    int buf_len = b + sizeof(b) - buf;
     if (settings.address != -1) {
         if (settings.bus != -1) {
-            sprintf(buf, "accessible RP2040 device in BOOTSEL mode was found at bus %d, address %d.", settings.bus, settings.address);
+            snprintf(buf, buf_len, "accessible RP2040 device in BOOTSEL mode was found at bus %d, address %d.", settings.bus, settings.address);
         } else {
-            sprintf(buf, "accessible RP2040 devices in BOOTSEL mode were found with address %d.", settings.address);
+            snprintf(buf, buf_len, "accessible RP2040 devices in BOOTSEL mode were found with address %d.", settings.address);
         }
     } else {
         if (settings.bus != -1) {
-            sprintf(buf, "accessible RP2040 devices in BOOTSEL mode were found found on bus %d.", settings.bus);
+            snprintf(buf, buf_len, "accessible RP2040 devices in BOOTSEL mode were found found on bus %d.", settings.bus);
         } else {
-            sprintf(buf, "accessible RP2040 devices in BOOTSEL mode were found.");
+            snprintf(buf, buf_len,"accessible RP2040 devices in BOOTSEL mode were found.");
         }
     }
     return b;
