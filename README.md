@@ -4,15 +4,39 @@ You need to set PICO_SDK_PATH in the environment, or pass it to cmake.
 
 You also need to install `libusb-1.0`.
 
-Linux/Mac: use your favorite package tool. For example, on Ubuntu:
+### Linux / macOS
+
+Use your favorite package tool to install dependencies. For example, on Ubuntu:
 
 ```console
 sudo apt install build-essential pkg-config libusb-1.0-0-dev cmake
 ```
 
-Windows: download from here https://libusb.info/
+On Linux you can add udev rules in order to run picotool without sudo:
 
-If you are on Windows, set LIBUSB_ROOT environment variable to the install directory
+```console
+sudo cp udev/99-picotool.rules /etc/udev/rules.d/
+```
+
+### Windows
+
+##### For Windows without MinGW
+
+Download libUSB from here https://libusb.info/
+
+set LIBUSB_ROOT environment variable to the install directory.
+```console
+mkdir build
+cd build
+cmake -G "NMake Makefiles" ..
+nmake
+```
+
+##### For Windows with MinGW in WSL
+
+Download libUSB from here https://libusb.info/
+
+set LIBUSB_ROOT environment variable to the install directory.
 
 ```console
 mkdir build
@@ -21,18 +45,9 @@ cmake ..
 make
 ```
 
-for Windows non MinGW/WSL:
+##### For Windows with MinGW in MSYS2:
 
-```console
-mkdir build
-cd build
-cmake -G "NMake Makefiles" ..
-nmake
-```
-
-Windows with MinGW in MSYS2:
-
-No need to download libusb separately or set LIBUSB_ROOT.
+No need to download libusb separately or set `LIBUSB_ROOT`.
 
 ```console
 pacman -S $MINGW_PACKAGE_PREFIX-{toolchain,cmake,libusb}
