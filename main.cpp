@@ -1010,7 +1010,7 @@ bool find_binary_info(memory_access& access, binary_info_header &hdr) {
 
 string read_string(memory_access &access, uint32_t addr) {
     const uint max_length = 512;
-    auto v = access.read_vector<char>(addr, 512, true); // zero fill
+    auto v = access.read_vector<char>(addr, max_length, true); // zero fill
     uint length;
     for (length = 0; length < max_length; length++) {
         if (!v[length]) {
