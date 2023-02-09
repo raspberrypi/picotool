@@ -57,7 +57,7 @@ PICOTOOL:
 SYNOPSYS:
     picotool info [-b] [-p] [-d] [-l] [-a] [--bus <bus>] [--address <addr>] [-f] [-F]
     picotool info [-b] [-p] [-d] [-l] [-a] <filename> [-t <type>]
-    picotool load [-n] [-N] [-v] [-x] <filename> [-t <type>] [-o <offset>] [--bus <bus>] [--address <addr>] [-f] [-F]
+    picotool load [-n] [-N] [-u] [-v] [-x] <filename> [-t <type>] [-o <offset>] [--bus <bus>] [--address <addr>] [-f] [-F]
     picotool save [-p] [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>]
     picotool save -a [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>]
     picotool save -r <from> <to> [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>]
