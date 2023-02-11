@@ -1017,7 +1017,8 @@ string read_string(memory_access &access, uint32_t addr) {
             break;
         }
     }
-    return string(v.data(), length);}
+    return string(v.data(), length);
+}
 
 struct bi_visitor_base {
     void visit(memory_access& access, const binary_info_header& hdr) {
@@ -1567,7 +1568,7 @@ void info_guts(memory_access &raw_access) {
                     }
                     for(const auto& item : info) {
                         fos.first_column(1);
-                        fos << (item.first + ":");;
+                        fos << (item.first + ":");
                         fos.first_column(1 + tab);
                         fos << (item.second + "\n");
                     }
@@ -1920,7 +1921,7 @@ bool load_command::execute(device_map &devices) {
                 for (uint32_t base = mem_range.from; base < mem_range.to && ok; base += batch_size) {
                     uint32_t this_batch = std::min(mem_range.to - base, batch_size);
                     // note we pass zero_fill = true in case the file has holes, but this does
-                    // mean that the verification will fail if those holes are not filed with zeros
+                    // mean that the verification will fail if those holes are not filled with zeros
                     // on the device
                     file_access.read_into_vector(base, this_batch, file_buf, true);
                     raw_access.read_into_vector(base, this_batch, device_buf);
@@ -1992,7 +1993,7 @@ bool verify_command::execute(device_map &devices) {
                     for(uint32_t base = mem_range.from; base < mem_range.to && ok; base += batch_size) {
                         uint32_t this_batch = std::min(mem_range.to - base, batch_size);
                         // note we pass zero_fill = true in case the file has holes, but this does
-                        // mean that the verification will fail if those holes are not filed with zeros
+                        // mean that the verification will fail if those holes are not filled with zeros
                         // on the device
                         file_access.read_into_vector(base, this_batch, file_buf, true);
                         raw_access.read_into_vector(base, this_batch, device_buf);
