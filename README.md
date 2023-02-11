@@ -145,7 +145,6 @@ TARGET SELECTION:
             The file name
         -t <type>
             Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
-
 ```
 
 Note the -f arguments vary slightly for Windows vs macOS / Unix platforms.
@@ -207,6 +206,63 @@ Fixed Pin Information
 
 Build Information
  build date:  Dec 31 2020
+```
+
+## load
+
+Load allows you to write data from a file into flash
+
+```text
+$ picotool help load
+LOAD:
+    Load the program / memory range stored in a file onto the device.
+
+SYNOPSYS:
+    picotool load [-n] [-N] [-u] [-v] [-x] <filename> [-t <type>] [-o <offset>] [--bus <bus>] [--address <addr>] [-f] [-F]
+
+OPTIONS:
+    Post load actions
+        -n, --no-overwrite
+            When writing flash data, do not overwrite an existing program in flash. If picotool cannot determine the size/presence
+            of the program in flash, the command fails
+        -N, --no-overwrite-unsafe
+            When writing flash data, do not overwrite an existing program in flash. If picotool cannot determine the size/presence
+            of the program in flash, the load continues anyway
+        -u, --update
+            Skip writing flash sectors that already contain identical data
+        -v, --verify
+            Verify the data was written correctly
+        -x, --execute
+            Attempt to execute the downloaded file as a program after the load
+    File to load from
+        <filename>
+            The file name
+        -t <type>
+            Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
+    BIN file options
+        -o, --offset
+            Specify the load address for a BIN file
+        <offset>
+            Load offset (memory address; default 0x10000000)
+    Target device selection
+        --bus <bus>
+            Filter devices by USB bus number
+        --address <addr>
+            Filter devices by USB device address
+        -f, --force
+            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing
+            the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode
+        -F, --force-no-reboot
+            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing
+            the command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but
+            without the RPI-RP2 drive mounted
+```
+
+e.g.
+
+```text
+$ picotool load blink.uf2
+Loading into Flash: [==============================]  100%
 ```
 
 ## save
