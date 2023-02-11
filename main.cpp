@@ -1568,7 +1568,7 @@ void info_guts(memory_access &raw_access) {
                     }
                     for(const auto& item : info) {
                         fos.first_column(1);
-                        fos << (item.first + ":");;
+                        fos << (item.first + ":");
                         fos.first_column(1 + tab);
                         fos << (item.second + "\n");
                     }
