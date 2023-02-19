@@ -4,15 +4,39 @@ You need to set PICO_SDK_PATH in the environment, or pass it to cmake.
 
 You also need to install `libusb-1.0`.
 
-Linux/Mac: use your favorite package tool. For example, on Ubuntu:
+### Linux / macOS
+
+Use your favorite package tool to install dependencies. For example, on Ubuntu:
 
 ```console
-sudo apt install build-essential pkg-config libusb-1.0-0-dev
+sudo apt install build-essential pkg-config libusb-1.0-0-dev cmake
 ```
 
-Windows: download from here https://libusb.info/
+On Linux you can add udev rules in order to run picotool without sudo:
 
-If you are on Windows, set LIBUSB_ROOT environment variable to the install directory
+```console
+sudo cp udev/99-picotool.rules /etc/udev/rules.d/
+```
+
+### Windows
+
+##### For Windows without MinGW
+
+Download libUSB from here https://libusb.info/
+
+set LIBUSB_ROOT environment variable to the install directory.
+```console
+mkdir build
+cd build
+cmake -G "NMake Makefiles" ..
+nmake
+```
+
+##### For Windows with MinGW in WSL
+
+Download libUSB from here https://libusb.info/
+
+set LIBUSB_ROOT environment variable to the install directory.
 
 ```console
 mkdir build
@@ -21,14 +45,19 @@ cmake ..
 make
 ```
 
-for Windows non MinGW/WSL:
+##### For Windows with MinGW in MSYS2:
+
+No need to download libusb separately or set `LIBUSB_ROOT`.
 
 ```console
+pacman -S $MINGW_PACKAGE_PREFIX-{toolchain,cmake,libusb}
 mkdir build
 cd build
-cmake -G "NMake Makefiles" ..
-nmake
+MSYS2_ARG_CONV_EXCL=- cmake .. -G"MSYS Makefiles" -DCMAKE_INSTALL_PREFIX=$MINGW_PREFIX
+make
+make install DESTDIR=/  # optional
 ```
+
 ## Overview
 
 `picotool` is a tool for inspecting RP2040 binaries, and interacting with RP2040 devices when they are in BOOTSEL mode. (As of version 1.1 of `picotool` it is also possible to interact with RP2040 devices that are not in BOOTSEL mode, but are using USB stdio support from the Raspberry Pi Pico SDK by using the `-f` argument of `picotool`).
@@ -43,7 +72,7 @@ PICOTOOL:
 SYNOPSYS:
     picotool info [-b] [-p] [-d] [-l] [-a] [--bus <bus>] [--address <addr>] [-f] [-F]
     picotool info [-b] [-p] [-d] [-l] [-a] <filename> [-t <type>]
-    picotool load [-n] [-N] [-v] [-x] <filename> [-t <type>] [-o <offset>] [--bus <bus>] [--address <addr>] [-f] [-F]
+    picotool load [-n] [-N] [-u] [-v] [-x] <filename> [-t <type>] [-o <offset>] [--bus <bus>] [--address <addr>] [-f] [-F]
     picotool save [-p] [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>]
     picotool save -a [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>]
     picotool save -r <from> <to> [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>]
