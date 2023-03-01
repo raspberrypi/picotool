@@ -563,7 +563,7 @@ int parse(const int argc, char **argv) {
             }
         }
         if (!no_synopsis) {
-            section_header("SYNOPSYS");
+            section_header("SYNOPSIS");
             for (auto &s : synopsis) {
                 fos.first_column(tab);
                 fos.hanging_indent((int)tool_name.length() + tab);
