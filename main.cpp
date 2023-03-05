@@ -294,7 +294,7 @@ std::shared_ptr<cmd> selected_cmd;
 
 auto device_selection =
     (
-        (option("--bus") & integer("bus").min_value(1).max_value(255).set(settings.bus)
+        (option("--bus") & integer("bus").min_value(0).max_value(255).set(settings.bus)
             .if_missing([] { return "missing bus number"; })) % "Filter devices by USB bus number" +
         (option("--address") & integer("addr").min_value(1).max_value(127).set(settings.address)
             .if_missing([] { return "missing address"; })) % "Filter devices by USB device address"
@@ -563,7 +563,7 @@ int parse(const int argc, char **argv) {
             }
         }
         if (!no_synopsis) {
-            section_header("SYNOPSYS");
+            section_header("SYNOPSIS");
             for (auto &s : synopsis) {
                 fos.first_column(tab);
                 fos.hanging_indent((int)tool_name.length() + tab);
