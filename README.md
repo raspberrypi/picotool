@@ -69,7 +69,7 @@ $ picotool help
 PICOTOOL:
     Tool for interacting with a RP2040 device in BOOTSEL mode, or with a RP2040 binary
 
-SYNOPSYS:
+SYNOPSIS:
     picotool info [-b] [-p] [-d] [-l] [-a] [--bus <bus>] [--address <addr>] [-f] [-F]
     picotool info [-b] [-p] [-d] [-l] [-a] <filename> [-t <type>]
     picotool load [-n] [-N] [-u] [-v] [-x] <filename> [-t <type>] [-o <offset>] [--bus <bus>] [--address <addr>] [-f] [-F]
@@ -110,7 +110,7 @@ INFO:
     Display information from the target device(s) or file.
     Without any arguments, this will display basic information for all connected RP2040 devices in BOOTSEL mode
 
-SYNOPSYS:
+SYNOPSIS:
     picotool info [-b] [-p] [-d] [-l] [-a] [--bus <bus>] [--address <addr>] [-f] [-F]
     picotool info [-b] [-p] [-d] [-l] [-a] <filename> [-t <type>]
 
@@ -217,7 +217,7 @@ $ picotool help load
 LOAD:
     Load the program / memory range stored in a file onto the device.
 
-SYNOPSYS:
+SYNOPSIS:
     picotool load [-n] [-N] [-u] [-v] [-x] <filename> [-t <type>] [-o <offset>] [--bus <bus>] [--address <addr>] [-f] [-F]
 
 OPTIONS:
@@ -274,7 +274,7 @@ $ picotool help save
 SAVE:
     Save the program / memory stored in flash on the device to a file.
 
-SYNOPSYS:
+SYNOPSIS:
     picotool save [-p] [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>]
     picotool save -a [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>]
     picotool save -r <from> <to> [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>]
