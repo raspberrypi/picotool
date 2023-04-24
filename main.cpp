@@ -346,6 +346,23 @@ struct info_command : public cmd {
     }
 };
 
+struct serial_command : public cmd {
+    serial_command() : cmd("serial") {}
+    bool execute(device_map& devices) override;
+
+    group get_cli() override {
+        return (
+            (
+                device_selection % "To target one or more connected RP2040 device(s) in BOOTSEL mode (the default)"
+            ).major_group("TARGET SELECTION").min(0).doc_non_optional(true)
+         );
+    }
+
+    string get_doc() const override {
+         return "Display the serial number of the target device in BOOTSEL mode";
+    }
+};
+
 struct verify_command : public cmd {
     verify_command() : cmd("verify") {}
     bool execute(device_map &devices) override;
@@ -495,6 +512,7 @@ struct reboot_command : public cmd {
 
 vector<std::shared_ptr<cmd>> commands {
         std::shared_ptr<cmd>(new info_command()),
+        std::shared_ptr<cmd>(new serial_command()),
         std::shared_ptr<cmd>(new load_command()),
         std::shared_ptr<cmd>(new save_command()),
         std::shared_ptr<cmd>(new verify_command()),
@@ -1645,7 +1663,72 @@ bool info_command::execute(device_map &devices) {
     return false;
 }
 
-static picoboot::connection get_single_bootsel_device_connection(device_map& devices, bool exclusive = true) {
+static picoboot::connection get_single_bootsel_device_connection(device_map& devices, bool exclusive = true);
+
+void print_hex(uint8_t * buf, size_t len) {
+    for (int i = 0; i < len; i++) {
+        std::cout << std::hex << std::setw(2) << std::setfill('0') << std::uppercase << int(buf[i]);
+    }
+}
+
+bool serial_command::execute(device_map &devices) {
+    auto con = get_single_bootsel_device_connection(devices);
+    picoboot_memory_access raw_access(con);
+
+    static const uint8_t code_buf[] = {
+        // void flash_get_unique_id(void)
+        0x02, 0xa0, 0x06, 0xa1, 0x00, 0x4a, 0x11, 0xe0, 
+        // int buflen
+        0x0d, 0x00, 0x00, 0x00,
+        // char txbuf[13]
+        0x4b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        // char rxbuf[13]
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        // void flash_do_cmd(txbuf, rxbuf, buflen)
+        0x80, 0x23, 0xf0, 0xb5, 0x17, 0x4e, 0x9b, 0x00,
+        0x34, 0x68, 0x63, 0x40, 0xc0, 0x24, 0xa4, 0x00,
+        0x23, 0x40, 0x15, 0x4c, 0x23, 0x60, 0xc0, 0x24,
+        0x13, 0x00, 0x64, 0x05, 0x17, 0x00, 0x1f, 0x43,
+        0x06, 0xd1, 0xc0, 0x23, 0x32, 0x68, 0x9b, 0x00,
+        0x93, 0x43, 0x0f, 0x4a, 0x13, 0x60, 0xf0, 0xbd,
+        0x08, 0x25, 0xa7, 0x6a, 0x3d, 0x40, 0xac, 0x46,
+        0x02, 0x25, 0x2f, 0x42, 0x08, 0xd0, 0x00, 0x2a,
+        0x06, 0xd0, 0x9f, 0x1a, 0x0d, 0x2f, 0x03, 0xd8,
+        0x07, 0x78, 0x01, 0x3a, 0x27, 0x66, 0x01, 0x30,
+        0x65, 0x46, 0x00, 0x2d, 0xe2, 0xd0, 0x00, 0x2b,
+        0xe0, 0xd0, 0x27, 0x6e, 0x01, 0x3b, 0x0f, 0x70,
+        0x01, 0x31, 0xdb, 0xe7, 0x0c, 0x80, 0x01, 0x40,
+        0x0c, 0x90, 0x01, 0x40,
+    };
+
+    const uint32_t code_addr = SRAM_START;
+
+    //std::cout << "-- writing code to " << std::hex << code_addr << std::dec << "\n";
+    raw_access.write(code_addr, (uint8_t *)code_buf, sizeof code_buf);
+
+    const uint32_t uid_addr = code_addr + 28 + 1 + 4;
+    uint8_t uid_buf[8];
+
+    //std::cout << "-- reading uid buf before: " << std::hex << uid_addr << std::dec << " = ";
+    //raw_access.read(uid_addr, uid_buf, sizeof uid_buf, false);
+    //print_hex(uid_buf, sizeof uid_buf);
+    //std::cout << "\n";
+
+    // execute test code
+    //std::cout << "-- executing code at " << std::hex << (code_addr | 1) << std::dec << "\n";
+    con.exec(code_addr | 1);
+
+    //std::cout << "-- reading target after: " << std::hex << uid_addr << std::dec << " = ";
+    raw_access.read(uid_addr, uid_buf, sizeof uid_buf, false);
+    print_hex(uid_buf, sizeof uid_buf);
+    std::cout << "\n";
+
+    return true;
+}
+
+static picoboot::connection get_single_bootsel_device_connection(device_map& devices, bool exclusive) {
     assert(devices[dr_vidpid_bootrom_ok].size() == 1);
     libusb_device_handle *rc = devices[dr_vidpid_bootrom_ok][0].second;
     if (!rc) fail(ERROR_USB, "Unable to connect to device");
