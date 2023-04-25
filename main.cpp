@@ -1718,7 +1718,9 @@ bool serial_command::execute(device_map &devices) {
 
     // execute test code
     //std::cout << "-- executing code at " << std::hex << (code_addr | 1) << std::dec << "\n";
+    con.exit_xip();
     con.exec(code_addr | 1);
+    con.enter_cmd_xip();
 
     //std::cout << "-- reading target after: " << std::hex << uid_addr << std::dec << " = ";
     raw_access.read(uid_addr, uid_buf, sizeof uid_buf, false);
