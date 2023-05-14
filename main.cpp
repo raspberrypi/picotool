@@ -1726,20 +1726,15 @@ struct memory_access {
     // write a vector of types that have a raw_type_mapping
     template <typename T> void write_vector(uint32_t addr, vector<T> &v) {
         assert(v.size());
-        vector<typename raw_type_mapping<T>::access_type> buffer(v.size());
-        for(const auto &e : v) {
-            buffer.push_back(e);
-        }
-        write(addr, (uint8_t *)buffer.data(), v.size() * sizeof(typename raw_type_mapping<T>::access_type));
+        write(addr, (uint8_t *)v.data(), v.size() * sizeof(typename raw_type_mapping<T>::access_type));
     }
 
     template <typename T> void read_into_vector(uint32_t addr, unsigned int count, vector<T> &v, bool zero_fill = false) {
-        vector<typename raw_type_mapping<T>::access_type> buffer(count);
-        if (count) read(addr, (uint8_t *)buffer.data(), count * sizeof(typename raw_type_mapping<T>::access_type), zero_fill);
-        v.clear();
-        v.reserve(count);
-        for(const auto &e : buffer) {
-            v.push_back(e);
+        // vector<typename raw_type_mapping<T>::access_type> buffer(count);
+        if (count) {
+            v.clear();
+            v.resize(count);
+            read(addr, (uint8_t *)v.data(), count * sizeof(typename raw_type_mapping<T>::access_type), zero_fill);
         }
     }
 };
