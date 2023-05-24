@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <pico/usb_reset_interface.h>
 
 #include "picoboot_connection.h"
 
@@ -66,6 +67,19 @@ enum picoboot_device_result picoboot_open_device(libusb_device *device, libusb_d
     }
     if (!ret) {
         if (desc.idVendor != VENDOR_ID_RASPBERRY_PI) {
+            ret = libusb_get_active_config_descriptor(device, &config);
+            if (ret && verbose) {
+                output("Failed to read config descriptor\n");
+            }
+
+            for (uint8_t i = 0; i < config->bNumInterfaces; ++i) {
+                if (0xff == config->interface[i].altsetting[0].bInterfaceClass &&
+                    RESET_INTERFACE_SUBCLASS == config->interface[i].altsetting[0].bInterfaceSubClass &&
+                    RESET_INTERFACE_PROTOCOL == config->interface[i].altsetting[0].bInterfaceProtocol) {
+                    return dr_vidpid_stdio_usb;
+                }
+            }
+
             return dr_vidpid_unknown;
         }
         switch (desc.idProduct) {
