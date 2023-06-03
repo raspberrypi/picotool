@@ -256,6 +256,7 @@ struct _settings {
     uint32_t binary_start = FLASH_START;
     int bus=-1;
     int address=-1;
+    int port = -1;
     string serial;
     uint32_t offset = 0;
     uint32_t from = 0;
@@ -2264,6 +2265,7 @@ int main(int argc, char **argv) {
                 for (libusb_device **dev = devs; *dev; dev++) {
                     if (settings.bus != -1 && settings.bus != libusb_get_bus_number(*dev)) continue;
                     if (settings.address != -1 && settings.address != libusb_get_device_address(*dev)) continue;
+                    if (settings.port != -1 && settings.port != libusb_get_port_number(*dev)) continue;
                     libusb_device_handle *handle = nullptr;
                     auto result = picoboot_open_device(*dev, &handle);
                     if (handle) {
@@ -2351,8 +2353,14 @@ int main(int argc, char **argv) {
                              "Forced command requires a single rebootable RP2040 device to be targeted.");
                     }
                     if (selected_cmd->force_requires_pre_reboot()) {
-                        // we reboot into BOOTSEL mode and disable MSC interface (the 1 here)
                         auto &to_reboot = devices[dr_vidpid_stdio_usb][0].first;
+                        // adjust filter settings, so we can find the device after reboot
+                        if (!settings.serial.empty()) {
+                            settings.serial = "";
+                            settings.bus = libusb_get_bus_number(to_reboot);
+                            settings.port = libusb_get_port_number(to_reboot);
+                        }
+                        // we reboot into BOOTSEL mode and disable MSC interface (the 1 here)
                         reboot_device(to_reboot, true, 1);
                         fos << "The device was asked to reboot into BOOTSEL mode so the command can be executed.\n\n";
                         for (const auto &handle : to_close) {
@@ -2369,7 +2377,9 @@ int main(int argc, char **argv) {
                         // again is to assume it is the only now visible device.
                         settings.force = false;
                         settings.address = -1;
-                        settings.bus = -1;
+                        if (settings.serial.empty()) {
+                            settings.bus = -1;
+                        }
                         continue;
                     }
                 }
