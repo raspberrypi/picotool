@@ -70,14 +70,14 @@ PICOTOOL:
     Tool for interacting with a RP2040 device in BOOTSEL mode, or with a RP2040 binary
 
 SYNOPSIS:
-    picotool info [-b] [-p] [-d] [-l] [-a] [--bus <bus>] [--address <addr>] [--serial <serial>] [-f] [-F]
+    picotool info [-b] [-p] [-d] [-l] [-a] [--bus <bus>] [--address <addr>] [--vid <vid>] [--pid <pid>] [--serial <serial>] [-f] [-F]
     picotool info [-b] [-p] [-d] [-l] [-a] <filename> [-t <type>]
-    picotool load [-n] [-N] [-u] [-v] [-x] <filename> [-t <type>] [-o <offset>] [--bus <bus>] [--address <addr>] [--serial <serial>] [-f] [-F]
-    picotool save [-p] [--bus <bus>] [--address <addr>] [--serial <serial>] [-f] [-F] <filename> [-t <type>]
-    picotool save -a [--bus <bus>] [--address <addr>] [--serial <serial>] [-f] [-F] <filename> [-t <type>]
-    picotool save -r <from> <to> [--bus <bus>] [--address <addr>] [--serial <serial>] [-f] [-F] <filename> [-t <type>]
-    picotool verify [--bus <bus>] [--address <addr>] [--serial <serial>] [-f] [-F] <filename> [-t <type>] [-r <from> <to>] [-o <offset>]
-    picotool reboot [-a] [-u] [--bus <bus>] [--address <addr>] [--serial <serial>] [-f] [-F]
+    picotool load [-n] [-N] [-u] [-v] [-x] <filename> [-t <type>] [-o <offset>] [--bus <bus>] [--address <addr>] [--vid <vid>] [--pid <pid>] [--serial <serial>] [-f] [-F]
+    picotool save [-p] [--bus <bus>] [--address <addr>] [--vid <vid>] [--pid <pid>] [--serial <serial>] [-f] [-F] <filename> [-t <type>]
+    picotool save -a [--bus <bus>] [--address <addr>] [--vid <vid>] [--pid <pid>] [--serial <serial>] [-f] [-F] <filename> [-t <type>]
+    picotool save -r <from> <to> [--bus <bus>] [--address <addr>] [--vid <vid>] [--pid <pid>] [--serial <serial>] [-f] [-F] <filename> [-t <type>]
+    picotool verify [--bus <bus>] [--address <addr>] [--vid <vid>] [--pid <pid>] [--serial <serial>] [-f] [-F] <filename> [-t <type>] [-r <from> <to>] [-o <offset>]
+    picotool reboot [-a] [-u] [--bus <bus>] [--address <addr>] [--vid <vid>] [--pid <pid>] [--serial <serial>] [-f] [-F]
     picotool version [-s]
     picotool help [<cmd>]
 
@@ -111,7 +111,7 @@ INFO:
     Without any arguments, this will display basic information for all connected RP2040 devices in BOOTSEL mode
 
 SYNOPSIS:
-    picotool info [-b] [-p] [-d] [-l] [-a] [--bus <bus>] [--address <addr>] [-f] [-F]
+    picotool info [-b] [-p] [-d] [-l] [-a] [--bus <bus>] [--address <addr>] [--vid <vid>] [--pid <pid>] [--serial <serial>] [-f] [-F]
     picotool info [-b] [-p] [-d] [-l] [-a] <filename> [-t <type>]
 
 OPTIONS:
@@ -133,6 +133,10 @@ TARGET SELECTION:
             Filter devices by USB bus number
         --address <addr>
             Filter devices by USB device address
+        --vid <vid>
+            Filter devices by vendor id
+        --pid <pid>
+            Filter devices by product id
         --serial <serial>
             Filter devices by serial id
         -f, --force
@@ -220,7 +224,7 @@ LOAD:
     Load the program / memory range stored in a file onto the device.
 
 SYNOPSIS:
-    picotool load [-n] [-N] [-u] [-v] [-x] <filename> [-t <type>] [-o <offset>] [--bus <bus>] [--address <addr>] [--serial <serial>] [-f] [-F]
+    picotool load [-n] [-N] [-u] [-v] [-x] <filename> [-t <type>] [-o <offset>] [--bus <bus>] [--address <addr>] [--vid <vid>] [--pid <pid>] [--serial <serial>] [-f] [-F]
 
 OPTIONS:
     Post load actions
@@ -251,6 +255,10 @@ OPTIONS:
             Filter devices by USB bus number
         --address <addr>
             Filter devices by USB device address
+        --vid <vid>
+            Filter devices by vendor id
+        --pid <pid>
+            Filter devices by product id
         --serial <serial>
             Filter devices by serial id
         -f, --force
@@ -279,9 +287,9 @@ SAVE:
     Save the program / memory stored in flash on the device to a file.
 
 SYNOPSIS:
-    picotool save [-p] [--bus <bus>] [--address <addr>] [--serial <serial>] [-f] [-F] <filename> [-t <type>]
-    picotool save -a [--bus <bus>] [--address <addr>] [--serial <serial>] [-f] [-F] <filename> [-t <type>]
-    picotool save -r <from> <to> [--bus <bus>] [--address <addr>] [--serial <serial>] [-f] [-F] <filename> [-t <type>]
+    picotool save [-p] [--bus <bus>] [--address <addr>] [--vid <vid>] [--pid <pid>] [--serial <serial>] [-f] [-F] <filename> [-t <type>]
+    picotool save -a [--bus <bus>] [--address <addr>] [--vid <vid>] [--pid <pid>] [--serial <serial>] [-f] [-F] <filename> [-t <type>]
+    picotool save -r <from> <to> [--bus <bus>] [--address <addr>] [--vid <vid>] [--pid <pid>] [--serial <serial>] [-f] [-F] <filename> [-t <type>]
 
 OPTIONS:
     Selection of data to save
@@ -301,6 +309,10 @@ OPTIONS:
             Filter devices by USB bus number
         --address <addr>
             Filter devices by USB device address
+        --vid <vid>
+            Filter devices by vendor id
+        --pid <pid>
+            Filter devices by product id
         --serial <serial>
             Filter devices by serial id
         -f, --force

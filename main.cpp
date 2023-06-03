@@ -257,6 +257,8 @@ struct _settings {
     int bus=-1;
     int address=-1;
     int port = -1;
+    int vid = -1;
+    int pid = -1;
     string serial;
     uint32_t offset = 0;
     uint32_t from = 0;
@@ -305,11 +307,17 @@ auto device_selection =
             % "Filter devices by USB device address"
     ).min(0).doc_non_optional(true) +
     (
-        (option("--serial") & value("serial").set(settings.serial)
+        (option("--vid") & hex("vid").min_value(0).max_value(0xffff).set(settings.vid)
+            .if_missing([] { return "missing vendor id"; }))
+            % "Filter devices by vendor id"
+        + (option("--pid") & hex("pid").min_value(0).max_value(0xffff).set(settings.pid)
+            .if_missing([] { return "missing product id"; }))
+            % "Filter devices by product id"
+        + (option("--serial") & value("serial").set(settings.serial)
             .if_missing([] { return "missing serial id"; }))
             % "Filter devices by serial id"
 #if !defined(_WIN32)
-        + option('f', "--force").set(settings.force)
+         + option('f', "--force").set(settings.force)
             % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. "
               "After executing the command (unless the command itself is a 'reboot') "
               "the device will be rebooted back to application mode"
@@ -1604,6 +1612,15 @@ string missing_device_string(bool wasRetry) {
         oss << 's';
     }
     oss << " in BOOTSEL mode";
+
+    if (settings.vid != -1 && settings.pid != -1) {
+        oss << " with ID '" << std::hex << settings.vid << ':' << std::hex << settings.pid << '\'';
+    } else if (settings.vid != -1) {
+        oss << " with Vendor ID '" << std::hex << settings.vid << '\'';
+    } else if (settings.pid != -1) {
+        oss << " with Product ID '" << std::hex << settings.pid << '\'';
+    }
+
     if (!settings.serial.empty()) {
         oss << " with serial ID '" << settings.serial << '\'';
     }
@@ -2220,6 +2237,19 @@ string get_usb_device_serial(libusb_device *device, libusb_device_handle *handle
     return serial;
 }
 
+int get_usb_device_vid_pid(libusb_device *device, uint16_t &vid_out, uint16_t &pid_out) {
+    struct libusb_device_descriptor desc;
+    int ret = libusb_get_device_descriptor(device, &desc);
+    if (ret) {
+        return -1;
+    }
+
+    vid_out = desc.idVendor;
+    pid_out = desc.idProduct;
+
+    return 0;
+}
+
 int main(int argc, char **argv) {
     libusb_context *ctx = nullptr;
 
@@ -2266,6 +2296,12 @@ int main(int argc, char **argv) {
                     if (settings.bus != -1 && settings.bus != libusb_get_bus_number(*dev)) continue;
                     if (settings.address != -1 && settings.address != libusb_get_device_address(*dev)) continue;
                     if (settings.port != -1 && settings.port != libusb_get_port_number(*dev)) continue;
+                    if (settings.vid != -1 || settings.pid != -1) {
+                        uint16_t vid, pid;
+                        int ret = get_usb_device_vid_pid(*dev, vid, pid);
+                        if (settings.vid != -1 && (ret || settings.vid != vid)) continue;
+                        if (settings.pid != -1 && (ret || settings.pid != vid)) continue;
+                    }
                     libusb_device_handle *handle = nullptr;
                     auto result = picoboot_open_device(*dev, &handle);
                     if (handle) {
