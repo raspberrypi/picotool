@@ -264,6 +264,7 @@ struct _settings {
     bool reboot_app_specified = false;
     bool force = false;
     bool force_no_reboot = false;
+    bool detect_reset_interface = false;
 
     struct {
         bool show_basic = false;
@@ -297,7 +298,10 @@ auto device_selection =
         (option("--bus") & integer("bus").min_value(0).max_value(255).set(settings.bus)
             .if_missing([] { return "missing bus number"; })) % "Filter devices by USB bus number" +
         (option("--address") & integer("addr").min_value(1).max_value(127).set(settings.address)
-            .if_missing([] { return "missing address"; })) % "Filter devices by USB device address"
+            .if_missing([] { return "missing address"; })) % "Filter devices by USB device address" +
+        option('i', "--detect-reset-interface").set(settings.detect_reset_interface)
+            % "Enable detection of devices with a custom USB vendor interface compatible with stdio_usb reset interface."
+              "The stdio_usb reset interface is implemented by Pico SDK in default USB serial setup."
 #if !defined(_WIN32)
         + option('f', "--force").set(settings.force) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode" +
                 option('F', "--force-no-reboot").set(settings.force_no_reboot) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the RPI-RP2 drive mounted"
@@ -2110,7 +2114,10 @@ static int reboot_device(libusb_device *device, bool bootsel, uint disable_mask=
 
 bool reboot_command::execute(device_map &devices) {
     if (settings.force) {
-        reboot_device(devices[dr_vidpid_stdio_usb][0].first, settings.reboot_usb);
+        auto &to_reboot = devices[dr_vidpid_stdio_usb].empty()
+            ? devices[dr_reset_interface][0].first
+            : devices[dr_vidpid_stdio_usb][0].first;
+        reboot_device(to_reboot, settings.reboot_usb);
         if (!quiet) {
             if (settings.reboot_usb) {
                 std::cout << "The device was asked to reboot into BOOTSEL mode.\n";
@@ -2230,7 +2237,7 @@ int main(int argc, char **argv) {
                     if (handle) {
                         to_close.push_back(handle);
                     }
-                    if (result != dr_error) {
+                    if (result != dr_error && (result != dr_reset_interface || settings.detect_reset_interface)) {
                         devices[result].push_back(std::make_pair(*dev, handle));
                     }
                 }
@@ -2242,7 +2249,7 @@ int main(int argc, char **argv) {
                     // fall thru
                 case cmd::device_support::one:
                     if (devices[dr_vidpid_bootrom_ok].empty() &&
-                        (!settings.force || devices[dr_vidpid_stdio_usb].empty())) {
+                        (!settings.force || (devices[dr_vidpid_stdio_usb].empty() && devices[dr_reset_interface].empty()))) {
                         bool had_note = false;
                         fos << missing_device_string(tries>0);
                         if (tries > 0) {
@@ -2276,19 +2283,25 @@ int main(int argc, char **argv) {
 #if defined(_WIN32)
                             printer(dr_vidpid_stdio_usb,
                                     " appears to be a RP2040 device with a USB serial connection, not in BOOTSEL mode. You can force reboot into BOOTSEL mode via 'picotool reboot -f -u' first.");
+                            printer(dr_reset_interface,
+                                    " appears to be a RP2040 device with a USB reset interface, not in BOOTSEL mode. You can force reboot into BOOTSEL mode via 'picotool reboot -f -u -i' first.");
 #else
                             printer(dr_vidpid_stdio_usb,
                                     " appears to be a RP2040 device with a USB serial connection, so consider -f (or -F) to force reboot in order to run the command.");
+                            printer(dr_reset_interface,
+                                " appears to be a RP2040 device with a USB reset interface, so consider -f (or -F) to force reboot in order to run the command.");
 #endif
                         } else {
                             // special case message for what is actually just reboot (the only command that doesn't require reboot first)
                             printer(dr_vidpid_stdio_usb,
                                     " appears to be a RP2040 device with a USB serial connection, so consider -f to force the reboot.");
+                            printer(dr_reset_interface,
+                                " appears to be a RP2040 device with a USB reset interface, so consider -f to force the reboot.");
                         }
                         rc = ERROR_NO_DEVICE;
                     } else if (supported == cmd::device_support::one) {
                         if (devices[dr_vidpid_bootrom_ok].size() > 1 ||
-                            (devices[dr_vidpid_bootrom_ok].empty() && devices[dr_vidpid_stdio_usb].size() > 1)) {
+                            (devices[dr_vidpid_bootrom_ok].empty() && (devices[dr_vidpid_stdio_usb].size() + devices[dr_reset_interface].size()) > 1)) {
                             fail(ERROR_NOT_POSSIBLE, "Command requires a single RP2040 device to be targeted.");
                         }
                         if (!devices[dr_vidpid_bootrom_ok].empty()) {
@@ -2306,13 +2319,15 @@ int main(int argc, char **argv) {
             }
             if (!rc) {
                 if (settings.force && ctx) { // actually ctx should never be null as we are targeting device if force is set, but still
-                    if (devices[dr_vidpid_stdio_usb].size() != 1) {
+                    if ((devices[dr_vidpid_stdio_usb].size() + devices[dr_reset_interface].size()) != 1) {
                         fail(ERROR_NOT_POSSIBLE,
                              "Forced command requires a single rebootable RP2040 device to be targeted.");
                     }
                     if (selected_cmd->force_requires_pre_reboot()) {
                         // we reboot into BOOTSEL mode and disable MSC interface (the 1 here)
-                        auto &to_reboot = devices[dr_vidpid_stdio_usb][0].first;
+                        auto &to_reboot = devices[dr_vidpid_stdio_usb].empty()
+                            ? devices[dr_reset_interface][0].first
+                            : devices[dr_vidpid_stdio_usb][0].first;
                         reboot_device(to_reboot, true, 1);
                         fos << "The device was asked to reboot into BOOTSEL mode so the command can be executed.\n\n";
                         for (const auto &handle : to_close) {

@@ -76,7 +76,7 @@ enum picoboot_device_result picoboot_open_device(libusb_device *device, libusb_d
                 if (0xff == config->interface[i].altsetting[0].bInterfaceClass &&
                     RESET_INTERFACE_SUBCLASS == config->interface[i].altsetting[0].bInterfaceSubClass &&
                     RESET_INTERFACE_PROTOCOL == config->interface[i].altsetting[0].bInterfaceProtocol) {
-                    return dr_vidpid_stdio_usb;
+                    return dr_reset_interface;
                 }
             }
 
