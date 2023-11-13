@@ -2110,7 +2110,12 @@ static int reboot_device(libusb_device *device, bool bootsel, uint disable_mask=
 
 bool reboot_command::execute(device_map &devices) {
     if (settings.force) {
-        reboot_device(devices[dr_vidpid_stdio_usb][0].first, settings.reboot_usb);
+        if (!devices[dr_vidpid_stdio_usb].empty()) {
+            reboot_device(devices[dr_vidpid_stdio_usb][0].first, settings.reboot_usb);
+        }
+        if (!devices[dr_vidpid_cmsis].empty()) {
+            reboot_device(devices[dr_vidpid_cmsis][0].first, settings.reboot_usb);
+        }
         if (!quiet) {
             if (settings.reboot_usb) {
                 std::cout << "The device was asked to reboot into BOOTSEL mode.\n";
@@ -2242,7 +2247,7 @@ int main(int argc, char **argv) {
                     // fall thru
                 case cmd::device_support::one:
                     if (devices[dr_vidpid_bootrom_ok].empty() &&
-                        (!settings.force || devices[dr_vidpid_stdio_usb].empty())) {
+                        (!settings.force || (devices[dr_vidpid_stdio_usb].empty() && devices[dr_vidpid_cmsis].empty())  )) {
                         bool had_note = false;
                         fos << missing_device_string(tries>0);
                         if (tries > 0) {
@@ -2270,6 +2275,8 @@ int main(int argc, char **argv) {
 #endif
                         printer(dr_vidpid_picoprobe,
                                 " appears to be a RP2040 PicoProbe device not in BOOTSEL mode.");
+                        printer(dr_vidpid_cmsis,
+                                " appears to be a RP2040 CMSIS-DAP device not in BOOTSEL mode.");
                         printer(dr_vidpid_micropython,
                                 " appears to be a RP2040 MicroPython device not in BOOTSEL mode.");
                         if (selected_cmd->force_requires_pre_reboot()) {
@@ -2306,7 +2313,7 @@ int main(int argc, char **argv) {
             }
             if (!rc) {
                 if (settings.force && ctx) { // actually ctx should never be null as we are targeting device if force is set, but still
-                    if (devices[dr_vidpid_stdio_usb].size() != 1) {
+                    if (devices[dr_vidpid_stdio_usb].size() + devices[dr_vidpid_cmsis].size() != 1) {
                         fail(ERROR_NOT_POSSIBLE,
                              "Forced command requires a single rebootable RP2040 device to be targeted.");
                     }
