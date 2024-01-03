@@ -866,7 +866,12 @@ struct file_memory_access : public memory_access {
                 this_size = std::min(size, result.first.max_offset - result.first.offset);
                 assert(this_size);
                 fseek(file, result.second + result.first.offset, SEEK_SET);
-                fread(buffer, this_size, 1, file);
+                auto read_bytes = fread(buffer, 1, this_size, file);
+                if (this_size != read_bytes) {
+                    std::stringstream err;
+                    err << "File read error, wanted " << this_size << ", only read " << read_bytes << "bytes.";
+                    throw std::runtime_error(err.str().c_str());
+                }
             } catch (not_mapped_exception &e) {
                 if (zero_fill) {
                     // address is not in a range, so fill up to next range with zeros
