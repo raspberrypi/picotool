@@ -70,14 +70,14 @@ PICOTOOL:
     Tool for interacting with a RP2040 device in BOOTSEL mode, or with a RP2040 binary
 
 SYNOPSIS:
-    picotool info [-b] [-p] [-d] [-l] [-a] [--bus <bus>] [--address <addr>] [-f] [-F]
+    picotool info [-b] [-p] [-d] [-l] [-a] [--bus <bus>] [--address <addr>] [--serial <serial>] [-f] [-F]
     picotool info [-b] [-p] [-d] [-l] [-a] <filename> [-t <type>]
-    picotool load [-n] [-N] [-u] [-v] [-x] <filename> [-t <type>] [-o <offset>] [--bus <bus>] [--address <addr>] [-f] [-F]
-    picotool save [-p] [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>]
-    picotool save -a [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>]
-    picotool save -r <from> <to> [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>]
-    picotool verify [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>] [-r <from> <to>] [-o <offset>]
-    picotool reboot [-a] [-u] [--bus <bus>] [--address <addr>] [-f] [-F]
+    picotool load [-n] [-N] [-u] [-v] [-x] <filename> [-t <type>] [-o <offset>] [--bus <bus>] [--address <addr>] [--serial <serial>] [-f] [-F]
+    picotool save [-p] [--bus <bus>] [--address <addr>] [--serial <serial>] [-f] [-F] <filename> [-t <type>]
+    picotool save -a [--bus <bus>] [--address <addr>] [--serial <serial>] [-f] [-F] <filename> [-t <type>]
+    picotool save -r <from> <to> [--bus <bus>] [--address <addr>] [--serial <serial>] [-f] [-F] <filename> [-t <type>]
+    picotool verify [--bus <bus>] [--address <addr>] [--serial <serial>] [-f] [-F] <filename> [-t <type>] [-r <from> <to>] [-o <offset>]
+    picotool reboot [-a] [-u] [--bus <bus>] [--address <addr>] [--serial <serial>] [-f] [-F]
     picotool version [-s]
     picotool help [<cmd>]
 
@@ -133,6 +133,8 @@ TARGET SELECTION:
             Filter devices by USB bus number
         --address <addr>
             Filter devices by USB device address
+        --serial <serial>
+            Filter devices by serial id
         -f, --force
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing
             the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode
@@ -218,7 +220,7 @@ LOAD:
     Load the program / memory range stored in a file onto the device.
 
 SYNOPSIS:
-    picotool load [-n] [-N] [-u] [-v] [-x] <filename> [-t <type>] [-o <offset>] [--bus <bus>] [--address <addr>] [-f] [-F]
+    picotool load [-n] [-N] [-u] [-v] [-x] <filename> [-t <type>] [-o <offset>] [--bus <bus>] [--address <addr>] [--serial <serial>] [-f] [-F]
 
 OPTIONS:
     Post load actions
@@ -249,6 +251,8 @@ OPTIONS:
             Filter devices by USB bus number
         --address <addr>
             Filter devices by USB device address
+        --serial <serial>
+            Filter devices by serial id
         -f, --force
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing
             the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode
@@ -275,9 +279,9 @@ SAVE:
     Save the program / memory stored in flash on the device to a file.
 
 SYNOPSIS:
-    picotool save [-p] [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>]
-    picotool save -a [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>]
-    picotool save -r <from> <to> [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>]
+    picotool save [-p] [--bus <bus>] [--address <addr>] [--serial <serial>] [-f] [-F] <filename> [-t <type>]
+    picotool save -a [--bus <bus>] [--address <addr>] [--serial <serial>] [-f] [-F] <filename> [-t <type>]
+    picotool save -r <from> <to> [--bus <bus>] [--address <addr>] [--serial <serial>] [-f] [-F] <filename> [-t <type>]
 
 OPTIONS:
     Selection of data to save
@@ -297,6 +301,8 @@ OPTIONS:
             Filter devices by USB bus number
         --address <addr>
             Filter devices by USB device address
+        --serial <serial>
+            Filter devices by serial id
         -f, --force
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing
             the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode
