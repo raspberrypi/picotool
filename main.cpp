@@ -25,6 +25,7 @@
 #include <memory>
 #include <functional>
 #include <ctime>
+#include <sstream>
 
 #include "boot/uf2.h"
 #include "picoboot_connection_cxx.h"
@@ -255,6 +256,10 @@ struct _settings {
     uint32_t binary_start = FLASH_START;
     int bus=-1;
     int address=-1;
+    int port = -1;
+    int vid = -1;
+    int pid = -1;
+    string serial;
     uint32_t offset = 0;
     uint32_t from = 0;
     uint32_t to = 0;
@@ -295,12 +300,31 @@ std::shared_ptr<cmd> selected_cmd;
 auto device_selection =
     (
         (option("--bus") & integer("bus").min_value(0).max_value(255).set(settings.bus)
-            .if_missing([] { return "missing bus number"; })) % "Filter devices by USB bus number" +
-        (option("--address") & integer("addr").min_value(1).max_value(127).set(settings.address)
-            .if_missing([] { return "missing address"; })) % "Filter devices by USB device address"
+            .if_missing([] { return "missing bus number"; }))
+            % "Filter devices by USB bus number"
+        + (option("--address") & integer("addr").min_value(1).max_value(127).set(settings.address)
+            .if_missing([] { return "missing address"; }))
+            % "Filter devices by USB device address"
+    ).min(0).doc_non_optional(true) +
+    (
+        (option("--vid") & hex("vid").min_value(0).max_value(0xffff).set(settings.vid)
+            .if_missing([] { return "missing vendor id"; }))
+            % "Filter devices by vendor id"
+        + (option("--pid") & hex("pid").min_value(0).max_value(0xffff).set(settings.pid)
+            .if_missing([] { return "missing product id"; }))
+            % "Filter devices by product id"
+        + (option("--serial") & value("serial").set(settings.serial)
+            .if_missing([] { return "missing serial id"; }))
+            % "Filter devices by serial id"
 #if !defined(_WIN32)
-        + option('f', "--force").set(settings.force) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode" +
-                option('F', "--force-no-reboot").set(settings.force_no_reboot) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the RPI-RP2 drive mounted"
+         + option('f', "--force").set(settings.force)
+            % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. "
+              "After executing the command (unless the command itself is a 'reboot') "
+              "the device will be rebooted back to application mode"
+        + option('F', "--force-no-reboot").set(settings.force_no_reboot)
+            % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. "
+              "After executing the command (unless the command itself is a 'reboot') the device will be left connected "
+              "and accessible to picotool, but without the RPI-RP2 drive mounted"
 #endif
     ).min(0).doc_non_optional(true);
 
@@ -1585,28 +1609,34 @@ void info_guts(memory_access &raw_access) {
 }
 
 string missing_device_string(bool wasRetry) {
-    char b[256];
-    if (wasRetry) {
-        strcpy(b, "Despite the reboot attempt, no ");
-    } else {
-        strcpy(b, "No ");
+    std::ostringstream oss;
+    oss << (wasRetry ? "Despite the reboot attempt, no" : "No") << " accessible RP2040 device";
+    if (settings.bus != -1 && settings.serial.empty()) {
+        oss << 's';
     }
-    char *buf = b + strlen(b);
-    int buf_len = b + sizeof(b) - buf;
+    oss << " in BOOTSEL mode";
+
+    if (settings.vid != -1 && settings.pid != -1) {
+        oss << " with ID '" << std::hex << settings.vid << ':' << std::hex << settings.pid << '\'';
+    } else if (settings.vid != -1) {
+        oss << " with Vendor ID '" << std::hex << settings.vid << '\'';
+    } else if (settings.pid != -1) {
+        oss << " with Product ID '" << std::hex << settings.pid << '\'';
+    }
+
+    if (!settings.serial.empty()) {
+        oss << " with serial ID '" << settings.serial << '\'';
+    }
+    oss << " was found";
+    if (settings.bus != -1) {
+        oss << " at bus " << settings.bus;
+    }
     if (settings.address != -1) {
-        if (settings.bus != -1) {
-            snprintf(buf, buf_len, "accessible RP2040 device in BOOTSEL mode was found at bus %d, address %d.", settings.bus, settings.address);
-        } else {
-            snprintf(buf, buf_len, "accessible RP2040 devices in BOOTSEL mode were found with address %d.", settings.address);
-        }
-    } else {
-        if (settings.bus != -1) {
-            snprintf(buf, buf_len, "accessible RP2040 devices in BOOTSEL mode were found found on bus %d.", settings.bus);
-        } else {
-            snprintf(buf, buf_len,"accessible RP2040 devices in BOOTSEL mode were found.");
-        }
+        oss << (settings.bus == -1 ? " with" : ",") << " address " << settings.address;
     }
-    return b;
+    oss << '.';
+
+    return oss.str();
 }
 
 bool help_command::execute(device_map &devices) {
@@ -2183,6 +2213,46 @@ void cancelled(int) {
     throw cancelled_exception();
 }
 
+string get_usb_device_serial(libusb_device *device, libusb_device_handle *handle) {
+    struct libusb_device_descriptor desc{};
+    int ret = libusb_get_device_descriptor(device, &desc);
+    if (ret) {
+        return "";
+    }
+    bool needs_closing = false;
+    if (handle == nullptr) {
+        ret = libusb_open(device, &handle);
+        if (ret) {
+            return "";
+        }
+        needs_closing = true;
+    }
+    unsigned char data[33];
+    string serial;
+    if (libusb_get_string_descriptor_ascii(handle, desc.iSerialNumber, data, 31)) {
+        data[32] = '\0';
+        serial = reinterpret_cast<char const*>(data);
+    }
+    if (needs_closing) {
+        libusb_close(handle);
+    }
+
+    return serial;
+}
+
+int get_usb_device_vid_pid(libusb_device *device, uint16_t &vid_out, uint16_t &pid_out) {
+    struct libusb_device_descriptor desc;
+    int ret = libusb_get_device_descriptor(device, &desc);
+    if (ret) {
+        return -1;
+    }
+
+    vid_out = desc.idVendor;
+    pid_out = desc.idProduct;
+
+    return 0;
+}
+
 int main(int argc, char **argv) {
     libusb_context *ctx = nullptr;
 
@@ -2228,11 +2298,19 @@ int main(int argc, char **argv) {
                 for (libusb_device **dev = devs; *dev; dev++) {
                     if (settings.bus != -1 && settings.bus != libusb_get_bus_number(*dev)) continue;
                     if (settings.address != -1 && settings.address != libusb_get_device_address(*dev)) continue;
+                    if (settings.port != -1 && settings.port != libusb_get_port_number(*dev)) continue;
+                    if (settings.vid != -1 || settings.pid != -1) {
+                        uint16_t vid, pid;
+                        int ret = get_usb_device_vid_pid(*dev, vid, pid);
+                        if (settings.vid != -1 && (ret || settings.vid != vid)) continue;
+                        if (settings.pid != -1 && (ret || settings.pid != vid)) continue;
+                    }
                     libusb_device_handle *handle = nullptr;
                     auto result = picoboot_open_device(*dev, &handle);
                     if (handle) {
                         to_close.push_back(handle);
                     }
+                    if (!settings.serial.empty() && settings.serial != get_usb_device_serial(*dev, handle)) continue;
                     if (result != dr_error) {
                         devices[result].push_back(std::make_pair(*dev, handle));
                     }
@@ -2314,8 +2392,14 @@ int main(int argc, char **argv) {
                              "Forced command requires a single rebootable RP2040 device to be targeted.");
                     }
                     if (selected_cmd->force_requires_pre_reboot()) {
-                        // we reboot into BOOTSEL mode and disable MSC interface (the 1 here)
                         auto &to_reboot = devices[dr_vidpid_stdio_usb][0].first;
+                        // adjust filter settings, so we can find the device after reboot
+                        if (!settings.serial.empty()) {
+                            settings.serial = "";
+                            settings.bus = libusb_get_bus_number(to_reboot);
+                            settings.port = libusb_get_port_number(to_reboot);
+                        }
+                        // we reboot into BOOTSEL mode and disable MSC interface (the 1 here)
                         reboot_device(to_reboot, true, 1);
                         fos << "The device was asked to reboot into BOOTSEL mode so the command can be executed.\n\n";
                         for (const auto &handle : to_close) {
@@ -2332,7 +2416,9 @@ int main(int argc, char **argv) {
                         // again is to assume it is the only now visible device.
                         settings.force = false;
                         settings.address = -1;
-                        settings.bus = -1;
+                        if (settings.serial.empty()) {
+                            settings.bus = -1;
+                        }
                         continue;
                     }
                 }
