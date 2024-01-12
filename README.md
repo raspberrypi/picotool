@@ -70,14 +70,14 @@ PICOTOOL:
     Tool for interacting with a RP2040 device in BOOTSEL mode, or with a RP2040 binary
 
 SYNOPSIS:
-    picotool info [-b] [-p] [-d] [-l] [-a] [--bus <bus>] [--address <addr>] [-f] [-F]
+    picotool info [-b] [-p] [-d] [-l] [-a] [--bus <bus>] [--address <addr>] [-i] [-f] [-F]
     picotool info [-b] [-p] [-d] [-l] [-a] <filename> [-t <type>]
-    picotool load [-n] [-N] [-u] [-v] [-x] <filename> [-t <type>] [-o <offset>] [--bus <bus>] [--address <addr>] [-f] [-F]
-    picotool save [-p] [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>]
-    picotool save -a [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>]
-    picotool save -r <from> <to> [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>]
-    picotool verify [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>] [-r <from> <to>] [-o <offset>]
-    picotool reboot [-a] [-u] [--bus <bus>] [--address <addr>] [-f] [-F]
+    picotool load [-n] [-N] [-u] [-v] [-x] <filename> [-t <type>] [-o <offset>] [--bus <bus>] [--address <addr>] [-i] [-f] [-F]
+    picotool save [-p] [--bus <bus>] [--address <addr>] [-i] [-f] [-F] <filename> [-t <type>]
+    picotool save -a [--bus <bus>] [--address <addr>] [-i] [-f] [-F] <filename> [-t <type>]
+    picotool save -r <from> <to> [--bus <bus>] [--address <addr>] [-i] [-f] [-F] <filename> [-t <type>]
+    picotool verify [--bus <bus>] [--address <addr>] [-i] [-f] [-F] <filename> [-t <type>] [-r <from> <to>] [-o <offset>]
+    picotool reboot [-a] [-u] [--bus <bus>] [--address <addr>] [-i] [-f] [-F]
     picotool version [-s]
     picotool help [<cmd>]
 
@@ -111,7 +111,7 @@ INFO:
     Without any arguments, this will display basic information for all connected RP2040 devices in BOOTSEL mode
 
 SYNOPSIS:
-    picotool info [-b] [-p] [-d] [-l] [-a] [--bus <bus>] [--address <addr>] [-f] [-F]
+    picotool info [-b] [-p] [-d] [-l] [-a] [--bus <bus>] [--address <addr>] [-i] [-f] [-F]
     picotool info [-b] [-p] [-d] [-l] [-a] <filename> [-t <type>]
 
 OPTIONS:
@@ -133,6 +133,9 @@ TARGET SELECTION:
             Filter devices by USB bus number
         --address <addr>
             Filter devices by USB device address
+        -i, --detect-reset-interface
+            Enable detection of devices with a custom USB vendor interface compatible with stdio_usb reset interface.
+            The stdio_usb reset interface is implemented by Pico SDK in default USB serial setup
         -f, --force
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing
             the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode
@@ -218,7 +221,7 @@ LOAD:
     Load the program / memory range stored in a file onto the device.
 
 SYNOPSIS:
-    picotool load [-n] [-N] [-u] [-v] [-x] <filename> [-t <type>] [-o <offset>] [--bus <bus>] [--address <addr>] [-f] [-F]
+    picotool load [-n] [-N] [-u] [-v] [-x] <filename> [-t <type>] [-o <offset>] [--bus <bus>] [--address <addr>] [-i] [-f] [-F]
 
 OPTIONS:
     Post load actions
@@ -249,6 +252,9 @@ OPTIONS:
             Filter devices by USB bus number
         --address <addr>
             Filter devices by USB device address
+        -i, --detect-reset-interface
+            Enable detection of devices with a custom USB vendor interface compatible with stdio_usb reset interface.
+            The stdio_usb reset interface is implemented by Pico SDK in default USB serial setup
         -f, --force
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing
             the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode
@@ -275,9 +281,9 @@ SAVE:
     Save the program / memory stored in flash on the device to a file.
 
 SYNOPSIS:
-    picotool save [-p] [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>]
-    picotool save -a [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>]
-    picotool save -r <from> <to> [--bus <bus>] [--address <addr>] [-f] [-F] <filename> [-t <type>]
+    picotool save [-p] [--bus <bus>] [--address <addr>] [-i] [-f] [-F] <filename> [-t <type>]
+    picotool save -a [--bus <bus>] [--address <addr>] [-i] [-f] [-F] <filename> [-t <type>]
+    picotool save -r <from> <to> [--bus <bus>] [--address <addr>] [-i] [-f] [-F] <filename> [-t <type>]
 
 OPTIONS:
     Selection of data to save
@@ -297,6 +303,9 @@ OPTIONS:
             Filter devices by USB bus number
         --address <addr>
             Filter devices by USB device address
+        -i, --detect-reset-interface
+            Enable detection of devices with a custom USB vendor interface compatible with stdio_usb reset interface.
+            The stdio_usb reset interface is implemented by Pico SDK in default USB serial setup
         -f, --force
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing
             the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode
@@ -540,3 +549,33 @@ in binary.
 If you ctrl+c out of the middle of a long operation, then libusb seems to get a bit confused, which means we aren't able
 to unlock our lockout of USB MSD writes (we have turned them off so the user doesn't step on their own toes). Simply running
 `picotool info` again will unlock it properly the next time (or you can reboot the device).
+
+### Support for custom stdio_usb compatible reset interface
+
+When you include [`pico_stdio_usb`](https://www.raspberrypi.com/documentation/pico-sdk/runtime.html#pico_stdio_usb)
+module and enable default Pico SDK USB stack using
+[`stdio_usb_init()`](https://www.raspberrypi.com/documentation/pico-sdk/runtime.html#gab87bcfa3f24e5a3fe92a944f9eecc460),
+you also automatically include a custom [USB vendor interface](https://www.usb.org/defined-class-codes).
+This interface implements commands to restart the device either to bootloader or to the application.
+
+However `picotool` does not recognize the device as standard RP2040 device,
+when it uses custom USB setup via [TinyUSB](https://docs.tinyusb.org/).
+Custom devices implementing stdio_usb compatible
+[reset interface](https://github.com/raspberrypi/pico-sdk/blob/master/src/rp2_common/pico_stdio_usb/reset_interface.c)
+are supported using picotool `--detect-reset-interface` or `-i` CLI option.
+
+#### Permissions for devices with custom reset interface - Linux / macOS
+
+To allow using `picotool` with your custom USB device without sudo,
+add following UDEV rule to the end of `/etc/udev/rules.d/99-picotool.rules` file:
+
+```udev
+SUBSYSTEM=="usb", \
+    ATTRS{idVendor}=="<VID>", \
+    ATTRS{idProduct}=="<PID>", \
+    MODE="660", \
+    GROUP="plugdev"
+```
+
+Replace `<VID>` and `<PID>` with vendor and product identifier configured in your
+custom USB stack respectively.
