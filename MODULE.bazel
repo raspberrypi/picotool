@@ -1,0 +1,25 @@
+module(name = "picotool", version="0.0.1")
+
+# pico-sdk isn't yet in a Bazel module registry.
+bazel_dep(name = "libusb")
+git_override(
+    module_name = "libusb",
+    remote = "https://github.com/armandomontanez/rules_libusb.git",
+    commit = "efe2b1163e2226ab86b6a9333e32d9e1943407f0",
+)
+
+# pico-sdk isn't yet in a Bazel module registry.
+bazel_dep(name = "pico-sdk", version="0.0.1")
+git_override(
+    module_name = "pico-sdk",
+    remote = "https://github.com/armandomontanez/pico-sdk.git",
+    commit = "64de6dc664ed3c56022d07083e629a32e3d9c569",
+)
+
+# pw_toolchain isn't yet in a Bazel module registry, and comes in transitively
+# from the pico-sdk.
+archive_override(
+    module_name = "pw_toolchain",
+    strip_prefix = "pigweed-a2b21f20127369137c0a24ba1aa91dba86ce9197/pw_toolchain_bazel",
+    urls = "https://github.com/google/pigweed/archive/a2b21f20127369137c0a24ba1aa91dba86ce9197.zip",
+)

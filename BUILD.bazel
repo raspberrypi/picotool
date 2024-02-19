@@ -1,0 +1,44 @@
+cc_library(
+    name = "internal_libraries",
+    includes = ["picoboot_connection"],
+    hdrs = [
+        "picoboot_connection/picoboot_connection.h",
+        "picoboot_connection/picoboot_connection_cxx.h",
+        "clipp/clipp.h",
+        "cli.h",
+        "elf.h",
+    ],
+    srcs = [
+        "picoboot_connection/picoboot_connection.c",
+        "picoboot_connection/picoboot_connection_cxx.cpp",
+    ],
+    deps = [
+        "@libusb//:libusb_headers",
+        "@pico-sdk//src/common/boot_picoboot:boot_picoboot",
+        "@pico-sdk//src/common/pico_base:platform_defs",
+    ],
+    visibility = ["//visibility:private"],
+)
+
+cc_binary(
+    name = "picotool",
+    srcs = ["main.cpp"],
+    deps = [
+        "@pico-sdk//src/common/boot_uf2:boot_uf2",
+        "@pico-sdk//src/common/pico_binary_info:pico_binary_info",
+        "@pico-sdk//src/rp2_common/pico_stdio_usb:reset_interface_headers",
+        ":internal_libraries",
+    ],
+    copts = [
+        "-Wno-delete-non-abstract-non-virtual-dtor",
+        "-Wno-reorder-ctor",
+        "-Wno-unused-variable",
+    ],
+    # TODO: There's probably a nicer way to do share this with CMake.
+    defines = [
+        'PICOTOOL_VERSION=\\"1.1.2\\"',
+        'SYSTEM_VERSION=\\"host\\"',
+        'COMPILER_INFO=\\"local\\"',
+    ],
+    dynamic_deps = ["@libusb//:libusb"],
+)
