@@ -1,1 +1,7 @@
 common --verbose_failures
+
+# Get non-BCR Bazel modules.
+common --registry=https://raw.githubusercontent.com/armandomontanez/bazel-registry/main/
+
+# Re-add BCR since specifying a registry disables the BCR.
+common --registry=https://bcr.bazel.build
