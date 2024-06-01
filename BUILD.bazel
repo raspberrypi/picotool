@@ -1,3 +1,5 @@
+package(default_visibility = ["//visibility:public"])
+
 cc_library(
     name = "internal_libraries",
     includes = ["picoboot_connection"],
@@ -29,11 +31,14 @@ cc_binary(
         "@pico-sdk//src/rp2_common/pico_stdio_usb:reset_interface_headers",
         ":internal_libraries",
     ],
-    copts = [
-        "-Wno-delete-non-abstract-non-virtual-dtor",
-        "-Wno-reorder-ctor",
-        "-Wno-unused-variable",
-    ],
+    copts = select({
+        "@platforms//os:windows": [],
+        "//conditions:default": [
+            "-Wno-delete-non-abstract-non-virtual-dtor",
+            "-Wno-reorder-ctor",
+            "-Wno-unused-variable",
+        ]
+    }),
     # TODO: There's probably a nicer way to do share this with CMake.
     defines = [
         'PICOTOOL_VERSION=\\"1.1.2\\"',
