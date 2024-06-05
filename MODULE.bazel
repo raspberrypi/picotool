@@ -2,11 +2,15 @@ module(name = "picotool", version="0.0.1")
 
 # libusb isn't yet in the BCR, this is fetched from:
 #     https://github.com/armandomontanez/bazel-registry
-bazel_dep(name = "libusb", version="0.0.1")
+bazel_dep(name = "rules_libusb", version="0.1.0")
 
 # pico-sdk isn't yet in the BCR, this is fetched from:
 #     https://github.com/armandomontanez/bazel-registry
 bazel_dep(name = "pico-sdk", version="0.0.1")
+
+libusb = use_extension("@rules_libusb//:extensions.bzl", "libusb")
+libusb.source_release(min_version = "1.0.22")
+use_repo(libusb, "libusb")
 
 # pw_toolchain isn't yet in a Bazel module registry, and comes in transitively
 # from the pico-sdk.
