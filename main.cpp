@@ -2170,9 +2170,15 @@ void get_terminal_size(int& width, int& height) {
     height = (int)(csbi.dwSize.Y);
 #elif defined(__linux__) || defined(__APPLE__)
     winsize w;
-    ioctl(fileno(stdout), TIOCGWINSZ, &w);
-    width = (int)(w.ws_col);
-    height = (int)(w.ws_row);
+    if (ioctl(fileno(stdout), TIOCGWINSZ, &w) == 0) {
+        width = (int)(w.ws_col);
+        height = (int)(w.ws_row);
+    } else {
+        // default values if ioctl failed, for example if stdout is not
+        // connected to an interactive tty
+        width = 80;
+        height = 24;
+    }
 #endif // Windows/Linux
 }
 
