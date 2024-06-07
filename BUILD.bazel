@@ -15,6 +15,7 @@ cc_binary(
     copts = select({
         "@platforms//os:windows": [],
         "//conditions:default": [
+            "-fexceptions",
             "-Wno-delete-non-abstract-non-virtual-dtor",
             "-Wno-reorder-ctor",
             "-Wno-unused-variable",
