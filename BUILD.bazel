@@ -23,7 +23,7 @@ cc_binary(
     }),
     # TODO: There's probably a nicer way to do share this with CMake.
     defines = [
-        'PICOTOOL_VERSION=\\"1.1.2\\"',
+        'PICOTOOL_VERSION=\\"1.1.3-rc1\\"',
         'SYSTEM_VERSION=\\"host\\"',
         'COMPILER_INFO=\\"local\\"',
     ],
