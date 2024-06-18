@@ -1,6 +1,10 @@
 ## Prerequisites
 
-To build picotool using Bazel, you will first and foremost need to [get Bazel](https://github.com/bazelbuild/bazel/releases/latest).
+You'll need Bazel (v7.0.0 or higher) or Bazelisk (a self-updating Bazel
+launcher) to build the Pico SDK.
+
+We strongly recommend you set up
+[Bazelisk](https://bazel.build/install/bazelisk).
 
 ### Linux
 
@@ -33,7 +37,7 @@ To build on Windows, you must install [Visual Studio for Desktop Development Wit
 From the root of the picotool repository, run Bazel with the following command:
 
 ```console
-bazel build //:picotool
+bazelisk build //:picotool
 ```
 
 ## Running picotool
