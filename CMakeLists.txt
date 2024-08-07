@@ -58,7 +58,8 @@ else()
             pico_platform_headers
             pico_usb_reset_interface_headers
             picoboot_connection_cxx
-            ${LIBUSB_LIBRARIES})
+            ${LIBUSB_LIBRARIES}
+            ${PC_LIBUSB_LIBRARIES})
     # allow `make install`
     install(TARGETS picotool RUNTIME DESTINATION bin)
 endif()
