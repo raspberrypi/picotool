@@ -1,0 +1,26 @@
+{
+    "10": {
+        "no_key_state": 0,
+        "key_r": 0,
+        "key_w": 1,
+        "lock_bl": 3,
+        "lock_ns": 3,
+        "lock_s": 2
+    },
+    "11": {
+        "no_key_state": 0,
+        "key_r": 1,
+        "key_w": 5,
+        "lock_bl": 3,
+        "lock_ns": 3,
+        "lock_s": 3
+    },
+    "12": {
+        "no_key_state": 0,
+        "key_r": 0,
+        "key_w": 0,
+        "lock_bl": 3,
+        "lock_ns": 3,
+        "lock_s": 3
+    }
+}

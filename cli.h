@@ -117,6 +117,7 @@ namespace cli {
         settings_holder(const settings_holder &other) {
             settings = other.settings->copy();
         }
+        settings_holder& operator=(const settings_holder&) = default;
         void save_into() {
             settings->save_into();
         }
@@ -174,6 +175,7 @@ namespace cli {
 
     struct matchable {
         matchable() = default;
+        virtual ~matchable() = default;
 
         explicit matchable(string name) : _name(std::move(name)) {}
 
@@ -203,6 +205,10 @@ namespace cli {
             return _force_expand_help;
         }
 
+        string collapse_synopsys() const {
+            return _collapse_synopsys;
+        }
+
         string doc() const {
             return _doc;
         }
@@ -226,6 +232,7 @@ namespace cli {
         int _max = 1;
         bool _doc_non_optional = false;
         bool _force_expand_help = false;
+        string _collapse_synopsys = "";
     };
 
     template<typename D>
@@ -271,6 +278,11 @@ namespace cli {
 
         D &force_expand_help(bool v) {
             _force_expand_help = v;
+            return *static_cast<D *>(this);
+        }
+
+        D &collapse_synopsys(string v) {
+            _collapse_synopsys = v;
             return *static_cast<D *>(this);
         }
 
@@ -394,56 +406,121 @@ namespace cli {
             });
             return *this;
         }
+        template<typename T> value &add_to(T &t) {
+            // note we cannot capture "this"
+            on_action([&t](const string& value) {
+                t.push_back(value);
+                return "";
+            });
+            return *this;
+        }
     };
 
     struct integer : public value_base<integer> {
         explicit integer(string name) : value_base(std::move(name)) {}
 
         template<typename T>
+        static std::string parse_string(std::string value, T& out) {
+            size_t pos = 0;
+            long lvalue = std::numeric_limits<long>::max();
+            int64_t base = 10;
+            if (value.find("0x") == 0) {
+                value = value.substr(2);
+                base = 16;
+            } else if (value.find("0b") == 0) {
+                value = value.substr(2);
+                base = 2;
+            }
+            try {
+                lvalue = std::stoll(value, &pos, base);
+                if (pos != value.length()) {
+                    return "Garbage after integer value: " + value.substr(pos);
+                }
+            } catch (std::invalid_argument&) {
+                return value + " is not a valid integer";
+            } catch (std::out_of_range&) {
+            }
+            if (lvalue != (int64_t)lvalue) {
+                return value + " is too big";
+            }
+            out = (int64_t)lvalue;
+            return "";
+        }
+
+        template<typename T>
         integer &set(T &t) {
-            int min = _min_value;
-            int max = _max_value;
+            int64_t min = _min_value;
+            int64_t max = _max_value;
+            int64_t invalid_bits = _invalid_bits;
+            std::string invalid_bits_error = _invalid_bits_error;
             string nm = "<" + name() + ">";
             // note we cannot capture "this"
-            on_action([&t, min, max, nm](const string& value) {
-                size_t pos = 0;
-                long lvalue = std::numeric_limits<long>::max();
-                try {
-                    lvalue = std::stol(value, &pos);
-                    if (pos != value.length()) {
-                        return "Garbage after integer value: " + value.substr(pos);
-                    }
-                } catch (std::invalid_argument&) {
-                    return value + " is not a valid integer";
-                } catch (std::out_of_range&) {
-                }
-                if (lvalue != (int)lvalue) {
-                    return value + " is too big";
-                }
-                t = (int)lvalue;
+            on_action([&t, min, max, nm, invalid_bits, invalid_bits_error](const string& value) {
+                int64_t tmp = 0;
+                std::string err = parse_string(value, tmp);
+                t = tmp;
+                if (!err.empty()) return err;
                 if (t < min) {
                     return nm + " must be >= " + std::to_string(min);
                 }
                 if (t > max) {
                     return nm + " must be <= " + std::to_string(max);
                 }
+                if (t & invalid_bits) {
+                    return nm + " " + invalid_bits_error;
+                }
                 return string("");
             });
             return *this;
         }
 
-        integer& min_value(int v) {
+        template<typename T>
+        integer &add_to(T &t) {
+            int64_t min = _min_value;
+            int64_t max = _max_value;
+            int64_t invalid_bits = _invalid_bits;
+            std::string invalid_bits_error = _invalid_bits_error;
+            string nm = "<" + name() + ">";
+            // note we cannot capture "this"
+            on_action([&t, min, max, nm, invalid_bits, invalid_bits_error](const string& value) {
+                int64_t tmp = 0;
+                std::string err = parse_string(value, tmp);
+                if (!err.empty()) return err;
+                if (tmp < min) {
+                    return nm + " must be >= " + std::to_string(min);
+                }
+                if (tmp > max) {
+                    return nm + " must be <= " + std::to_string(max);
+                }
+                if (tmp & invalid_bits) {
+                    return nm + " " + invalid_bits_error;
+                }
+                t.push_back(tmp);
+                return string("");
+            });
+            return *this;
+        }
+
+        integer& min_value(int64_t v) {
             _min_value = v;
             return *this;
         }
 
-        integer& max_value(int v) {
+        integer& max_value(int64_t v) {
             _max_value = v;
             return *this;
         }
 
-        int _min_value = 0;
-        int _max_value = std::numeric_limits<int>::max();
+        integer& invalid_bits(int64_t bits, std::string error) {
+            _invalid_bits = bits;
+            _invalid_bits_error = error;
+            return *this;
+        }
+
+        int64_t _min_value = 0;
+        int64_t _max_value = std::numeric_limits<int64_t>::max();
+        std::string _invalid_bits_error;
+        int64_t _invalid_bits = 0;
     };
 
     struct hex : public value_base<hex> {
@@ -488,6 +565,46 @@ namespace cli {
             return *this;
         }
 
+        template<typename T>
+        hex &add_to(T &t) {
+            unsigned int min = _min_value;
+            unsigned int max = _max_value;
+            string nm = "<" + name() + ">";
+            // note we cannot capture "this"
+            on_action([&t, min, max, nm](string value) {
+                auto ovalue = value;
+                if (value.find("0x") == 0) value = value.substr(2);
+                size_t pos = 0;
+                long lvalue = std::numeric_limits<long>::max();
+                try {
+                    lvalue = std::stoul(value, &pos, 16);
+                    if (pos != value.length()) {
+                        return "Garbage after hex value: " + value.substr(pos);
+                    }
+                } catch (std::invalid_argument&) {
+                    return ovalue + " is not a valid hex value";
+                } catch (std::out_of_range&) {
+                }
+                if (lvalue != (unsigned int)lvalue) {
+                    return value + " is not a valid 32 bit value";
+                }
+                unsigned int tmp = (unsigned int)lvalue;
+                if (tmp < min) {
+                    std::stringstream ss;
+                    ss << nm << " must be >= 0x" << std::hex << std::to_string(min);
+                    return ss.str();
+                }
+                if (tmp > max) {
+                    std::stringstream ss;
+                    ss << nm << " must be <= 0x" << std::hex << std::to_string(max);
+                    return ss.str();
+                }
+                t.push_back(tmp);
+                return string("");
+            });
+            return *this;
+        }
+
         hex& min_value(unsigned int v) {
             _min_value = v;
             return *this;
@@ -507,6 +624,7 @@ namespace cli {
             sequence,
             set,
             exclusive,
+            collapse,
         };
 
     public:
@@ -516,7 +634,7 @@ namespace cli {
         explicit group(const T &t) : type(set), elements{t.to_ptr()} {}
 
         template<class Matchable, class... Matchables>
-        group(Matchable m, Matchable ms...) : elements{m, ms}, type(set) {}
+        group(Matchable m, Matchable ms...) : type(set), elements{m, ms} {}
 
         group &set_type(group_type t) {
             type = t;
@@ -542,22 +660,29 @@ namespace cli {
                 case set:
                 case sequence: {
                     std::vector<std::vector<string>> tmp{{}};
-                    for (auto &x : elements) {
-                        auto xs = x->synopsys();
-                        if (xs.size() == 1) {
-                            for (auto &s : tmp) {
-                                s.push_back(decorate(*x, xs[0]));
-                            }
-                        } else {
-                            auto save = tmp;
-                            tmp.clear();
-                            for (auto &v : save) {
-                                for (auto &s : xs) {
-                                    auto nv = v;
-                                    nv.push_back(decorate(*x, s));
-                                    tmp.push_back(nv);
+                    if (_collapse_synopsys.empty()) {
+                        for (auto &x : elements) {
+                            auto xs = x->synopsys();
+                            if (xs.size() == 1) {
+                                for (auto &s : tmp) {
+                                    s.push_back(decorate(*x, xs[0]));
+                                }
+                            } else {
+                                auto save = tmp;
+                                tmp.clear();
+                                for (auto &v : save) {
+                                    for (auto &s : xs) {
+                                        auto nv = v;
+                                        nv.push_back(decorate(*x, s));
+                                        tmp.push_back(nv);
+                                    }
                                 }
                             }
+                        }
+                    } else {
+                        std::vector<std::string> xs = {"[" + _collapse_synopsys + "]"};
+                        for (auto &s : tmp) {
+                            s.push_back(xs[0]);
                         }
                     }
                     for (const auto &v : tmp) {
@@ -580,17 +705,17 @@ namespace cli {
             return rc;
         }
 
-        group operator|(const group &g) {
-            return matchable_derived::operator|(g);
-        }
-
-        group operator&(const group &g) {
-            return matchable_derived::operator&(g);
-        }
-
-        group operator+(const group &g) {
-            return matchable_derived::operator+(g);
-        }
+//        group operator|(const group &g) {
+//            return matchable_derived::operator|(g);
+//        }
+//
+//        group operator&(const group &g) {
+//            return matchable_derived::operator&(g);
+//        }
+//
+//        group operator+(const group &g) {
+//            return matchable_derived::operator+(g);
+//        }
 
         bool no_match_beats_error() const {
             return _no_match_beats_error;
@@ -776,8 +901,8 @@ namespace cli {
 
     private:
         string _major_group;
-        vector<std::shared_ptr<matchable>> elements;
         group_type type;
+        vector<std::shared_ptr<matchable>> elements;
         bool _no_match_beats_error = true;
     };
 
@@ -860,7 +985,7 @@ namespace cli {
         return update_stats(match_type::match, matchable);
     }
 
-    template<typename S> struct typed_settings : public opaque_settings {
+    template<typename S> struct typed_settings final : public opaque_settings {
         explicit typed_settings(S& settings) : root_settings(settings), settings(settings) {
         }
 

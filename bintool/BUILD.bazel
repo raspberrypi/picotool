@@ -1,0 +1,34 @@
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "bintool",
+    srcs = [
+        "bintool.cpp",
+        "mbedtls_wrapper.c",
+    ],
+    hdrs = [
+        "bintool.h",
+        "mbedtls_wrapper.h",
+        "metadata.h",
+    ],
+    copts = select({
+        "@platforms//os:windows": [],
+        "//conditions:default": [
+            "-Wno-unused-variable",
+        ],
+    }),
+    defines = [
+        "HAS_MBEDTLS=1",  # Bazel build always has mbedtls.
+    ],
+    includes = ["."],
+    # In the CMake build, there's a workaround where this library is built with
+    # NO_PICO_PLATFORM, but that define shouldn't propagate to other
+    # dependencies.
+    local_defines = ["NO_PICO_PLATFORM=1"],
+    deps = [
+        "//elf",
+        "//errors",
+        "@mbedtls",
+        "@pico-sdk//src/common/boot_picobin_headers",
+    ],
+)

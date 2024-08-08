@@ -1,0 +1,21 @@
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "picoboot_connection",
+    srcs = [
+        "picoboot_connection.c",
+        "picoboot_connection_cxx.cpp",
+    ],
+    hdrs = [
+        "picoboot_connection.h",
+        "picoboot_connection_cxx.h",
+    ],
+    defines = ["HAS_LIBUSB=1"],  # Bazel build always has libusb.
+    includes = ["."],
+    deps = [
+        "//elf",
+        "@libusb",
+        "@pico-sdk//src/common/boot_picoboot_headers",
+        "@pico-sdk//src/rp2_common/pico_bootrom:pico_bootrom_headers",
+    ],
+)

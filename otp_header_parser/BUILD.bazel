@@ -1,0 +1,13 @@
+package(default_visibility = ["//visibility:public"])
+
+cc_binary(
+    name = "otp_header_parser",
+    srcs = ["otp_header_parse.cpp"],
+    copts = select({
+        "@platforms//os:windows": [],
+        "//conditions:default": [
+            "-Wno-unused-variable",
+        ],
+    }),
+    deps = ["//lib/nlohmann_json:json"],
+)

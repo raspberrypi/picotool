@@ -1,0 +1,21 @@
+load("@rules_python//python:defs.bzl", "py_binary")
+
+package(default_visibility = ["//:__subpackages__"])
+
+cc_library(
+    name = "data_locs",
+    srcs = ["data_locs.cpp"],
+    hdrs = ["//:data_locs_header"],
+    visibility = ["//:__subpackages__"],
+    deps = ["@rules_cc//cc/runfiles"],
+)
+
+py_binary(
+    name = "binh",
+    srcs = ["binh.py"],
+)
+
+py_binary(
+    name = "jsonh",
+    srcs = ["jsonh.py"],
+)

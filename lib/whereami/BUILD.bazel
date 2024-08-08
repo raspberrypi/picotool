@@ -1,0 +1,14 @@
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "whereami",
+    srcs = [
+        "whereami++.cpp",
+    ],
+    hdrs = [
+        "whereami.c",
+        "whereami.h",
+        "whereami++.h",
+    ],
+    includes = ["."],
+)

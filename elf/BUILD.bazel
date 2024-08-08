@@ -1,0 +1,20 @@
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "elf",
+    srcs = ["elf_file.cpp"],
+    hdrs = [
+        "addresses.h",
+        "elf.h",
+        "elf_file.h",
+        "portable_endian.h",
+    ],
+    copts = select({
+        "@platforms//os:windows": [],
+        "//conditions:default": [
+            "-Wno-unused-function",
+        ],
+    }),
+    includes = ["."],
+    deps = ["//errors"],
+)

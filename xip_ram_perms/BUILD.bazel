@@ -1,0 +1,17 @@
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "xip_ram_perms_prebuilt",
+    srcs = ["xip_ram_perms.elf"],
+)
+
+# TODO: Make this work.
+cc_library(
+    name = "xip_ram_perms",
+    srcs = ["set_perms.c"],
+    tags = ["manual"],
+    deps = [
+        "//:xip_ram_perms",
+        "@pico-sdk//src/rp2_common/pico_stdlib",
+    ],
+)

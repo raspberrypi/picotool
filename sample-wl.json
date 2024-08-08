@@ -1,0 +1,25 @@
+{
+    "device": {
+        "vid": "0x2e8b",
+        "pid": "0x000e",
+        "bcd": 2.15,
+        "lang_id": "0x0c09",
+        "manufacturer": "zß水🍌 Test's Pis",
+        "product": "Test RP2350?",
+        "serial_number": "notnecessarilyanumber",
+        "max_power": "0x20",
+        "attributes": "0xe0"
+    },
+    "scsi": {
+        "vendor": "TestPi",
+        "product": "MyPi",
+        "version": "v897"
+    },
+    "volume": {
+        "label": "TestPi Boot",
+        "redirect_url": "https://www.raspberrypi.com/news/",
+        "redirect_name": "Some News About Stuff",
+        "model": "My Test Pi",
+        "board_id": "TPI-RP2350"
+    }
+}

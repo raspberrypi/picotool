@@ -1,0 +1,20 @@
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "elf2uf2",
+    srcs = ["elf2uf2.cpp"],
+    hdrs = ["elf2uf2.h"],
+    copts = select({
+        "@platforms//os:windows": [],
+        "//conditions:default": [
+            "-Wno-unused-function",
+            "-Wno-unused-variable",
+        ],
+    }),
+    includes = ["."],
+    deps = [
+        "//elf",
+        "//errors",
+        "@pico-sdk//src/common/boot_uf2_headers",
+    ],
+)

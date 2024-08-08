@@ -1,0 +1,6 @@
+cc_library(
+    name = "mbedtls_config",
+    hdrs = ["include/mbedtls_config.h"],
+    includes = ["include"],
+    visibility = ["@mbedtls//:__subpackages__"],
+)
