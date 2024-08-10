@@ -16,7 +16,7 @@ Use your favorite package tool to install dependencies. For example, on Ubuntu:
 sudo apt install build-essential pkg-config libusb-1.0-0-dev cmake
 ```
 
-> If libusb-1.0-0-dev is not present, picotool still builds, but it automatically leave out all options that deal with managing a pico via usb (load, save, verify, reboot). This type of build can be recognized because these commands also do not appear in the help command.
+> If libusb-1.0-0-dev is not present, picotool still builds, but it automatically leave out all options that deal with managing a pico via usb (load, save, verify, reboot). This type of build can be recognized because these commands also do not appear in the help command. It can also be observed with the build output message 'libUSB is not found - no USB support will be built'
 
 Then simply build like a normal CMake project:
 
