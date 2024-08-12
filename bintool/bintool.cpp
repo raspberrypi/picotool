@@ -747,6 +747,16 @@ void verify_block(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runt
 }
 
 
+uint32_t calc_checksum(std::vector<uint8_t> bin) {
+    assert(bin.size() == 252);
+
+    uint32_t checksum = 0;
+    crc32(bin.data(), bin.size(), &checksum);
+
+    return checksum;
+}
+
+
 int encrypt(elf_file *elf, block *new_block, const private_t aes_key, const public_t public_key, const private_t private_key, bool hash_value, bool sign) {
 
     std::vector<uint8_t> to_enc = get_lm_hash_data(elf, new_block);

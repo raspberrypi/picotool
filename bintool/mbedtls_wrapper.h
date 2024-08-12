@@ -44,6 +44,7 @@ typedef message_digest_t private_t;
 void mb_sha256_buffer(const uint8_t *data, size_t len, message_digest_t *digest_out);
 void mb_aes256_buffer(const uint8_t *data, size_t len, uint8_t *data_out, const private_t *key, iv_t *iv);
 void mb_sign_sha256(const uint8_t *entropy, size_t entropy_size, const message_digest_t *m, const public_t *p, const private_t *d, signature_t *out);
+void mb_crc32(const uint8_t *data, size_t len, uint32_t* cs_out);
 
 uint32_t mb_verify_signature_secp256k1(
         signature_t signature[1],
@@ -54,6 +55,7 @@ uint32_t mb_verify_signature_secp256k1(
 #define aes256_buffer mb_aes256_buffer
 #define sign_sha256 mb_sign_sha256
 #define verify_signature_secp256k1 mb_verify_signature_secp256k1
+#define crc32 mb_crc32
 
 #ifdef __cplusplus
 };

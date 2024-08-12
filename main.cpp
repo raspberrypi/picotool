@@ -3467,12 +3467,32 @@ uint32_t get_family_id(uint8_t file_idx) {
         vector<uint8_t> bin;
         std::unique_ptr<block> best_block = find_best_block(file_access, bin);
         if (best_block == NULL) {
-            // No block, so RP2040
-            DEBUG_LOG("Detected family id %s\n", family_name(RP2040_FAMILY_ID).c_str());
-            return RP2040_FAMILY_ID;
+            // No block, so RP2040 or absolute
+            if (file_access.get_binary_start() == FLASH_START) {
+                vector<uint8_t> checksum_data = {};
+                file_access.read_into_vector(FLASH_START, 252, checksum_data);
+                uint32_t checksum = file_access.read_int(FLASH_START + 252);
+                if (checksum == calc_checksum(checksum_data)) {
+                    // Checksum is correct, so RP2040
+                    DEBUG_LOG("Detected family id %s due to boot2 checksum\n", family_name(RP2040_FAMILY_ID).c_str());
+                    return RP2040_FAMILY_ID;
+                } else {
+                    // Checksum incorrect, so absolute
+                    DEBUG_LOG("Assumed family id %s\n", family_name(ABSOLUTE_FAMILY_ID).c_str());
+                    return ABSOLUTE_FAMILY_ID;
+                }
+            } else {
+                // no_flash RP2040 binaries have no checksum
+                DEBUG_LOG("Assumed family id %s\n", family_name(RP2040_FAMILY_ID).c_str());
+                return RP2040_FAMILY_ID;
+            }
         }
         auto first_item = best_block->items[0].get();
-        if (first_item->type() != PICOBIN_BLOCK_ITEM_1BS_IMAGE_TYPE) fail(ERROR_INCOMPATIBLE, "Cannot autodetect UF2 family: No IMAGE_DEF found\n");
+        if (first_item->type() != PICOBIN_BLOCK_ITEM_1BS_IMAGE_TYPE) {
+            // This will apply for partition tables
+            DEBUG_LOG("Assumed family id %s due to block with no IMAGE_DEF\n", family_name(ABSOLUTE_FAMILY_ID).c_str());
+            return ABSOLUTE_FAMILY_ID;
+        }
         auto image_def = dynamic_cast<image_type_item*>(first_item);
         if (image_def->image_type() == type_exe) {
             if (image_def->chip() == chip_rp2040) {
@@ -4162,7 +4182,13 @@ bool load_command::execute(device_map &devices) {
                 settings.offset_set = true;
                 settings.partition_size = end - start;
             } else {
-                fail(ERROR_NOT_POSSIBLE, "This file cannot be loaded into the partition table on the device");
+                // Check if partition table is present, for correct error message
+                auto partitions = get_partitions(con);
+                if (!partitions) {
+                    fail(ERROR_NOT_POSSIBLE, "This file cannot be loaded onto a device with no partition table");
+                } else {
+                    fail(ERROR_NOT_POSSIBLE, "This file cannot be loaded into the partition table on the device");
+                }
             }
         }
     }
