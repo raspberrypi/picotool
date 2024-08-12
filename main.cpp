@@ -2948,120 +2948,6 @@ void info_guts(memory_access &raw_access, void *con) {
                     if (binary_end)
                         info_pair("binary end", hex_string(binary_end));
 
-                    vector<uint8_t> bin;
-                    std::unique_ptr<block> best_block = find_best_block(raw_access, bin);
-                    if (best_block) {
-                        verified_t hash_verified = none;
-                        verified_t sig_verified = none;
-                    #if HAS_MBEDTLS
-                        verify_block(bin, raw_access.get_binary_start(), raw_access.get_binary_start(), best_block.get(), hash_verified, sig_verified);
-                    #endif
-
-                        // Image Def
-                        auto image_def = best_block->get_item<image_type_item>();
-                        if (image_def != nullptr) {
-                            if (image_def->image_type() == type_exe) {
-                                switch (image_def->chip()) {
-                                    case chip_rp2040:
-                                        info_pair("target chip", "RP2040");
-                                        break;
-                                    case chip_rp2350:
-                                        info_pair("target chip", "RP2350");
-                                        switch (image_def->cpu()) {
-                                            case cpu_riscv:
-                                                info_pair("image type", "RISC-V");
-                                                break;
-                                            case cpu_varmulet:
-                                                info_pair("image type", "Varmulet");
-                                                break;
-                                            case cpu_arm:
-                                                if (image_def->security() == sec_s) {
-                                                    info_pair("image type", "ARM Secure");
-                                                } else if (image_def->security() == sec_ns) {
-                                                    info_pair("image type", "ARM Non-Secure");
-                                                } else if (image_def->security() == sec_unspecified) {
-                                                    info_pair("image type", "ARM");
-                                                }
-                                        }
-                                        break;
-                                    default:
-                                        break;
-                                }
-                            } else if (image_def->image_type() == type_data) {
-                                info_pair("image type", "data");
-                            }
-                        }
-
-                        // Version
-                        auto version = best_block->get_item<version_item>();
-                        if (version != nullptr) {
-                            info_pair("version", std::to_string(version->major) + "." + std::to_string(version->minor));
-                            if (version->otp_rows.size() > 0) {
-                                info_pair("rollback version", std::to_string(version->rollback));
-                                std::stringstream rows;
-                                for (const auto row : version->otp_rows) { rows << hex_string(row, 3) << " "; }
-                                info_pair("rollback rows", rows.str());
-                            }
-                        }
-
-                        // Load Map
-                        // todo what should this really report
-                        auto load_map = best_block->get_item<load_map_item>();
-                        if (load_map != nullptr) {
-                            for (unsigned int i=0; i < load_map->entries.size(); i++) {
-                                std::stringstream ss;
-                                auto e = load_map->entries[i];
-                                if (e.storage_address == 0) {
-                                    ss << "Clear 0x" << std::hex << e.runtime_address;
-                                    ss << "+0x" << std::hex << e.size;
-                                } else if (e.storage_address != e.runtime_address) {
-                                    if (is_address_initialized(rp2350_address_ranges_flash, e.runtime_address)) {
-                                        ss << "ERROR: COPY TO FLASH NOT PERMITTED ";
-                                    }
-                                    ss << "Copy 0x" << std::hex << e.storage_address;
-                                    ss << "+0x" << std::hex << e.size;
-                                    ss << " to 0x" << std::hex << e.runtime_address;
-                                } else {
-                                    ss << "Load 0x" << std::hex << e.storage_address;
-                                    ss << "+0x" << std::hex << e.size;
-                                }
-                                info_pair("load map entry " + std::to_string(i), ss.str());
-                            }
-                        }
-
-                        // Rolling Window Delta
-                        auto rwd = best_block->get_item<rolling_window_delta_item>();
-                        if (rwd != nullptr) {
-                            info_pair("rolling window delta", hex_string(rwd->addr));
-                        }
-
-                        // Vector Table
-                        auto vtor = best_block->get_item<vector_table_item>();
-                        if (vtor != nullptr) {
-                            info_pair("vector table", hex_string(vtor->addr));
-                        }
-
-                        // Entry Point
-                        auto entry_point = best_block->get_item<entry_point_item>();
-                        if (entry_point != nullptr) {
-                            std::stringstream ss;
-                            ss << "EP " << hex_string(entry_point->ep);
-                            ss << ", SP " << hex_string(entry_point->sp);
-                            if (entry_point->splim_set) ss << ", SPLIM " << hex_string(entry_point->splim);
-                            info_pair("entry point", ss.str());
-                        }
-
-                        // Hash and Sig
-                        if (hash_verified != none) {
-                            info_pair("hash value", hash_verified == passed ? "verified" : "incorrect");
-                        }
-                        if (sig_verified != none) {
-                            info_pair("signature", sig_verified == passed ? "verified" : "incorrect");
-                        }
-                    } else if (get_model(raw_access) == rp2350) {
-                        fos << "WARNING: Binary on RP2350 device does not contain a block loop - this binary will not boot\n";
-                    }
-
                     for (auto &f: deferred) {
                         f();
                     }
@@ -3095,6 +2981,120 @@ void info_guts(memory_access &raw_access, void *con) {
                     info_pair("build date", program_build_date);
                     info_pair("build attributes", cli::join(build_attributes, "\n"));
                 }
+            }
+            vector<uint8_t> bin;
+            std::unique_ptr<block> best_block = find_best_block(raw_access, bin);
+            if (best_block && (settings.info.show_basic || settings.info.all)) {
+                select_group(program_info);
+                verified_t hash_verified = none;
+                verified_t sig_verified = none;
+            #if HAS_MBEDTLS
+                verify_block(bin, raw_access.get_binary_start(), raw_access.get_binary_start(), best_block.get(), hash_verified, sig_verified);
+            #endif
+
+                // Image Def
+                auto image_def = best_block->get_item<image_type_item>();
+                if (image_def != nullptr) {
+                    if (image_def->image_type() == type_exe) {
+                        switch (image_def->chip()) {
+                            case chip_rp2040:
+                                info_pair("target chip", "RP2040");
+                                break;
+                            case chip_rp2350:
+                                info_pair("target chip", "RP2350");
+                                switch (image_def->cpu()) {
+                                    case cpu_riscv:
+                                        info_pair("image type", "RISC-V");
+                                        break;
+                                    case cpu_varmulet:
+                                        info_pair("image type", "Varmulet");
+                                        break;
+                                    case cpu_arm:
+                                        if (image_def->security() == sec_s) {
+                                            info_pair("image type", "ARM Secure");
+                                        } else if (image_def->security() == sec_ns) {
+                                            info_pair("image type", "ARM Non-Secure");
+                                        } else if (image_def->security() == sec_unspecified) {
+                                            info_pair("image type", "ARM");
+                                        }
+                                }
+                                break;
+                            default:
+                                break;
+                        }
+                    } else if (image_def->image_type() == type_data) {
+                        info_pair("image type", "data");
+                    }
+                }
+
+                // Version
+                auto version = best_block->get_item<version_item>();
+                if (version != nullptr) {
+                    info_pair("version", std::to_string(version->major) + "." + std::to_string(version->minor));
+                    if (version->otp_rows.size() > 0) {
+                        info_pair("rollback version", std::to_string(version->rollback));
+                        std::stringstream rows;
+                        for (const auto row : version->otp_rows) { rows << hex_string(row, 3) << " "; }
+                        info_pair("rollback rows", rows.str());
+                    }
+                }
+
+                // Load Map
+                // todo what should this really report
+                auto load_map = best_block->get_item<load_map_item>();
+                if (load_map != nullptr) {
+                    for (unsigned int i=0; i < load_map->entries.size(); i++) {
+                        std::stringstream ss;
+                        auto e = load_map->entries[i];
+                        if (e.storage_address == 0) {
+                            ss << "Clear 0x" << std::hex << e.runtime_address;
+                            ss << "+0x" << std::hex << e.size;
+                        } else if (e.storage_address != e.runtime_address) {
+                            if (is_address_initialized(rp2350_address_ranges_flash, e.runtime_address)) {
+                                ss << "ERROR: COPY TO FLASH NOT PERMITTED ";
+                            }
+                            ss << "Copy 0x" << std::hex << e.storage_address;
+                            ss << "+0x" << std::hex << e.size;
+                            ss << " to 0x" << std::hex << e.runtime_address;
+                        } else {
+                            ss << "Load 0x" << std::hex << e.storage_address;
+                            ss << "+0x" << std::hex << e.size;
+                        }
+                        info_pair("load map entry " + std::to_string(i), ss.str());
+                    }
+                }
+
+                // Rolling Window Delta
+                auto rwd = best_block->get_item<rolling_window_delta_item>();
+                if (rwd != nullptr) {
+                    info_pair("rolling window delta", hex_string(rwd->addr));
+                }
+
+                // Vector Table
+                auto vtor = best_block->get_item<vector_table_item>();
+                if (vtor != nullptr) {
+                    info_pair("vector table", hex_string(vtor->addr));
+                }
+
+                // Entry Point
+                auto entry_point = best_block->get_item<entry_point_item>();
+                if (entry_point != nullptr) {
+                    std::stringstream ss;
+                    ss << "EP " << hex_string(entry_point->ep);
+                    ss << ", SP " << hex_string(entry_point->sp);
+                    if (entry_point->splim_set) ss << ", SPLIM " << hex_string(entry_point->splim);
+                    info_pair("entry point", ss.str());
+                }
+
+                // Hash and Sig
+                if (hash_verified != none) {
+                    info_pair("hash value", hash_verified == passed ? "verified" : "incorrect");
+                }
+                if (sig_verified != none) {
+                    info_pair("signature", sig_verified == passed ? "verified" : "incorrect");
+                }
+            } else if (get_model(raw_access) == rp2350) {
+                fos << "WARNING: Binary on RP2350 device does not contain a block loop - this binary will not boot\n";
             }
         } catch (std::invalid_argument &e) {
             fos << "Error reading binary info\n";
