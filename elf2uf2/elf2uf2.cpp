@@ -154,12 +154,16 @@ bool check_abs_block(uf2_block block) {
 }
 
 int pages2uf2(std::map<uint32_t, std::vector<page_fragment>>& pages, std::shared_ptr<std::iostream> in, std::shared_ptr<std::iostream> out, uint32_t family_id, uint32_t abs_block_loc=0) {
-    // RP2350-E10: add absolute block to start, targeting end of flash by default
+    // RP2350-E10: add absolute block to start of flash UF2s, targeting end of flash by default
     if (family_id != ABSOLUTE_FAMILY_ID && family_id != RP2040_FAMILY_ID && abs_block_loc) {
-        uf2_block block = gen_abs_block(abs_block_loc);
-        out->write((char*)&block, sizeof(uf2_block));
-        if (out->fail()) {
-            fail_write_error();
+        uint32_t base_addr = pages.begin()->first;
+        address_ranges flash_range = rp2350_address_ranges_flash;
+        if (is_address_initialized(flash_range, base_addr)) {
+            uf2_block block = gen_abs_block(abs_block_loc);
+            out->write((char*)&block, sizeof(uf2_block));
+            if (out->fail()) {
+                fail_write_error();
+            }
         }
     }
     uf2_block block;
