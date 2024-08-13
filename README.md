@@ -709,7 +709,7 @@ OPTIONS:
             Don't hash the partition table
         --singleton
             Singleton partition table
-    Errata RP2350-E9 Fix
+    Errata RP2350-E10 Fix
         --abs-block
             Enforce support for an absolute block
         <abs_block_loc>
@@ -756,7 +756,7 @@ OPTIONS:
     UF2 Family options
         <family_id>
             family id for UF2
-    Errata RP2350-E9 Fix
+    Errata RP2350-E10 Fix
         --abs-block
             Add an absolute block
         <abs_block_loc>
