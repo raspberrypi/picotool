@@ -2836,7 +2836,8 @@ void info_guts(memory_access &raw_access, void *con) {
         select_group(device_info);
         binary_info_header hdr;
         try {
-            if (find_binary_info(raw_access, hdr)) {
+            bool has_binary_info = find_binary_info(raw_access, hdr);
+            if (has_binary_info) {
                 auto access = remapped_memory_access(raw_access, hdr.reverse_copy_mapping);
                 auto visitor = bi_visitor{};
                 map<string, string> output;
@@ -3093,7 +3094,7 @@ void info_guts(memory_access &raw_access, void *con) {
                 if (sig_verified != none) {
                     info_pair("signature", sig_verified == passed ? "verified" : "incorrect");
                 }
-            } else if (get_model(raw_access) == rp2350) {
+            } else if (has_binary_info && get_model(raw_access) == rp2350) {
                 fos << "WARNING: Binary on RP2350 device does not contain a block loop - this binary will not boot\n";
             }
         } catch (std::invalid_argument &e) {
