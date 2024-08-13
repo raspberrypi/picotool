@@ -4,7 +4,7 @@ if (NOT USE_PRECOMPILED)
         set(PICO_PLATFORM rp2350-arm-s)
 
         # Pull in SDK (must be before project)
-        include(pico_sdk_import.cmake)
+        include(${PICO_SDK_PATH}/external/pico_sdk_import.cmake)
 
         project(xip_ram_perms C CXX ASM)
         set(CMAKE_C_STANDARD 11)

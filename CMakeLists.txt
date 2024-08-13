@@ -84,6 +84,29 @@ if (NOT PICOTOOL_NO_LIBUSB)
         DEPENDS xip_ram_perms
     )
 
+    # compile flash_id
+    ExternalProject_Add(flash_id
+            PREFIX picoboot_flash_id
+            SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/picoboot_flash_id
+            BINARY_DIR ${CMAKE_BINARY_DIR}/picoboot_flash_id
+            CMAKE_ARGS 
+                "-DCMAKE_MAKE_PROGRAM:FILEPATH=${CMAKE_MAKE_PROGRAM}"
+                "-DPICO_SDK_PATH:FILEPATH=${PICO_SDK_PATH}"
+                "-DUSE_PRECOMPILED:BOOL=${USE_PRECOMPILED}"
+            BUILD_ALWAYS 1 # todo remove this
+            INSTALL_COMMAND ""
+            )
+
+    set(FLASH_ID_BIN ${CMAKE_BINARY_DIR}/picoboot_flash_id/flash_id.bin)
+    add_executable(flash_id_bin IMPORTED)
+    add_dependencies(flash_id_bin flash_id)
+    set_property(TARGET flash_id_bin PROPERTY IMPORTED_LOCATION ${FLASH_ID_BIN})
+    # copy xip_ram_perms.elf into build directory
+    add_custom_command(TARGET flash_id
+        COMMAND ${CMAKE_COMMAND} -E copy ${FLASH_ID_BIN} ${CMAKE_BINARY_DIR}/flash_id.bin
+        DEPENDS flash_id
+    )
+
     # We want to generate headers from WELCOME.HTM etc.
     ExternalProject_Add(otp_header_parser
             PREFIX otp_header_parser
@@ -144,7 +167,10 @@ if (NOT PICOTOOL_NO_LIBUSB)
     endif()
 endif()
 
-add_custom_target(binary_data DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/rp2350.rom.h ${CMAKE_CURRENT_BINARY_DIR}/xip_ram_perms_elf.h)
+add_custom_target(binary_data DEPENDS
+        ${CMAKE_CURRENT_BINARY_DIR}/rp2350.rom.h
+        ${CMAKE_CURRENT_BINARY_DIR}/xip_ram_perms_elf.h
+        ${CMAKE_CURRENT_BINARY_DIR}/flash_id_bin.h)
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/rp2350.rom.h
         COMMAND ${CMAKE_COMMAND}
             -D BINARY_FILE=${CMAKE_CURRENT_LIST_DIR}/bootrom.end.bin
@@ -159,6 +185,14 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/xip_ram_perms_elf.h
             -P ${CMAKE_CURRENT_LIST_DIR}/cmake/binh.cmake
         DEPENDS xip_ram_perms
         COMMENT "Configuring xip_ram_perms_elf.h"
+        VERBATIM)
+add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/flash_id_bin.h
+        COMMAND ${CMAKE_COMMAND}
+            -D BINARY_FILE=${FLASH_ID_BIN}
+            -D OUTPUT_NAME=flash_id_bin
+            -P ${CMAKE_CURRENT_LIST_DIR}/cmake/binh.cmake
+        DEPENDS flash_id
+        COMMENT "Configuring flash_id_bin.h"
         VERBATIM)
 
 add_subdirectory(errors)
