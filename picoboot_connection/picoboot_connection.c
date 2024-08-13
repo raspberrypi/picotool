@@ -579,36 +579,71 @@ static const uint8_t picoboot_peek_cmd[] = {
 };
 #define PICOBOOT_PEEK_CMD_PROG_SIZE (size_t)(12 + 4)
 
-// todo - compile this - currently taken from github PR #86
-static const size_t picoboot_flash_id_cmd_len = 152;
-static const uint8_t picoboot_flash_id_cmd[] = {
-    // void flash_get_unique_id(void)
-    0x02, 0xa0, 0x06, 0xa1, 0x00, 0x4a, 0x11, 0xe0, 
-    // int buflen
-    0x0d, 0x00, 0x00, 0x00,
-    // char txbuf[13]
-    0x4b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    // char rxbuf[13]
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    // void flash_do_cmd(txbuf, rxbuf, buflen)
-    0x80, 0x23, 0xf0, 0xb5, 0x17, 0x4e, 0x9b, 0x00,
-    0x34, 0x68, 0x63, 0x40, 0xc0, 0x24, 0xa4, 0x00,
-    0x23, 0x40, 0x15, 0x4c, 0x23, 0x60, 0xc0, 0x24,
-    0x13, 0x00, 0x64, 0x05, 0x17, 0x00, 0x1f, 0x43,
-    0x06, 0xd1, 0xc0, 0x23, 0x32, 0x68, 0x9b, 0x00,
-    0x93, 0x43, 0x0f, 0x4a, 0x13, 0x60, 0xf0, 0xbd,
-    0x08, 0x25, 0xa7, 0x6a, 0x3d, 0x40, 0xac, 0x46,
-    0x02, 0x25, 0x2f, 0x42, 0x08, 0xd0, 0x00, 0x2a,
-    0x06, 0xd0, 0x9f, 0x1a, 0x0d, 0x2f, 0x03, 0xd8,
-    0x07, 0x78, 0x01, 0x3a, 0x27, 0x66, 0x01, 0x30,
-    0x65, 0x46, 0x00, 0x2d, 0xe2, 0xd0, 0x00, 0x2b,
-    0xe0, 0xd0, 0x27, 0x6e, 0x01, 0x3b, 0x0f, 0x70,
-    0x01, 0x31, 0xdb, 0xe7, 0x0c, 0x80, 0x01, 0x40,
-    0x0c, 0x90, 0x01, 0x40,
-};
-#define PICOBOOT_FLASH_ID_CMD_PROG_SIZE (size_t)(152)
+// 00000000 <flash_get_unique_id_raw>:
+//    0:   a002            add     r0, pc, #8      @ (adr r0, c <FLASH_RUID_DATA_BYTES+0x4>)
+//    2:   a106            add     r1, pc, #24     @ (adr r1, 1c <FLASH_RUID_TOTAL_BYTES+0xf>)
+//    4:   4a00            ldr     r2, [pc, #0]    @ (8 <FLASH_RUID_DATA_BYTES>)
+//    6:   e011            b.n     2c <flash_do_cmd>
+//    8:   0000000d        .word   0x0000000d
+//    c:   0000004b        .word   0x0000004b
+//         ...
+//
+// 0000002c <flash_do_cmd>:
+//   2c:   2380            movs    r3, #128        @ 0x80
+//   2e:   b5f0            push    {r4, r5, r6, r7, lr}
+//   30:   4e17            ldr     r6, [pc, #92]   @ (90 <FLASH_RUID_CMD+0x45>)
+//   32:   009b            lsls    r3, r3, #2
+//   34:   6834            ldr     r4, [r6, #0]
+//   36:   4063            eors    r3, r4
+//   38:   24c0            movs    r4, #192        @ 0xc0
+//   3a:   00a4            lsls    r4, r4, #2
+//   3c:   4023            ands    r3, r4
+//   3e:   4c15            ldr     r4, [pc, #84]   @ (94 <FLASH_RUID_CMD+0x49>)
+//   40:   6023            str     r3, [r4, #0]
+//   42:   24c0            movs    r4, #192        @ 0xc0
+//   44:   0013            movs    r3, r2
+//   46:   0564            lsls    r4, r4, #21
+//   48:   0017            movs    r7, r2
+//   4a:   431f            orrs    r7, r3
+//   4c:   d106            bne.n   5c <FLASH_RUID_CMD+0x11>
+//   4e:   23c0            movs    r3, #192        @ 0xc0
+//   50:   6832            ldr     r2, [r6, #0]
+//   52:   009b            lsls    r3, r3, #2
+//   54:   4393            bics    r3, r2
+//   56:   4a0f            ldr     r2, [pc, #60]   @ (94 <FLASH_RUID_CMD+0x49>)
+//   58:   6013            str     r3, [r2, #0]
+//   5a:   bdf0            pop     {r4, r5, r6, r7, pc}
+//   5c:   2508            movs    r5, #8
+//   5e:   6aa7            ldr     r7, [r4, #40]   @ 0x28
+//   60:   403d            ands    r5, r7
+//   62:   46ac            mov     ip, r5
+//   64:   2502            movs    r5, #2
+//   66:   422f            tst     r7, r5
+//   68:   d008            beq.n   7c <FLASH_RUID_CMD+0x31>
+//   6a:   2a00            cmp     r2, #0
+//   6c:   d006            beq.n   7c <FLASH_RUID_CMD+0x31>
+//   6e:   1a9f            subs    r7, r3, r2
+//   70:   2f0d            cmp     r7, #13
+//   72:   d803            bhi.n   7c <FLASH_RUID_CMD+0x31>
+//   74:   7807            ldrb    r7, [r0, #0]
+//   76:   3a01            subs    r2, #1
+//   78:   6627            str     r7, [r4, #96]   @ 0x60
+//   7a:   3001            adds    r0, #1
+//   7c:   4665            mov     r5, ip
+//   7e:   2d00            cmp     r5, #0
+//   80:   d0e2            beq.n   48 <flash_do_cmd+0x1c>
+//   82:   2b00            cmp     r3, #0
+//   84:   d0e0            beq.n   48 <flash_do_cmd+0x1c>
+//   86:   6e27            ldr     r7, [r4, #96]   @ 0x60
+//   88:   3b01            subs    r3, #1
+//   8a:   700f            strb    r7, [r1, #0]
+//   8c:   3101            adds    r1, #1
+//   8e:   e7db            b.n     48 <flash_do_cmd+0x1c>
+//   90:   4001800c        .word   0x4001800c
+//   94:   4001900c        .word   0x4001900c
+
+#include "flash_id_bin.h"
+#define PICOBOOT_FLASH_ID_CMD_PROG_SIZE (const size_t)(152)
 
 // TODO better place for this e.g. the USB DPRAM location the controller has already put it in
 #define PEEK_POKE_CODE_LOC 0x20000000u
@@ -647,10 +682,11 @@ int picoboot_peek(libusb_device_handle *usb_device, uint32_t addr, uint32_t *dat
 
 int picoboot_flash_id(libusb_device_handle *usb_device, uint64_t *data) {
     picoboot_exclusive_access(usb_device, 1);
+    assert(PICOBOOT_FLASH_ID_CMD_PROG_SIZE == flash_id_bin_SIZE);
     uint8_t prog[PICOBOOT_FLASH_ID_CMD_PROG_SIZE];
     uint64_t id;
     output("GET FLASH ID\n");
-    memcpy(prog, picoboot_flash_id_cmd, picoboot_flash_id_cmd_len);
+    memcpy(prog, flash_id_bin, flash_id_bin_SIZE);
 
     // ensure XIP is exited before executing
     int ret = picoboot_exit_xip(usb_device);
