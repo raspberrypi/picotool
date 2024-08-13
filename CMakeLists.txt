@@ -101,7 +101,7 @@ if (NOT PICOTOOL_NO_LIBUSB)
     add_executable(flash_id_bin IMPORTED)
     add_dependencies(flash_id_bin flash_id)
     set_property(TARGET flash_id_bin PROPERTY IMPORTED_LOCATION ${FLASH_ID_BIN})
-    # copy xip_ram_perms.elf into build directory
+    # copy flash_id.bin into build directory
     add_custom_command(TARGET flash_id
         COMMAND ${CMAKE_COMMAND} -E copy ${FLASH_ID_BIN} ${CMAKE_BINARY_DIR}/flash_id.bin
         DEPENDS flash_id
