@@ -242,7 +242,11 @@ else()
 endif()
 
 if (NOT LIBUSB_FOUND)
-    message("libUSB is not found - no USB support will be built")
+    if (PICOTOOL_NO_LIBUSB)
+        message("PICOTOOL_NO_LIBUSB is set - no USB support will be built")
+    else()
+        message("libUSB is not found - no USB support will be built")
+    endif()
     target_compile_definitions(picotool PRIVATE HAS_LIBUSB=0)
     target_link_libraries(picotool 
         picoboot_connection_header)
