@@ -471,7 +471,7 @@ struct _settings {
     struct {
         bool abs_block = false;
         #if SUPPORT_A2
-        uint32_t abs_block_loc = 0x11000000 - UF2_PAGE_SIZE;
+        uint32_t abs_block_loc = 0x12000000 - UF2_PAGE_SIZE;
         #else
         uint32_t abs_block_loc = 0;
         #endif
