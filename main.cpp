@@ -2589,10 +2589,6 @@ void build_rmap_elf(std::shared_ptr<std::iostream>file, range_map<size_t>& rmap)
     }
 }
 
-bool is_valid_family_id(uint32_t family_id) {
-    return family_id >= RP2040_FAMILY_ID  && family_id <= FAMILY_ID_MAX;
-}
-
 void build_rmap_uf2(std::shared_ptr<std::iostream>file, range_map<size_t>& rmap) {
     file->seekg(0, ios::beg);
     uf2_block block;
@@ -2606,7 +2602,6 @@ void build_rmap_uf2(std::shared_ptr<std::iostream>file, range_map<size_t>& rmap)
         if (block.magic_start0 == UF2_MAGIC_START0 && block.magic_start1 == UF2_MAGIC_START1 &&
             block.magic_end == UF2_MAGIC_END) {
             if (block.flags & UF2_FLAG_FAMILY_ID_PRESENT &&
-                is_valid_family_id(block.file_size) &&
                 !(block.flags & UF2_FLAG_NOT_MAIN_FLASH) && block.payload_size == PAGE_SIZE) {
                 #if SUPPORT_A2
                 // ignore the absolute block
