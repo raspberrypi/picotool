@@ -16,7 +16,7 @@ Use your favorite package tool to install dependencies. For example, on Ubuntu:
 sudo apt install build-essential pkg-config libusb-1.0-0-dev cmake
 ```
 
-> If libusb-1.0-0-dev is not installed, picotool still builds, but it omits all options that deal with managing a pico via USB (load, save, verify, reboot). Builds that do not include USB support can be recognized because these commands also do not appear in the help command. The build output message 'libUSB is not found - no USB support will be built' also appears in the build logs.
+> If libusb-1.0-0-dev is not installed, picotool still builds, but it omits all options that deal with managing a pico via USB (load, save, erase, verify, reboot). Builds that do not include USB support can be recognized because these commands also do not appear in the help command. The build output message 'libUSB is not found - no USB support will be built' also appears in the build logs.
 
 Then simply build like a normal CMake project:
 
@@ -118,6 +118,9 @@ SYNOPSIS:
     picotool save [-p] [device-selection]
     picotool save -a [device-selection]
     picotool save -r <from> <to> [device-selection]
+    picotool erase [-a] [device-selection]
+    picotool erase [-p <partition>] [device-selection]
+    picotool erase -r <from> <to> [device-selection]
     picotool verify [device-selection]
     picotool reboot [-a] [-u] [-g <partition>] [-c <cpu>] [device-selection]
     picotool otp list|get|set|load|dump|permissions|white-label
@@ -136,6 +139,7 @@ COMMANDS:
     seal        Add final metadata to a binary, optionally including a hash and/or signature.
     link        Link multiple binaries into one block loop.
     save        Save the program / memory stored in flash on the device to a file.
+    erase       Erase the program / memory stored in flash on the device.
     verify      Check that the device contents match those in the file.
     reboot      Reboot the device
     otp         Commands related to the RP2350 OTP (One-Time-Programmable) Memory
@@ -495,6 +499,95 @@ File spoon.uf2:
 Program Information
 name:      lcd_1602_i2c
 web site:  https://github.com/raspberrypi/pico-examples/tree/HEAD/i2c/lcd_1602_i2c
+```
+
+## erase
+
+`erase` allows you to erase all of flash, a partition of flash, or an explicit range of flash on the device.
+It defaults to erasing all of flash.
+
+```text
+$ picotool help erase
+ERASE:
+    Erase the program / memory stored in flash on the device.
+
+SYNOPSIS:
+    picotool erase [-a] [device-selection]
+    picotool erase [-p <partition>] [device-selection]
+    picotool erase -r <from> <to> [device-selection]
+
+OPTIONS:
+    Selection of data to erase
+        -a, --all
+            Erase all of flash memory. This is the default
+        -p, --partition
+            Erase a partition
+        <partition>
+            Partition number to erase
+        -r, --range
+            Erase a range of memory. Note that erases must be 4096 byte-aligned, so the range is expanded accordingly
+        <from>
+            The lower address bound in hex
+        <to>
+            The upper address bound in hex
+    Source device selection
+        --bus <bus>
+            Filter devices by USB bus number
+        --address <addr>
+            Filter devices by USB device address
+        --vid <vid>
+            Filter by vendor id
+        --pid <pid>
+            Filter by product id
+        --ser <ser>
+            Filter by serial number
+        -f, --force
+            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
+            command (unless the command itself is a 'reboot') the device will be rebooted back to application mode
+        -F, --force-no-reboot
+            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
+            command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
+            RPI-RP2 drive mounted
+```
+
+e.g. first looking at what is on the device...
+
+```text
+$ picotool info
+Partition 0
+ Program Information
+  none
+
+Partition 1
+ Program Information
+  name:          blink
+  web site:      https://github.com/raspberrypi/pico-examples/tree/HEAD/blink
+  features:      UART stdin / stdout
+  binary start:  0x10000000
+  binary end:    0x1000a934
+  target chip:   RP2350
+  image type:    ARM Secure
+```
+
+... then erase partition 1 ...
+```text
+$ picotool erase -p 1
+Erasing partition 1:
+  0007f000->000fc000
+Erasing: [==============================]  100%
+Erased 512000 bytes
+```
+
+... and looking at the device again:
+```text
+$ picotool info
+Partition 0
+ Program Information
+  none
+
+Partition 1
+ Program Information
+  none
 ```
 
 ## seal

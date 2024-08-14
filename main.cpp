@@ -707,6 +707,34 @@ struct load_command : public cmd {
         return "Load the program / memory range stored in a file onto the device.";
     }
 };
+
+struct erase_command : public cmd {
+    erase_command() : cmd("erase") {}
+    bool execute(device_map &devices) override;
+
+    group get_cli() override {
+        return (
+            (
+                option('a', "--all") % "Erase all of flash memory. This is the default" |
+                (
+                    option('p', "--partition") % "Erase a partition" &
+                        integer("partition").set(settings.load.partition) % "Partition number to erase"
+                ).min(0).doc_non_optional(true) |
+                (
+                    option('r', "--range").set(settings.range_set) % "Erase a range of memory. Note that erases must be 4096 byte-aligned, so the range is expanded accordingly" &
+                        hex("from").set(settings.from) % "The lower address bound in hex" &
+                        hex("to").set(settings.to) % "The upper address bound in hex"
+                ).min(0).doc_non_optional(true)
+            ).min(0).doc_non_optional(true).no_match_beats_error(false) % "Selection of data to erase" +
+            ( // note this parenthesis seems to help with error messages for say erase --foo
+                device_selection % "Source device selection"
+            )
+        );
+    }
+    string get_doc() const override {
+        return "Erase the program / memory stored in flash on the device.";
+    }
+};
 #endif
 
 #if HAS_MBEDTLS
@@ -1289,6 +1317,7 @@ vector<std::shared_ptr<cmd>> commands {
         std::shared_ptr<cmd>(new link_command()),
     #if HAS_LIBUSB
         std::shared_ptr<cmd>(new save_command()),
+        std::shared_ptr<cmd>(new erase_command()),
         std::shared_ptr<cmd>(new verify_command()),
         reboot_cmd,
     #endif
@@ -3893,6 +3922,64 @@ bool save_command::execute(device_map &devices) {
             throw;
         }
     }
+    return false;
+}
+
+bool erase_command::execute(device_map &devices) {
+    auto con = get_single_bootsel_device_connection(devices);
+    picoboot_memory_access raw_access(con);
+
+    uint32_t end = 0;
+    uint32_t binary_end = 0;
+    binary_info_header hdr;
+    uint32_t start = FLASH_START;
+    if (settings.load.partition >= 0) {
+        auto partitions = get_partitions(con);
+        if (!partitions) {
+            fail(ERROR_NOT_POSSIBLE, "There is no partition table on the device");
+        }
+        if (settings.load.partition >= partitions->size()) {
+            fail(ERROR_NOT_POSSIBLE, "There are only %d partitions on the device", partitions->size());
+        }
+        start = std::get<0>((*partitions)[settings.load.partition]);
+        end = std::get<1>((*partitions)[settings.load.partition]);
+        printf("Erasing partition %d:\n", settings.load.partition);
+        printf("  %08x->%08x\n", start, end);
+        start += FLASH_START;
+        end += FLASH_START;
+        if (end <= start) {
+            fail(ERROR_ARGS, "Erase range is invalid/empty");
+        }
+    } else if (settings.range_set) {
+        start = settings.from & ~(FLASH_SECTOR_ERASE_SIZE - 1);
+        end = (settings.to + (FLASH_SECTOR_ERASE_SIZE - 1)) & ~(FLASH_SECTOR_ERASE_SIZE - 1);
+        if (end <= start) {
+            fail(ERROR_ARGS, "Erase range is invalid/empty");
+        }
+    } else {
+        end = FLASH_START + guess_flash_size(raw_access);
+        if (end <= FLASH_START) {
+            fail(ERROR_NOT_POSSIBLE, "Cannot determine the flash size, so cannot erase the entirety of flash, try --range.");
+        }
+    }
+
+    model_t model = get_model(raw_access);
+    enum memory_type t1 = get_memory_type(start , model);
+    enum memory_type t2 = get_memory_type(end, model);
+    if (t1 != flash || t1 != t2) {
+        fail(ERROR_NOT_POSSIBLE, "Erase range not all in flash");
+    }
+    uint32_t size = end - start;
+
+    {
+        progress_bar bar("Erasing: ");
+        for (uint32_t addr = start; addr < end; addr += FLASH_SECTOR_ERASE_SIZE) {
+            bar.progress(addr-start, end-start);
+            con.flash_erase(addr, FLASH_SECTOR_ERASE_SIZE);
+        }
+        bar.progress(100);
+    }
+    std::cout << "Erased " << size << " bytes\n";
     return false;
 }
 #endif
