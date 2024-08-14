@@ -1683,11 +1683,13 @@ static model_t get_model(memory_access &raw_access) {
     }
 }
 
-bool get_int(const std::string& s, int& out) {
+template<typename T>
+bool get_int(const std::string& s, T& out) {
     return integer::parse_string(s, out).empty();
 }
 
-bool get_json_int(json value, int& out) {
+template<typename T>
+bool get_json_int(json value, T& out) {
     if (value.is_string()) {
         string str = value;
         if (str.back() == 'k' || str.back() == 'K') {
@@ -5410,7 +5412,7 @@ bool partition_create_command::execute(device_map &devices) {
     for (auto p : partitions) {
         partition_table_item::partition new_p;
         uint32_t start = cur_pos;
-        if (p.contains("start")) get_json_int(p["start"], (int&)start);
+        if (p.contains("start")) get_json_int(p["start"], start);
         int size; get_json_int(p["size"], size);
 
         if (start >= 4096 || size >= 4096) {
@@ -5467,7 +5469,7 @@ bool partition_create_command::execute(device_map &devices) {
             new_p.flags |= (link_value << PICOBIN_PARTITION_FLAGS_LINK_VALUE_LSB) & PICOBIN_PARTITION_FLAGS_LINK_VALUE_BITS;
         }
         if (p.contains("name")) { new_p.name = p["name"]; new_p.flags |= PICOBIN_PARTITION_FLAGS_HAS_NAME_BITS; }
-        if (p.contains("id")) { new_p.id = p["id"]; new_p.flags |= PICOBIN_PARTITION_FLAGS_HAS_ID_BITS; }
+        if (p.contains("id")) { get_json_int(p["id"], new_p.id); new_p.flags |= PICOBIN_PARTITION_FLAGS_HAS_ID_BITS; }
 
         if(p.contains("no_reboot_on_uf2_download")) new_p.flags |= PICOBIN_PARTITION_FLAGS_UF2_DOWNLOAD_NO_REBOOT_BITS;
         if(p.contains("ab_non_bootable_owner_affinity")) new_p.flags |= PICOBIN_PARTITION_FLAGS_UF2_DOWNLOAD_AB_NON_BOOTABLE_OWNER_AFFINITY;
