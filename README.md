@@ -87,13 +87,15 @@ Alternatively you can install in a custom path via:
 cmake -DCMAKE_INSTALL_PREFIX=$MY_INSTALL_DIR -DPICOTOOL_FLAT_INSTALL=1 ..
 ```
 
-In order for the SDK to find `picotool` in this custom path, you  will need to set the `picotool_DIR` variable in your project, either by passing to `-Dpicotool_DIR=$MY_INSTALL_DIR/picotool` to your SDK `cmake` command, or by adding
+In order for the SDK to find `picotool` in this custom path, you  will need to set the `picotool_DIR` variable in your project. This can be achieved either by setting the `picotool_DIR` environment variable to `$MY_INSTALL_DIR/picotool`, by passing `-Dpicotool_DIR=$MY_INSTALL_DIR/picotool` to your SDK `cmake` command, or by adding
 
 ```CMake
 set(picotool_DIR $MY_INSTALL_DIR/picotool)
 ```
 
 to your CMakeLists.txt file.
+
+> See the [find_package documentation](https://cmake.org/cmake/help/latest/command/find_package.html#config-mode-search-procedure) for more details - although note that SDK builds will not have the `CMAKE_SYSTEM_XXX` variables set, as the the Platform files do not set up these paths
 
 ## Overview
 
