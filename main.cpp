@@ -1627,6 +1627,7 @@ SAFE_MAPPING(binary_info_named_group_t);
 
 #define BOOTROM_MAGIC_RP2040 0x01754d
 #define BOOTROM_MAGIC_RP2350 0x02754d
+#define BOOTROM_MAGIC_UNKNOWN 0x000000
 #define BOOTROM_MAGIC_ADDR 0x00000010
 
 static inline uint32_t rom_table_code(char c1, char c2) {
@@ -1956,13 +1957,16 @@ struct iostream_memory_access : public memory_access {
     }
 
     void read(uint32_t address, uint8_t *buffer, uint32_t size, bool zero_fill) override {
-        if (model != unknown && address == BOOTROM_MAGIC_ADDR && size == 4) {
+        if (address == BOOTROM_MAGIC_ADDR && size == 4) {
             // return the memory model
             if (model == rp2040) {
                 *(uint32_t*)buffer = BOOTROM_MAGIC_RP2040;
                 return;
             } else if (model == rp2350) {
                 *(uint32_t*)buffer = BOOTROM_MAGIC_RP2350;
+                return;
+            } else {
+                *(uint32_t*)buffer = BOOTROM_MAGIC_UNKNOWN;
                 return;
             }
         }
@@ -2635,9 +2639,10 @@ void build_rmap_uf2(std::shared_ptr<std::iostream>file, range_map<size_t>& rmap)
             if (block.flags & UF2_FLAG_FAMILY_ID_PRESENT &&
                 !(block.flags & UF2_FLAG_NOT_MAIN_FLASH) && block.payload_size == PAGE_SIZE) {
                 #if SUPPORT_A2
-                // ignore the absolute block
+                // ignore the absolute block, but save the address
                 if (check_abs_block(block)) {
                     DEBUG_LOG("Ignoring RP2350-E10 absolute block\n");
+                    settings.uf2.abs_block_loc = block.target_addr;
                 } else {
                     rmap.insert(range(block.target_addr, block.target_addr + PAGE_SIZE), pos + offsetof(uf2_block, data[0]));
                 }
@@ -4408,13 +4413,7 @@ void sign_guts_elf(elf_file* elf, private_t private_key, public_t public_key) {
     );
 }
 
-vector<uint8_t> sign_guts_bin(iostream_memory_access in, private_t private_key, public_t public_key) {
-    auto rmap = in.get_rmap();
-    auto ranges = rmap.ranges();
-    assert(ranges.size() == 1);
-    auto bin_start = ranges[0].from;
-    auto bin_size = ranges[0].len();
-
+vector<uint8_t> sign_guts_bin(iostream_memory_access in, private_t private_key, public_t public_key, uint32_t bin_start, uint32_t bin_size) {
     vector<uint8_t> bin = in.read_vector<uint8_t>(bin_start, bin_size, false);
 
     std::unique_ptr<block> first_block = find_first_block(bin, bin_start);
@@ -4457,12 +4456,15 @@ vector<uint8_t> sign_guts_bin(iostream_memory_access in, private_t private_key, 
 bool seal_command::execute(device_map &devices) {
     bool isElf = false;
     bool isBin = false;
+    bool isUf2 = false;
     if (get_file_type() == filetype::elf) {
         isElf = true;
     } else if (get_file_type() == filetype::bin) {
         isBin = true;
+    } else if (get_file_type() == filetype::uf2) {
+        isUf2 = true;
     } else {
-        fail(ERROR_ARGS, "Can only sign ELFs or BINs");
+        fail(ERROR_ARGS, "Can only sign ELFs, BINs or UF2s");
     }
 
     if (get_file_type_idx(1) != get_file_type()) {
@@ -4519,9 +4521,30 @@ bool seal_command::execute(device_map &devices) {
         elf->write(out);
         out->close();
     } else if (isBin) {
-        auto sig_data = sign_guts_bin(get_file_memory_access(0), private_key, public_key);
+        auto access = get_file_memory_access(0);
+        auto rmap = access.get_rmap();
+        auto ranges = rmap.ranges();
+        assert(ranges.size() == 1);
+        auto bin_start = ranges[0].from;
+        auto bin_size = ranges[0].len();
+
+        auto sig_data = sign_guts_bin(access, private_key, public_key, bin_start, bin_size);
         auto out = get_file_idx(ios::out|ios::binary, 1);
         out->write((const char *)sig_data.data(), sig_data.size());
+        out->close();
+    } else if (isUf2) {
+        auto access = get_file_memory_access(0);
+        auto rmap = access.get_rmap();
+        auto ranges = rmap.ranges();
+        auto bin_start = ranges.front().from;
+        auto bin_size = ranges.back().to - bin_start;
+        auto family_id = get_family_id(0);
+
+        auto sig_data = sign_guts_bin(access, private_key, public_key, bin_start, bin_size);
+        auto tmp = std::make_shared<std::stringstream>();
+        tmp->write(reinterpret_cast<const char*>(sig_data.data()), sig_data.size());
+        auto out = get_file_idx(ios::out|ios::binary, 1);
+        bin2uf2(tmp, out, bin_start, family_id, settings.uf2.abs_block_loc);
         out->close();
     } else {
         fail(ERROR_ARGS, "Must be ELF or BIN");
