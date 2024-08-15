@@ -150,7 +150,10 @@ int rp_check_elf_header(const elf32_header &eh) {
     if (eh.common.machine != EM_ARM && eh.common.machine != EM_RISCV) {
         fail(ERROR_FORMAT, "Not an Arm or RISC-V executable");
     }
-    if (eh.common.abi != 0) {
+    // Accept either ELFOSABI_NONE or ELFOSABI_GNU for EI_OSABI. Compilers may
+    // set the OS/ABI field to ELFOSABI_GNU when they use GNU features, such as
+    // the SHF_GNU_RETAIN section flag, but the binary is still compatible.
+    if (eh.common.abi != 0 /* NONE */ && eh.common.abi != 3 /* GNU */) {
         fail(ERROR_INCOMPATIBLE, "Unrecognized ABI");
     }
     // todo amy not sure if this should be expected or not - we have HARD float in clang only for now
