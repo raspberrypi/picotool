@@ -857,7 +857,7 @@ struct partition_create_command : public cmd {
                 + (
                     option("--abs-block").set(settings.uf2.abs_block) % "Enforce support for an absolute block" +
                         hex("abs_block_loc").set(settings.uf2.abs_block_loc).min(0) % "absolute block location (default to 0x10ffff00)"
-                ).force_expand_help(true).min(0) % "Errata RP2350-E9 Fix"
+                ).force_expand_help(true).min(0) % "Errata RP2350-E10 Fix"
             #endif
         );
     }
@@ -1141,7 +1141,7 @@ struct uf2_convert_command : public cmd {
                 + (
                     option("--abs-block").set(settings.uf2.abs_block) % "Add an absolute block" +
                         hex("abs_block_loc").set(settings.uf2.abs_block_loc).min(0) % "absolute block location (default to 0x10ffff00)"
-                ).force_expand_help(true).min(0) % "Errata RP2350-E9 Fix"
+                ).force_expand_help(true).min(0) % "Errata RP2350-E10 Fix"
             #endif
         );
     }
@@ -2611,7 +2611,7 @@ void build_rmap_uf2(std::shared_ptr<std::iostream>file, range_map<size_t>& rmap)
                 #if SUPPORT_A2
                 // ignore the absolute block
                 if (check_abs_block(block)) {
-                    DEBUG_LOG("Ignoring RP2350-E9 absolute block\n");
+                    DEBUG_LOG("Ignoring RP2350-E10 absolute block\n");
                 } else {
                     rmap.insert(range(block.target_addr, block.target_addr + PAGE_SIZE), pos + offsetof(uf2_block, data[0]));
                 }
@@ -3506,7 +3506,7 @@ uint32_t get_family_id(uint8_t file_idx) {
         #if SUPPORT_A2
         // ignore the absolute block
         if (check_abs_block(block)) {
-            DEBUG_LOG("Ignoring RP2350-E9 absolute block\n");
+            DEBUG_LOG("Ignoring RP2350-E10 absolute block\n");
             file->read((char*)&block, sizeof(block));
         }
         #endif
@@ -5379,7 +5379,7 @@ bool partition_create_command::execute(device_map &devices) {
 
 #if SUPPORT_A2
     if (!(unpartitioned_flags & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_ABSOLUTE_BITS)) {
-        fail(ERROR_INCOMPATIBLE, "Unpartitioned space must accept the absolute family, for the RP2350-E9 fix to work");
+        fail(ERROR_INCOMPATIBLE, "Unpartitioned space must accept the absolute family, for the RP2350-E10 fix to work");
     }
 #endif
 
@@ -5403,7 +5403,7 @@ bool partition_create_command::execute(device_map &devices) {
         cur_pos = start + size;
     #if SUPPORT_A2
         if (start <= (settings.uf2.abs_block_loc - FLASH_START)/0x1000 && start + size > (settings.uf2.abs_block_loc - FLASH_START)/0x1000) {
-            fail(ERROR_INCOMPATIBLE, "The address %lx cannot be in a partition for the RP2350-E9 fix to work", settings.uf2.abs_block_loc);
+            fail(ERROR_INCOMPATIBLE, "The address %lx cannot be in a partition for the RP2350-E10 fix to work", settings.uf2.abs_block_loc);
         }
     #endif
         new_p.first_sector = start;
@@ -5580,9 +5580,9 @@ bool uf2_convert_command::execute(device_map &devices) {
     auto in = get_file(ios::in|ios::binary);
     auto out = get_file_idx(ios::out|ios::binary, 1);
     #if SUPPORT_A2
-    // RP2350-E9 : add absolute block
+    // RP2350-E10 : add absolute block
     if (settings.uf2.abs_block) {
-        fos << "RP2350-E9: Adding absolute block to UF2 targeting " << hex_string(settings.uf2.abs_block_loc) << "\n";
+        fos << "RP2350-E10: Adding absolute block to UF2 targeting " << hex_string(settings.uf2.abs_block_loc) << "\n";
     } else {
         settings.uf2.abs_block_loc = 0;
     }
