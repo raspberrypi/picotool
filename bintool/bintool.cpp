@@ -554,21 +554,29 @@ std::vector<uint8_t> get_lm_hash_data(elf_file *elf, block *new_block, bool clea
         for(const auto &entry : load_map->entries) {
             std::vector<uint8_t> data;
             uint32_t current_storage_address = entry.storage_address;
-            while (data.size() < entry.size) {
-                auto seg = elf->segment_from_physical_address(current_storage_address);
-                if (seg == nullptr) {
-                    fail(ERROR_NOT_POSSIBLE, "The ELF file does not contain the storage address %x", current_storage_address);
+            if (current_storage_address == 0) {
+                std::copy(
+                    (uint8_t*)&entry.size,
+                    (uint8_t*)&entry.size + sizeof(entry.size),
+                    std::back_inserter(to_hash));
+                DEBUG_LOG("CLEAR %08x + %08x\n", (int)entry.runtime_address, (int)entry.size);
+            } else {
+                while (data.size() < entry.size) {
+                    auto seg = elf->segment_from_physical_address(current_storage_address);
+                    if (seg == nullptr) {
+                        fail(ERROR_NOT_POSSIBLE, "The ELF file does not contain the storage address %x", current_storage_address);
+                    }
+                    const auto new_data = elf->content(*seg);
+
+                    uint32_t offset = current_storage_address - seg->physical_address();
+
+                    std::copy(new_data.begin()+offset, new_data.end(), std::back_inserter(data));
+                    current_storage_address += new_data.size();
                 }
-                const auto new_data = elf->content(*seg);
-
-                uint32_t offset = current_storage_address - seg->physical_address();
-
-                std::copy(new_data.begin()+offset, new_data.end(), std::back_inserter(data));
-                current_storage_address += new_data.size();
+                data.resize(entry.size);
+                std::copy(data.begin(), data.end(), std::back_inserter(to_hash));
+                DEBUG_LOG("HASH %08x + %08x\n", (int)entry.storage_address, (int)data.size());
             }
-            data.resize(entry.size);
-            std::copy(data.begin(), data.end(), std::back_inserter(to_hash));
-            DEBUG_LOG("HASH %08x + %08x\n", (int)entry.storage_address, (int)data.size());
         }
     }
 
@@ -613,7 +621,7 @@ std::vector<uint8_t> get_lm_hash_data(std::vector<uint8_t> bin, uint32_t storage
                     (uint8_t*)&entry.size,
                     (uint8_t*)&entry.size + sizeof(entry.size),
                     std::back_inserter(to_hash));
-                DEBUG_LOG("HASH CLEAR %08x + %08x\n", (int)entry.storage_address, (int)entry.size);
+                DEBUG_LOG("CLEAR %08x + %08x\n", (int)entry.runtime_address, (int)entry.size);
             } else {
                 uint32_t rel_addr = entry.storage_address - storage_addr;
                 std::copy(

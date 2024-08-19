@@ -367,7 +367,11 @@ struct load_map_item : public item {
             if (absolute) {
                 rc.push_back(entry.storage_address);
                 rc.push_back(entry.runtime_address);
-                rc.push_back(entry.runtime_address + entry.size);
+                if (entry.storage_address != 0) {
+                    rc.push_back(entry.runtime_address + entry.size);
+                } else {
+                    rc.push_back(entry.size);
+                }
             } else {
                 if (entry.storage_address != 0) {
                     rc.push_back(entry.storage_address - ctx.base_addr - ctx.word_offset * 4);
