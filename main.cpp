@@ -665,6 +665,8 @@ struct save_command : public cmd {
                         hex("to").set(settings.to) % "The upper address bound in hex"
                 ).min(0).doc_non_optional(true)
             ).min(0).doc_non_optional(true).no_match_beats_error(false) % "Selection of data to save" +
+            (option("--family") % "Specify the family ID to save the file as" &
+                family_id("family_id").set(settings.family_id) % "family id to save file as").force_expand_help(true) +
             ( // note this parenthesis seems to help with error messages for say save --foo
                 device_selection % "Source device selection" +
                 file_selection % "File to save to"
@@ -2819,6 +2821,26 @@ std::unique_ptr<block> find_best_block(memory_access &raw_access, vector<uint8_t
     return best_block;
 }
 
+std::unique_ptr<block> find_last_block(memory_access &raw_access, vector<uint8_t> &bin) {
+    // todo read the right amount
+    uint32_t read_size = 0x1000;
+    DEBUG_LOG("Reading from %x size %x\n", raw_access.get_binary_start(), read_size);
+    bin = raw_access.read_vector<uint8_t>(raw_access.get_binary_start(), read_size, true);
+
+    std::unique_ptr<block> first_block = find_first_block(bin, raw_access.get_binary_start());
+    if (first_block) {
+        // verify stuff
+        get_more_bin_cb more_cb = [&raw_access](std::vector<uint8_t> &bin, uint32_t new_size) {
+            DEBUG_LOG("Now reading from %x size %x\n", raw_access.get_binary_start(), new_size);
+            bin = raw_access.read_vector<uint8_t>(raw_access.get_binary_start(), new_size, true);
+        };
+        auto last_block = get_last_block(bin, raw_access.get_binary_start(), first_block, more_cb);
+        return last_block;
+    }
+
+    return nullptr;
+}
+
 #if HAS_LIBUSB
 void info_guts(memory_access &raw_access, picoboot::connection *con) {
 #else
@@ -3490,67 +3512,74 @@ bool help_command::execute(device_map &devices) {
     return false;
 }
 
+uint32_t get_access_family_id(memory_access &file_access) {
+    uint32_t family_id = 0;
+    vector<uint8_t> bin;
+    std::unique_ptr<block> best_block = find_best_block(file_access, bin);
+    if (best_block == NULL) {
+        // No block, so RP2040 or absolute
+        if (file_access.get_binary_start() == FLASH_START) {
+            vector<uint8_t> checksum_data = {};
+            file_access.read_into_vector(FLASH_START, 252, checksum_data);
+            uint32_t checksum = file_access.read_int(FLASH_START + 252);
+            if (checksum == calc_checksum(checksum_data)) {
+                // Checksum is correct, so RP2040
+                DEBUG_LOG("Detected family id %s due to boot2 checksum\n", family_name(RP2040_FAMILY_ID).c_str());
+                return RP2040_FAMILY_ID;
+            } else {
+                // Checksum incorrect, so absolute
+                DEBUG_LOG("Assumed family id %s\n", family_name(ABSOLUTE_FAMILY_ID).c_str());
+                return ABSOLUTE_FAMILY_ID;
+            }
+        } else {
+            // no_flash RP2040 binaries have no checksum
+            DEBUG_LOG("Assumed family id %s\n", family_name(RP2040_FAMILY_ID).c_str());
+            return RP2040_FAMILY_ID;
+        }
+    }
+    auto first_item = best_block->items[0].get();
+    if (first_item->type() != PICOBIN_BLOCK_ITEM_1BS_IMAGE_TYPE) {
+        // This will apply for partition tables
+        DEBUG_LOG("Assumed family id %s due to block with no IMAGE_DEF\n", family_name(ABSOLUTE_FAMILY_ID).c_str());
+        return ABSOLUTE_FAMILY_ID;
+    }
+    auto image_def = dynamic_cast<image_type_item*>(first_item);
+    if (image_def->image_type() == type_exe) {
+        if (image_def->chip() == chip_rp2040) {
+            family_id = RP2040_FAMILY_ID;
+        } else if (image_def->chip() == chip_rp2350) {
+            if (image_def->cpu() == cpu_riscv) {
+                family_id = RP2350_RISCV_FAMILY_ID;
+            } else if (image_def->cpu() == cpu_arm) {
+                if (image_def->security() == sec_s) {
+                    family_id = RP2350_ARM_S_FAMILY_ID;
+                } else if (image_def->security() == sec_ns) {
+                    family_id = RP2350_ARM_NS_FAMILY_ID;
+                } else {
+                    fail(ERROR_INCOMPATIBLE, "Cannot autodetect UF2 family: Unsupported security level %x\n", image_def->security());
+                }
+            } else {
+                fail(ERROR_INCOMPATIBLE, "Cannot autodetect UF2 family: Unsupported cpu %x\n", image_def->cpu());
+            }
+        } else {
+            fail(ERROR_INCOMPATIBLE, "Cannot autodetect UF2 family: Unsupported chip %x\n", image_def->chip());
+        }
+    } else if (image_def->image_type() == type_data) {
+        family_id = DATA_FAMILY_ID;
+    } else {
+        fail(ERROR_INCOMPATIBLE, "Cannot autodetect UF2 family: Unsupported image type %x\n", image_def->image_type());
+    }
+
+    return family_id;
+}
+
 uint32_t get_family_id(uint8_t file_idx) {
     uint32_t family_id = 0;
     if (settings.family_id) {
         family_id = settings.family_id;
     } else if (get_file_type_idx(file_idx) == filetype::elf || get_file_type_idx(file_idx) == filetype::bin) {
         auto file_access = get_file_memory_access(file_idx);
-        vector<uint8_t> bin;
-        std::unique_ptr<block> best_block = find_best_block(file_access, bin);
-        if (best_block == NULL) {
-            // No block, so RP2040 or absolute
-            if (file_access.get_binary_start() == FLASH_START) {
-                vector<uint8_t> checksum_data = {};
-                file_access.read_into_vector(FLASH_START, 252, checksum_data);
-                uint32_t checksum = file_access.read_int(FLASH_START + 252);
-                if (checksum == calc_checksum(checksum_data)) {
-                    // Checksum is correct, so RP2040
-                    DEBUG_LOG("Detected family id %s due to boot2 checksum\n", family_name(RP2040_FAMILY_ID).c_str());
-                    return RP2040_FAMILY_ID;
-                } else {
-                    // Checksum incorrect, so absolute
-                    DEBUG_LOG("Assumed family id %s\n", family_name(ABSOLUTE_FAMILY_ID).c_str());
-                    return ABSOLUTE_FAMILY_ID;
-                }
-            } else {
-                // no_flash RP2040 binaries have no checksum
-                DEBUG_LOG("Assumed family id %s\n", family_name(RP2040_FAMILY_ID).c_str());
-                return RP2040_FAMILY_ID;
-            }
-        }
-        auto first_item = best_block->items[0].get();
-        if (first_item->type() != PICOBIN_BLOCK_ITEM_1BS_IMAGE_TYPE) {
-            // This will apply for partition tables
-            DEBUG_LOG("Assumed family id %s due to block with no IMAGE_DEF\n", family_name(ABSOLUTE_FAMILY_ID).c_str());
-            return ABSOLUTE_FAMILY_ID;
-        }
-        auto image_def = dynamic_cast<image_type_item*>(first_item);
-        if (image_def->image_type() == type_exe) {
-            if (image_def->chip() == chip_rp2040) {
-                family_id = RP2040_FAMILY_ID;
-            } else if (image_def->chip() == chip_rp2350) {
-                if (image_def->cpu() == cpu_riscv) {
-                    family_id = RP2350_RISCV_FAMILY_ID;
-                } else if (image_def->cpu() == cpu_arm) {
-                    if (image_def->security() == sec_s) {
-                        family_id = RP2350_ARM_S_FAMILY_ID;
-                    } else if (image_def->security() == sec_ns) {
-                        family_id = RP2350_ARM_NS_FAMILY_ID;
-                    } else {
-                        fail(ERROR_INCOMPATIBLE, "Cannot autodetect UF2 family: Unsupported security level %x\n", image_def->security());
-                    }
-                } else {
-                    fail(ERROR_INCOMPATIBLE, "Cannot autodetect UF2 family: Unsupported cpu %x\n", image_def->cpu());
-                }
-            } else {
-                fail(ERROR_INCOMPATIBLE, "Cannot autodetect UF2 family: Unsupported chip %x\n", image_def->chip());
-            }
-        } else if (image_def->image_type() == type_data) {
-            family_id = DATA_FAMILY_ID;
-        } else {
-            fail(ERROR_INCOMPATIBLE, "Cannot autodetect UF2 family: Unsupported image type %x\n", image_def->image_type());
-        }
+        family_id = get_access_family_id(file_access);
     } else if (get_file_type_idx(file_idx) == filetype::uf2) {
         auto file = get_file_idx(ios::in|ios::binary, file_idx);
         uf2_block block;
@@ -3843,11 +3872,18 @@ bool save_command::execute(device_map &devices) {
                 });
                 visitor.visit(access, hdr);
             }
-            if (binary_end == 0) {
+            end = binary_end;
+            vector<uint8_t> bin;
+            std::unique_ptr<block> last_block = find_last_block(raw_access, bin);
+            if (last_block != nullptr) {
+                uint32_t new_end = last_block->physical_addr + (last_block->to_words().size())*4;
+                DEBUG_LOG("Adjusting end to max of %x %x\n", end, new_end);
+                end = MAX(end, new_end);
+            }
+            if (end == 0) {
                 fail(ERROR_NOT_POSSIBLE,
                      "Cannot determine the binary size, so cannot save the program only, try --all.");
             }
-            end = binary_end;
         }
     } else {
         end = FLASH_START + guess_flash_size(raw_access);
@@ -3888,7 +3924,7 @@ bool save_command::execute(device_map &devices) {
             block.flags = UF2_FLAG_FAMILY_ID_PRESENT;
             block.payload_size = PAGE_SIZE;
             block.num_blocks = (size + PAGE_SIZE - 1)/PAGE_SIZE;
-            block.file_size = RP2040_FAMILY_ID;
+            block.file_size = settings.family_id ? settings.family_id : get_access_family_id(raw_access);
             block.magic_end = UF2_MAGIC_END;
             writer256 = [&](FILE *out, const uint8_t *buffer, unsigned int size, unsigned int offset) {
                 static_assert(512 == sizeof(block), "");
