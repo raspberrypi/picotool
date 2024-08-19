@@ -7450,13 +7450,13 @@ int main(int argc, char **argv) {
                 case cmd::device_support::one:
                     if (devices[dr_vidpid_bootrom_ok].empty() &&
                         (!settings.force || devices[dr_vidpid_stdio_usb].empty())) {
-                        if (tries <= 0 || tries >= MAX_REBOOT_TRIES) {
+                        if (tries == 0 || tries == MAX_REBOOT_TRIES) {
                             if (tries) {
                                 fos << "\n\n";
                             }
                             bool had_note = false;
                             fos << missing_device_string(tries>0, selected_cmd->requires_rp2350());
-                            if (tries > 0) {
+                            if (tries) {
                                 fos << " It is possible the device is not responding, and will have to be manually entered into BOOTSEL mode.\n";
                                 had_note = true; // suppress "but:" in this case
                             }
