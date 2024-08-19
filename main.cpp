@@ -75,6 +75,8 @@ static __forceinline int __builtin_ctz(unsigned x) {
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 
+#define MAX_REBOOT_TRIES 5
+
 #define OTP_PAGE_COUNT 64
 #define OTP_PAGE_ROWS  64
 #define OTP_ROW_COUNT (OTP_PAGE_COUNT * OTP_PAGE_ROWS)
@@ -7421,7 +7423,7 @@ int main(int argc, char **argv) {
         }
 
         // we only loop a second time if we want to reboot some devices (which may cause device
-        for (int tries = 0; !rc && tries < 2; tries++) {
+        for (int tries = 0; !rc && tries <= MAX_REBOOT_TRIES; tries++) {
             if (ctx) {
                 if (libusb_get_device_list(ctx, &devs) < 0) {
                     fail(ERROR_USB, "Failed to enumerate USB devices\n");
@@ -7448,49 +7450,57 @@ int main(int argc, char **argv) {
                 case cmd::device_support::one:
                     if (devices[dr_vidpid_bootrom_ok].empty() &&
                         (!settings.force || devices[dr_vidpid_stdio_usb].empty())) {
-                        bool had_note = false;
-                        fos << missing_device_string(tries>0, selected_cmd->requires_rp2350());
-                        if (tries > 0) {
-                            fos << " It is possible the device is not responding, and will have to be manually entered into BOOTSEL mode.\n";
-                            had_note = true; // suppress "but:" in this case
-                        }
-                        fos << "\n";
-                        fos.first_column(0);
-                        fos.hanging_indent(4);
-                        auto printer = [&](enum picoboot_device_result r, const string &description) {
-                            if (!had_note && !devices[r].empty()) {
-                                fos << "\nbut:\n\n";
-                                had_note = true;
+                        if (tries <= 0 || tries >= MAX_REBOOT_TRIES) {
+                            if (tries) {
+                                fos << "\n\n";
                             }
-                            for (auto d : devices[r]) {
-                                fos << bus_device_string(std::get<1>(d)) << description << "\n";
+                            bool had_note = false;
+                            fos << missing_device_string(tries>0, selected_cmd->requires_rp2350());
+                            if (tries > 0) {
+                                fos << " It is possible the device is not responding, and will have to be manually entered into BOOTSEL mode.\n";
+                                had_note = true; // suppress "but:" in this case
                             }
-                        };
-#if defined(__linux__) || defined(__APPLE__)
-                        printer(dr_vidpid_bootrom_cant_connect,
-                                " appears to be a RP2040 device in BOOTSEL mode, but picotool was unable to connect. Maybe try 'sudo' or check your permissions.");
-#else
-                        printer(dr_vidpid_bootrom_cant_connect,
-                                " appears to be a RP2040 device in BOOTSEL mode, but picotool was unable to connect. You may need to install a driver via Zadig. See \"Getting started with Raspberry Pi Pico\" for more information");
-#endif
-                        printer(dr_vidpid_picoprobe,
-                                " appears to be a RP2040 PicoProbe device not in BOOTSEL mode.");
-                        printer(dr_vidpid_micropython,
-                                " appears to be a RP2040 MicroPython device not in BOOTSEL mode.");
-                        if (selected_cmd->force_requires_pre_reboot()) {
-#if defined(_WIN32)
-                            printer(dr_vidpid_stdio_usb,
-                                    " appears to be a RP2040 device with a USB serial connection, not in BOOTSEL mode. You can force reboot into BOOTSEL mode via 'picotool reboot -f -u' first.");
-#else
-                            printer(dr_vidpid_stdio_usb,
-                                    " appears to be a RP2040 device with a USB serial connection, so consider -f (or -F) to force reboot in order to run the command.");
-#endif
+                            fos << "\n";
+                            fos.first_column(0);
+                            fos.hanging_indent(4);
+                            auto printer = [&](enum picoboot_device_result r, const string &description) {
+                                if (!had_note && !devices[r].empty()) {
+                                    fos << "\nbut:\n\n";
+                                    had_note = true;
+                                }
+                                for (auto d : devices[r]) {
+                                    fos << bus_device_string(std::get<1>(d)) << description << "\n";
+                                }
+                            };
+    #if defined(__linux__) || defined(__APPLE__)
+                            printer(dr_vidpid_bootrom_cant_connect,
+                                    " appears to be a RP2040 device in BOOTSEL mode, but picotool was unable to connect. Maybe try 'sudo' or check your permissions.");
+    #else
+                            printer(dr_vidpid_bootrom_cant_connect,
+                                    " appears to be a RP2040 device in BOOTSEL mode, but picotool was unable to connect. You may need to install a driver via Zadig. See \"Getting started with Raspberry Pi Pico\" for more information");
+    #endif
+                            printer(dr_vidpid_picoprobe,
+                                    " appears to be a RP2040 PicoProbe device not in BOOTSEL mode.");
+                            printer(dr_vidpid_micropython,
+                                    " appears to be a RP2040 MicroPython device not in BOOTSEL mode.");
+                            if (selected_cmd->force_requires_pre_reboot()) {
+    #if defined(_WIN32)
+                                printer(dr_vidpid_stdio_usb,
+                                        " appears to be a RP2040 device with a USB serial connection, not in BOOTSEL mode. You can force reboot into BOOTSEL mode via 'picotool reboot -f -u' first.");
+    #else
+                                printer(dr_vidpid_stdio_usb,
+                                        " appears to be a RP2040 device with a USB serial connection, so consider -f (or -F) to force reboot in order to run the command.");
+    #endif
+                            } else {
+                                // special case message for what is actually just reboot (the only command that doesn't require reboot first)
+                                printer(dr_vidpid_stdio_usb,
+                                        " appears to be a RP2040 device with a USB serial connection, so consider -f to force the reboot.");
+                            }
+                            rc = ERROR_NO_DEVICE;
                         } else {
-                            // special case message for what is actually just reboot (the only command that doesn't require reboot first)
-                            printer(dr_vidpid_stdio_usb,
-                                    " appears to be a RP2040 device with a USB serial connection, so consider -f to force the reboot.");
+                            // waiting for rebooted device to show up
+                            break;
                         }
-                        rc = ERROR_NO_DEVICE;
                     } else if (supported == cmd::device_support::one) {
                         if (devices[dr_vidpid_bootrom_ok].size() > 1 ||
                             (devices[dr_vidpid_bootrom_ok].empty() && devices[dr_vidpid_stdio_usb].size() > 1)) {
@@ -7511,36 +7521,43 @@ int main(int argc, char **argv) {
             }
             if (!rc) {
                 if (settings.force && ctx) { // actually ctx should never be null as we are targeting device if force is set, but still
-                    if (devices[dr_vidpid_stdio_usb].size() != 1) {
+                    if (devices[dr_vidpid_stdio_usb].size() != 1 && !tries) {
                         fail(ERROR_NOT_POSSIBLE,
                              "Forced command requires a single rebootable RP2040 device to be targeted.");
                     }
                     if (selected_cmd->force_requires_pre_reboot()) {
-                        // we reboot into BOOTSEL mode and disable MSC interface (the 1 here)
-                        auto &to_reboot = std::get<1>(devices[dr_vidpid_stdio_usb][0]);
-                        auto &to_reboot_handle = std::get<2>(devices[dr_vidpid_stdio_usb][0]);
-#if defined(_WIN32)
-                        {
-                            struct libusb_device_descriptor desc;
-                            libusb_get_device_descriptor(to_reboot, &desc);
-                            if (desc.idProduct == PRODUCT_ID_RP2040_STDIO_USB) {
-                                fail(ERROR_NOT_POSSIBLE,
-                                    "Forced commands do not work with RP2040 on Windows - you can force reboot into BOOTSEL mode via 'picotool reboot -f -u' instead.");
+                        if (!tries) {
+                            // we reboot into BOOTSEL mode and disable MSC interface (the 1 here)
+                            auto &to_reboot = std::get<1>(devices[dr_vidpid_stdio_usb][0]);
+                            auto &to_reboot_handle = std::get<2>(devices[dr_vidpid_stdio_usb][0]);
+    #if defined(_WIN32)
+                            {
+                                struct libusb_device_descriptor desc;
+                                libusb_get_device_descriptor(to_reboot, &desc);
+                                if (desc.idProduct == PRODUCT_ID_RP2040_STDIO_USB) {
+                                    fail(ERROR_NOT_POSSIBLE,
+                                        "Forced commands do not work with RP2040 on Windows - you can force reboot into BOOTSEL mode via 'picotool reboot -f -u' instead.");
+                                }
                             }
-                        }
-#endif
-                        if (settings.ser.empty() && to_reboot_handle) {
-                            // store USB serial number, to pick correct device after reboot
-                            struct libusb_device_descriptor desc;
-                            libusb_get_device_descriptor(to_reboot, &desc);
-                            char ser_str[128];
-                            libusb_get_string_descriptor_ascii(to_reboot_handle, desc.iSerialNumber, (unsigned char*)ser_str, sizeof(ser_str));
-                            settings.ser = ser_str;
-                            fos << "Tracking device serial number " << ser_str << " for reboot\n";
-                        }
+    #endif
+                            if (settings.ser.empty() && to_reboot_handle) {
+                                // store USB serial number, to pick correct device after reboot
+                                struct libusb_device_descriptor desc;
+                                libusb_get_device_descriptor(to_reboot, &desc);
+                                char ser_str[128];
+                                libusb_get_string_descriptor_ascii(to_reboot_handle, desc.iSerialNumber, (unsigned char*)ser_str, sizeof(ser_str));
+                                settings.ser = ser_str;
+                                fos << "Tracking device serial number " << ser_str << " for reboot\n";
+                            }
 
-                        reboot_device(to_reboot, to_reboot_handle, true, 1);
-                        fos << "The device was asked to reboot into BOOTSEL mode so the command can be executed.\n\n";
+                            reboot_device(to_reboot, to_reboot_handle, true, 1);
+                            fos << "The device was asked to reboot into BOOTSEL mode so the command can be executed.";
+                        } else if (tries == 1) {
+                            fos << "\nWaiting for device to reboot";
+                        } else {
+                            fos << "...";
+                        }
+                        fos.flush();
                         for (const auto &handle : to_close) {
                             libusb_close(handle);
                         }
@@ -7550,14 +7567,15 @@ int main(int argc, char **argv) {
                         devices.clear();
                         sleep_ms(1200);
 
-                        // we now clear settings.force, because we expect the device to have rebooted and be available.
-                        // we also clear bus/address filters, because the device may have moved, so the only way we can find it
+                        // we now clear bus/address filters, because the device may have moved, so the only way we can find it
                         // again is to assume it has the same serial number.
-                        settings.force = false;
                         settings.address = -1;
                         settings.bus = -1;
                         continue;
                     }
+                }
+                if (tries) {
+                    fos << "\n\n";
                 }
                 if (!selected_cmd->execute(devices) && tries) {
                     if (settings.force_no_reboot) {
