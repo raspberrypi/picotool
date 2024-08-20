@@ -2626,10 +2626,11 @@ void build_rmap_elf(std::shared_ptr<std::iostream>file, range_map<size_t>& rmap)
     }
 }
 
-void build_rmap_uf2(std::shared_ptr<std::iostream>file, range_map<size_t>& rmap) {
+uint32_t build_rmap_uf2(std::shared_ptr<std::iostream>file, range_map<size_t>& rmap, uint32_t family_id=0) {
     file->seekg(0, ios::beg);
     uf2_block block;
     unsigned int pos = 0;
+    uint32_t next_family_id = 0;
     do {
         file->read((char*)&block, sizeof(uf2_block));
         if (file->fail()) {
@@ -2639,7 +2640,8 @@ void build_rmap_uf2(std::shared_ptr<std::iostream>file, range_map<size_t>& rmap)
         if (block.magic_start0 == UF2_MAGIC_START0 && block.magic_start1 == UF2_MAGIC_START1 &&
             block.magic_end == UF2_MAGIC_END) {
             if (block.flags & UF2_FLAG_FAMILY_ID_PRESENT &&
-                !(block.flags & UF2_FLAG_NOT_MAIN_FLASH) && block.payload_size == PAGE_SIZE) {
+                !(block.flags & UF2_FLAG_NOT_MAIN_FLASH) && block.payload_size == PAGE_SIZE &&
+                (!family_id || block.file_size == family_id)) {
                 #if SUPPORT_A2
                 // ignore the absolute block, but save the address
                 if (check_abs_block(block)) {
@@ -2647,14 +2649,28 @@ void build_rmap_uf2(std::shared_ptr<std::iostream>file, range_map<size_t>& rmap)
                     settings.uf2.abs_block_loc = block.target_addr;
                 } else {
                     rmap.insert(range(block.target_addr, block.target_addr + PAGE_SIZE), pos + offsetof(uf2_block, data[0]));
+                    family_id = block.file_size;
+                    next_family_id = 0;
                 }
                 #else
                 rmap.insert(range(block.target_addr, block.target_addr + PAGE_SIZE), pos + offsetof(uf2_block, data[0]));
+                family_id = block.file_size;
+                next_family_id = 0;
+                #endif
+            } else if (block.file_size != family_id && family_id && !next_family_id) {
+                #if SUPPORT_A2
+                if (!check_abs_block(block)) {
+                #endif
+                    next_family_id = block.file_size;
+                #if SUPPORT_A2
+                }
                 #endif
             }
         }
         pos += sizeof(uf2_block);
     } while (true);
+
+    return next_family_id;
 }
 
 uint32_t find_binary_start(range_map<size_t>& rmap) {
@@ -2678,9 +2694,11 @@ uint32_t find_binary_start(range_map<size_t>& rmap) {
     return binary_start;
 }
 
-template <typename ACCESS, typename STREAM> ACCESS get_iostream_memory_access(std::shared_ptr<STREAM> file, filetype type, bool writeable = false) {
+template <typename ACCESS, typename STREAM> ACCESS get_iostream_memory_access(std::shared_ptr<STREAM> file, filetype type, bool writeable = false, uint32_t *next_family_id=nullptr) {
     range_map<size_t> rmap;
     uint32_t binary_start = 0;
+    uint32_t tmp = 0;
+    if (next_family_id != nullptr) tmp = *next_family_id;
     switch (type) {
         case filetype::bin:
             file->seekg(0, std::ios::end);
@@ -2692,7 +2710,12 @@ template <typename ACCESS, typename STREAM> ACCESS get_iostream_memory_access(st
             binary_start = find_binary_start(rmap);
             break;
         case filetype::uf2:
-            build_rmap_uf2(file, rmap);
+            tmp = build_rmap_uf2(file, rmap, tmp);
+            if (next_family_id != nullptr) {
+                *next_family_id = tmp;
+            } else if (tmp) {
+                fos << "WARNING: Multiple family IDs in a single UF2 file - only using first one\n";
+            }
             binary_start = find_binary_start(rmap);
             break;
         default:
@@ -2707,11 +2730,11 @@ template <typename ACCESS, typename STREAM> ACCESS get_iostream_memory_access(st
     return ACCESS(file, rmap, binary_start);
 }
 
-file_memory_access get_file_memory_access(uint8_t idx, bool writeable = false) {
+file_memory_access get_file_memory_access(uint8_t idx, bool writeable = false, uint32_t *next_family_id=nullptr) {
     ios::openmode mode = (writeable ? ios::out|ios::in : ios::in)|ios::binary;
     auto file = get_file_idx(mode, idx);
     try {
-        return get_iostream_memory_access<file_memory_access>(file, get_file_type_idx(idx), writeable);
+        return get_iostream_memory_access<file_memory_access>(file, get_file_type_idx(idx), writeable, next_family_id);
     } catch (std::exception&) {
         file->close();
         throw;
@@ -3718,7 +3741,8 @@ bool config_command::execute(device_map &devices) {
 bool info_command::execute(device_map &devices) {
     fos.first_column(0); fos.hanging_indent(0);
     if (!settings.filenames[0].empty()) {
-        auto access = get_file_memory_access(0);
+        uint32_t next_id = 0;
+        auto access = get_file_memory_access(0, false, &next_id);
         uint32_t id = 0;
         id = get_family_id(0);
         if (id == RP2040_FAMILY_ID) {
@@ -3726,8 +3750,25 @@ bool info_command::execute(device_map &devices) {
         } else if (id >= RP2350_ARM_S_FAMILY_ID && id <= RP2350_ARM_NS_FAMILY_ID) {
             access.set_model(rp2350);
         }
-        fos << "File " << settings.filenames[0] << ":\n\n";
-        info_guts(access, nullptr);
+        if (next_id) {
+            next_id = id;
+            while (next_id) {
+                fos.first_column(0); fos.hanging_indent(0);
+                std::stringstream s;
+                s << "File " << settings.filenames[0] << " family ID " << family_name(next_id) << ":";
+                if (next_id != id) {
+                    string dashes;
+                    std::generate_n(std::back_inserter(dashes), s.str().length() + 1, [] { return '-'; });
+                    fos << "\n" << dashes << "\n";
+                }
+                fos << s.str() << "\n\n";
+                auto tmp_access = get_file_memory_access(0, false, &next_id);
+                info_guts(tmp_access, nullptr);
+            }
+        } else {
+            fos << "File " << settings.filenames[0] << ":\n\n";
+            info_guts(access, nullptr);
+        }
         return false;
     }
 #if HAS_LIBUSB
