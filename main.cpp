@@ -463,7 +463,11 @@ struct _settings {
     } version;
 
     struct {
+        #if HAS_MBEDTLS
         bool hash = true;
+        #else
+        bool hash = false;
+        #endif
         bool sign = false;
         bool singleton = false;
     } partition;
@@ -875,12 +879,14 @@ struct partition_create_command : public cmd {
                 ).min(0).force_expand_help(true) % "UF2 output options") +
                 optional_typed_file_selection_x("bootloader", 2, "elf") % "embed partition table into bootloader ELF" + 
                 (
+                #if HAS_MBEDTLS
                     // todo why doesn't this set settings.partition.sign?
                     ((option("--sign").set(settings.partition.sign) & value("keyfile").with_exclusion_filter([](const string &value) {
                             return value.find_first_of('-') == 0;
                         }).set(settings.filenames[3])) % "The file name" +
                     named_file_types_x("pem", 3)) % "Sign the partition table" + 
                     (option("--no-hash").clear(settings.partition.hash) % "Don't hash the partition table") + 
+                #endif
                     (option("--singleton").set(settings.partition.singleton) % "Singleton partition table")
                 ).min(0).force_expand_help(true) % "Partition Table Options"
             #if SUPPORT_A2
