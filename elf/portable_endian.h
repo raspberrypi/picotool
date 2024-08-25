@@ -52,9 +52,13 @@
 #	define __LITTLE_ENDIAN LITTLE_ENDIAN
 #	define __PDP_ENDIAN    PDP_ENDIAN
 
-#elif defined(__NetBSD__) || defined(__FreeBSD__) || defined(__DragonFly__)
+#elif defined(__FreeBSD__)
 
 #	include <sys/endian.h>
+
+#elif defined(__NetBSD__) || defined(__DragonFly__)
+
+#   include <sys/endian.h>
 
 #	define be16toh(x) betoh16(x)
 #	define le16toh(x) letoh16(x)
