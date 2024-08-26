@@ -101,7 +101,14 @@ auto memory_names = map<enum memory_type, string>{
         {memory_type::rom, "ROM"}
 };
 
-static string tool_name = "picotool";
+static const string tool_name = "picotool";
+
+static const string data_family_name = "data";
+static const string absolute_family_name = "absolute";
+static const string rp2040_family_name = "rp2040";
+static const string rp2350_arm_s_family_name = "rp2350-arm-s";
+static const string rp2350_arm_ns_family_name = "rp2350-arm-ns";
+static const string rp2350_riscv_family_name = "rp2350-riscv";
 
 static string hex_string(int64_t value, int width=8, bool prefix=true) {
     std::stringstream ss;
@@ -295,17 +302,17 @@ struct family_id : public cli::value_base<family_id> {
         // note we cannot capture "this"
         on_action([&t, nm](string value) {
             auto ovalue = value;
-            if (value == "data") {
+            if (value == data_family_name) {
                 t = DATA_FAMILY_ID;
-            } else if (value == "absolute") {
+            } else if (value == absolute_family_name) {
                 t = ABSOLUTE_FAMILY_ID;
-            } else if (value == "rp2040") {
+            } else if (value == rp2040_family_name) {
                 t = RP2040_FAMILY_ID;
-            } else if (value == "rp2350-arm-s") {
+            } else if (value == rp2350_arm_s_family_name) {
                 t = RP2350_ARM_S_FAMILY_ID;
-            } else if (value == "rp2350-arm-ns") {
+            } else if (value == rp2350_arm_s_family_name) {
                 t = RP2350_ARM_NS_FAMILY_ID;
-            } else if (value == "rp2350-riscv") {
+            } else if (value == rp2350_riscv_family_name) {
                 t = RP2350_RISCV_FAMILY_ID;
             } else {
                 if (value.find("0x") == 0) value = value.substr(2);
@@ -332,12 +339,12 @@ struct family_id : public cli::value_base<family_id> {
 };
 
 string family_name(unsigned int family_id) {
-    if (family_id == DATA_FAMILY_ID) return "'data'";
-    if (family_id == ABSOLUTE_FAMILY_ID) return "'absolute'";
-    if (family_id == RP2040_FAMILY_ID) return "'rp2040'";
-    if (family_id == RP2350_ARM_S_FAMILY_ID) return "'rp2350-arm-s'";
-    if (family_id == RP2350_ARM_NS_FAMILY_ID) return "'rp2350-arm-ns'";
-    if (family_id == RP2350_RISCV_FAMILY_ID) return "'rp2350-riscv'";
+    if (family_id == DATA_FAMILY_ID) return "'" + data_family_name + "'";
+    if (family_id == ABSOLUTE_FAMILY_ID) return "'" + absolute_family_name + "'";
+    if (family_id == RP2040_FAMILY_ID) return "'" + rp2040_family_name + "'";
+    if (family_id == RP2350_ARM_S_FAMILY_ID) return "'" + rp2350_arm_s_family_name + "'";
+    if (family_id == RP2350_ARM_NS_FAMILY_ID) return "'" + rp2350_arm_ns_family_name + "'";
+    if (family_id == RP2350_RISCV_FAMILY_ID) return "'" + rp2350_riscv_family_name + "'";
     if (!family_id) return "none";
     return hex_string(family_id);
 }
@@ -5496,17 +5503,17 @@ uint32_t permissions_to_flags(json permissions) {
 uint32_t families_to_flags(std::vector<string> families) {
     uint32_t ret = 0;
     for (auto family : families) {
-        if (family == "data") {
+        if (family == data_family_name) {
             ret |= PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_DATA_BITS;
-        } else if (family == "absolute") {
+        } else if (family == absolute_family_name) {
             ret |= PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_ABSOLUTE_BITS;
-        } else if (family == "rp2040") {
+        } else if (family == rp2040_family_name) {
             ret |= PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2040_BITS;
-        } else if (family == "rp2350-arm-s") {
+        } else if (family == rp2350_arm_s_family_name) {
             ret |= PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_S_BITS;
-        } else if (family == "rp2350-arm-ns") {
+        } else if (family == rp2350_arm_ns_family_name) {
             ret |= PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_NS_BITS;
-        } else if (family == "rp2350-riscv") {
+        } else if (family == rp2350_riscv_family_name) {
             ret |= PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_RISCV_BITS;
         }
     }
@@ -6498,12 +6505,12 @@ bool coprodis_command::execute(device_map &devices) {
 
 #if HAS_LIBUSB
 void partition_info_command::insert_default_families(uint32_t flags_and_permissions, vector<std::string> &family_ids) const {
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_ABSOLUTE_BITS) family_ids.emplace_back("absolute");
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2040_BITS) family_ids.emplace_back("rp2040");
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_S_BITS) family_ids.emplace_back("rp2350-arm-s");
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_NS_BITS) family_ids.emplace_back("rp2350-arm-ns");
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_RISCV_BITS) family_ids.emplace_back("rp2350-riscv");
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_DATA_BITS) family_ids.emplace_back("data");
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_ABSOLUTE_BITS) family_ids.emplace_back(absolute_family_name);
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2040_BITS) family_ids.emplace_back(rp2040_family_name);
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_S_BITS) family_ids.emplace_back(rp2350_arm_s_family_name);
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_NS_BITS) family_ids.emplace_back(rp2350_arm_ns_family_name);
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_RISCV_BITS) family_ids.emplace_back(rp2350_riscv_family_name);
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_DATA_BITS) family_ids.emplace_back(data_family_name);
 }
 
 void partition_info_command::print_permissions(unsigned int p) const {
