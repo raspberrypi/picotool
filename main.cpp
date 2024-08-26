@@ -4146,7 +4146,8 @@ bool load_guts(picoboot::connection con, iostream_memory_access &file_access) {
         uint32_t flash_start_offset = flash_min - FLASH_START;
         uint32_t size_guess = guess_flash_size(raw_access);
         if (size_guess > 0) {
-            if ((flash_start_offset + flash_data_size) > size_guess) {
+            // Skip check when targeting PSRAM, which is anything above 0x11000000
+            if ((flash_start_offset + flash_data_size) > size_guess && flash_start_offset < FLASH_END_RP2040) {
                 if (flash_start_offset) {
                     fail(ERROR_NOT_POSSIBLE, "File size 0x%x starting at 0x%x is too big to fit in flash size 0x%x", flash_data_size, flash_start_offset, size_guess);
                 } else {
