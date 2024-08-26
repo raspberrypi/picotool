@@ -103,18 +103,17 @@ auto memory_names = map<enum memory_type, string>{
 
 static string tool_name = "picotool";
 
-static string hex_string(int64_t value, int width=8, bool prefix=true) {
+static string hex_string(int64_t value, int width=8, bool prefix=true, bool uppercase=false) {
     std::stringstream ss;
     if (prefix) ss << "0x";
-    ss << std::setfill('0') << std::setw(width) << std::hex << value;
+    ss << std::setfill('0') << std::setw(width);
+    if (uppercase) ss << std::uppercase;
+    ss << std::hex << value;
     return ss.str();
 }
 
 static string HEX_string(int64_t value, int width=8, bool prefix=true) {
-    std::stringstream ss;
-    if (prefix) ss << "0x";
-    ss << std::setfill('0') << std::setw(width) << std::uppercase << std::hex << value;
-    return ss.str();
+    return hex_string(value, width, prefix, true);
 }
 
 std::array<std::array<string, 30>, 10> pin_functions_rp2040{{
