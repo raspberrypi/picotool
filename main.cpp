@@ -3766,7 +3766,11 @@ bool info_command::execute(device_map &devices) {
                 info_guts(tmp_access, nullptr);
             }
         } else {
-            fos << "File " << settings.filenames[0] << ":\n\n";
+            if (get_file_type() == filetype::uf2) {
+                fos << "File " << settings.filenames[0] << " family ID " << family_name(id) << ":\n\n";
+            } else {
+                fos << "File " << settings.filenames[0] << ":\n\n";
+            }
             info_guts(access, nullptr);
         }
         return false;
