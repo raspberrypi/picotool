@@ -666,7 +666,7 @@ struct save_command : public cmd {
                 ).min(0).doc_non_optional(true)
             ).min(0).doc_non_optional(true).no_match_beats_error(false) % "Selection of data to save" +
             (option("--family") % "Specify the family ID to save the file as" &
-                family_id("family_id").set(settings.family_id) % "family id to save file as").force_expand_help(true) +
+                family_id("family_id").set(settings.family_id) % "family ID to save file as").force_expand_help(true) +
             ( // note this parenthesis seems to help with error messages for say save --foo
                 device_selection % "Source device selection" +
                 file_selection % "File to save to"
@@ -687,7 +687,7 @@ struct load_command : public cmd {
             (
                 option("--ignore-partitions").set(settings.load.ignore_pt) % "When writing flash data, ignore the partition table and write to absolute space" +
                 (option("--family") % "Specify the family ID of the file to load" &
-                        family_id("family_id").set(settings.family_id) % "family id to use for load").force_expand_help(true) +
+                        family_id("family_id").set(settings.family_id) % "family ID to use for load").force_expand_help(true) +
                 (option('p', "--partition") % "Specify the partition to load into" &
                         integer("partition").set(settings.load.partition) % "partition to load into").force_expand_help(true) +
                 option('n', "--no-overwrite").set(settings.load.no_overwrite) % "When writing flash data, do not overwrite an existing program in flash. If picotool cannot determine the size/presence of the program in flash, the command fails" +
@@ -842,7 +842,7 @@ struct partition_info_command : public cmd {
 
     group get_cli() override {
         return (
-                (option('m', "--family") & family_id("family_id").set(settings.family_id)) % "family id (will show target partition for said family)" +
+                (option('m', "--family") & family_id("family_id").set(settings.family_id)) % "family ID (will show target partition for said family)" +
                 device_selection % "Target device selection"
         );
     }
@@ -871,7 +871,7 @@ struct partition_create_command : public cmd {
                     (option('o', "--offset").set(settings.offset_set) % "Specify the load address for UF2 file output" &
                         hex("offset").set(settings.offset) % "Load offset (memory address; default 0x10000000)").force_expand_help(true) +
                     (option("--family") % "Specify the family if for UF2 file output" &
-                        family_id("family_id").set(settings.family_id) % "family id for UF2 (default absolute)").force_expand_help(true)
+                        family_id("family_id").set(settings.family_id) % "family ID for UF2 (default absolute)").force_expand_help(true)
                 ).min(0).force_expand_help(true) % "UF2 output options") +
                 optional_typed_file_selection_x("bootloader", 2, "elf") % "embed partition table into bootloader ELF" + 
                 (
@@ -1165,7 +1165,7 @@ struct uf2_convert_command : public cmd {
                         hex("offset").set(settings.offset) % "Load offset (memory address; default 0x10000000 for BIN file)"
                 ).force_expand_help(true) % "Packaging Options" + 
                 (
-                    option("--family") & family_id("family_id").set(settings.family_id) % "family id for UF2"
+                    option("--family") & family_id("family_id").set(settings.family_id) % "family ID for UF2"
                 ).force_expand_help(true) % "UF2 Family options"
             #if SUPPORT_A2
                 + (
@@ -3547,23 +3547,23 @@ uint32_t get_access_family_id(memory_access &file_access) {
             uint32_t checksum = file_access.read_int(FLASH_START + 252);
             if (checksum == calc_checksum(checksum_data)) {
                 // Checksum is correct, so RP2040
-                DEBUG_LOG("Detected family id %s due to boot2 checksum\n", family_name(RP2040_FAMILY_ID).c_str());
+                DEBUG_LOG("Detected family ID %s due to boot2 checksum\n", family_name(RP2040_FAMILY_ID).c_str());
                 return RP2040_FAMILY_ID;
             } else {
                 // Checksum incorrect, so absolute
-                DEBUG_LOG("Assumed family id %s\n", family_name(ABSOLUTE_FAMILY_ID).c_str());
+                DEBUG_LOG("Assumed family ID %s\n", family_name(ABSOLUTE_FAMILY_ID).c_str());
                 return ABSOLUTE_FAMILY_ID;
             }
         } else {
             // no_flash RP2040 binaries have no checksum
-            DEBUG_LOG("Assumed family id %s\n", family_name(RP2040_FAMILY_ID).c_str());
+            DEBUG_LOG("Assumed family ID %s\n", family_name(RP2040_FAMILY_ID).c_str());
             return RP2040_FAMILY_ID;
         }
     }
     auto first_item = best_block->items[0].get();
     if (first_item->type() != PICOBIN_BLOCK_ITEM_1BS_IMAGE_TYPE) {
         // This will apply for partition tables
-        DEBUG_LOG("Assumed family id %s due to block with no IMAGE_DEF\n", family_name(ABSOLUTE_FAMILY_ID).c_str());
+        DEBUG_LOG("Assumed family ID %s due to block with no IMAGE_DEF\n", family_name(ABSOLUTE_FAMILY_ID).c_str());
         return ABSOLUTE_FAMILY_ID;
     }
     auto image_def = dynamic_cast<image_type_item*>(first_item);
@@ -3619,7 +3619,7 @@ uint32_t get_family_id(uint8_t file_idx) {
         // todo this can be done - need to add block search for bin files
         fail(ERROR_FORMAT, "Cannot autodetect UF2 family - must specify the family\n");
     }
-    DEBUG_LOG("Detected family id %s\n", family_name(family_id).c_str());;
+    DEBUG_LOG("Detected family ID %s\n", family_name(family_id).c_str());;
     return family_id;
 }
 
@@ -4111,13 +4111,13 @@ bool get_target_partition(picoboot::connection &con, uint32_t* start = nullptr, 
     con.get_info(&cmd, loc_flags_id_buf, sizeof(loc_flags_id_buf));
     assert(loc_flags_id_buf_32[0] == 3);
     if ((int)loc_flags_id_buf_32[1] < 0) {
-        printf("Family id %s cannot be downloaded anywhere\n", family_name(settings.family_id).c_str());
+        printf("Family ID %s cannot be downloaded anywhere\n", family_name(settings.family_id).c_str());
         return false;
     } else {
         if (loc_flags_id_buf_32[1] == PARTITION_TABLE_NO_PARTITION_INDEX) {
-            printf("Family id %s can be downloaded in absolute space:\n", family_name(settings.family_id).c_str());
+            printf("Family ID %s can be downloaded in absolute space:\n", family_name(settings.family_id).c_str());
         } else {
-            printf("Family id %s can be downloaded in partition %d:\n", family_name(settings.family_id).c_str(), loc_flags_id_buf_32[1]);
+            printf("Family ID %s can be downloaded in partition %d:\n", family_name(settings.family_id).c_str(), loc_flags_id_buf_32[1]);
         }
         uint32_t location_and_permissions = loc_flags_id_buf_32[2];
         uint32_t saddr = ((location_and_permissions >> PICOBIN_PARTITION_LOCATION_FIRST_SECTOR_LSB) & 0x1fffu) * 4096;
