@@ -112,17 +112,12 @@ static const string rp2350_arm_s_family_name = "rp2350-arm-s";
 static const string rp2350_arm_ns_family_name = "rp2350-arm-ns";
 static const string rp2350_riscv_family_name = "rp2350-riscv";
 
-static string hex_string(int64_t value, int width=8, bool prefix=true) {
+static string hex_string(int64_t value, int width=8, bool prefix=true, bool uppercase=false) {
     std::stringstream ss;
     if (prefix) ss << "0x";
-    ss << std::setfill('0') << std::setw(width) << std::hex << value;
-    return ss.str();
-}
-
-static string HEX_string(int64_t value, int width=8, bool prefix=true) {
-    std::stringstream ss;
-    if (prefix) ss << "0x";
-    ss << std::setfill('0') << std::setw(width) << std::uppercase << std::hex << value;
+    ss << std::setfill('0') << std::setw(width);
+    if (uppercase) ss << std::uppercase;
+    ss << std::hex << value;
     return ss.str();
 }
 
@@ -3326,7 +3321,7 @@ void info_guts(memory_access &raw_access, void *con) {
                     if (model == rp2040) {
                         uint64_t flash_id = 0;
                         con->flash_id(flash_id);
-                        info_pair("flash id", HEX_string(flash_id, 16));
+                        info_pair("flash id", hex_string(flash_id, 16, true, true));
                     }
                 }
             } catch (picoboot::command_failure &e) {
