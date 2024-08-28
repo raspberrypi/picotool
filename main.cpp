@@ -112,10 +112,6 @@ static string hex_string(int64_t value, int width=8, bool prefix=true, bool uppe
     return ss.str();
 }
 
-static string HEX_string(int64_t value, int width=8, bool prefix=true) {
-    return hex_string(value, width, prefix, true);
-}
-
 std::array<std::array<string, 30>, 10> pin_functions_rp2040{{
     {"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""},
     {"SPI0 RX", "SPI0 CSn", "SPI0 SCK", "SPI0 TX", "SPI0 RX", "SPI0 CSn", "SPI0 SCK", "SPI0 TX", "SPI1 RX", "SPI1 CSn", "SPI1 SCK", "SPI1 TX", "SPI1 RX", "SPI1 CSn", "SPI1 SCK", "SPI1 TX", "SPI0 RX", "SPI0 CSn", "SPI0 SCK", "SPI0 TX", "SPI0 RX", "SPI0 CSn", "SPI0 SCK", "SPI0 TX", "SPI1 RX", "SPI1 CSn", "SPI1 SCK", "SPI1 TX", "SPI1 RX", "SPI1 CSn"},
@@ -3316,7 +3312,7 @@ void info_guts(memory_access &raw_access, void *con) {
                     if (model == rp2040) {
                         uint64_t flash_id = 0;
                         con->flash_id(flash_id);
-                        info_pair("flash id", HEX_string(flash_id, 16));
+                        info_pair("flash id", hex_string(flash_id, 16, true, true));
                     }
                 }
             } catch (picoboot::command_failure &e) {
