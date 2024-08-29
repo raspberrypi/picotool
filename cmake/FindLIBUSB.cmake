@@ -56,5 +56,10 @@ else (LIBUSB_INCLUDE_DIR AND LIBUSB_LIBRARIES)
 
     include(FindPackageHandleStandardArgs)
     FIND_PACKAGE_HANDLE_STANDARD_ARGS(LIBUSB DEFAULT_MSG LIBUSB_LIBRARIES LIBUSB_INCLUDE_DIR)
+
+    # Don't use .dll.a libraries, as they require the .dll file to be in the correct location
+    # Replace with .a for static linking instead
+    string(REPLACE ".dll.a" ".a" LIBUSB_LIBRARIES ${LIBUSB_LIBRARIES})
+
     MARK_AS_ADVANCED(LIBUSB_INCLUDE_DIR LIBUSB_LIBRARIES)
 endif (LIBUSB_INCLUDE_DIR AND LIBUSB_LIBRARIES)
