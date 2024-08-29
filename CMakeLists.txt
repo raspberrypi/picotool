@@ -222,10 +222,9 @@ add_subdirectory(${PICO_SDK_PATH}/src/common/boot_uf2_headers boot_uf2_headers)
 add_subdirectory(${PICO_SDK_PATH}/src/common/boot_picoboot_headers boot_picoboot_headers)
 add_subdirectory(${PICO_SDK_PATH}/src/common/boot_picobin_headers boot_picobin_headers)
 add_subdirectory(${PICO_SDK_PATH}/src/common/pico_usb_reset_interface_headers pico_usb_reset_interface_headers)
+add_subdirectory(${PICO_SDK_PATH}/src/rp2_common/boot_bootrom_headers boot_bootrom_headers)
 add_subdirectory(${PICO_SDK_PATH}/src/host/pico_platform pico_platform)
 
-add_library(pico_bootrom_headers INTERFACE)
-target_include_directories(pico_bootrom_headers INTERFACE ${PICO_SDK_PATH}/src/rp2_common/pico_bootrom/include)
 add_library(regs_headers INTERFACE)
 target_include_directories(regs_headers INTERFACE ${PICO_SDK_PATH}/src/rp2350/hardware_regs/include)
 
@@ -258,7 +257,7 @@ target_link_libraries(picotool
         boot_uf2_headers
         boot_picoboot_headers
         boot_picobin_headers
-        pico_bootrom_headers
+        boot_bootrom_headers
         pico_platform_headers
         pico_usb_reset_interface_headers
         regs_headers

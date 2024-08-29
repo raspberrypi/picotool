@@ -42,7 +42,7 @@
 #endif
 #include "bintool.h"
 #include "elf2uf2.h"
-#include "pico/bootrom_constants.h"
+#include "boot/bootrom_constants.h"
 #include "pico/binary_info.h"
 #include "pico/stdio_usb/reset_interface.h"
 #include "elf.h"

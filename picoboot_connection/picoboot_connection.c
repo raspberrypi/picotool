@@ -10,7 +10,7 @@
 #include <inttypes.h>
 
 #include "picoboot_connection.h"
-#include "pico/bootrom_constants.h"
+#include "boot/bootrom_constants.h"
 
 #if ENABLE_DEBUG_LOG
 #include <stdio.h>
