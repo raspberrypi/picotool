@@ -55,7 +55,7 @@ jobs:
         run: |
           cmake -S . -B build -G "${{ matrix.generator }}" -D PICO_SDK_PATH="${{ github.workspace }}/pico-sdk" ${{ matrix.libusb && '-D PICOTOOL_NO_LIBUSB=1' || '' }} ${{ matrix.compile && '-D USE_PRECOMPILED=false' || '' }}
           cmake --build build
-          ${{ runner.os == 'Windows' && '' || 'sudo' }} cmake --install build
+          ${{ runner.os != 'Windows' && 'sudo' || '' }} cmake --install build
       - name: Add to path (Windows)
         if: runner.os == 'Windows'
         run: echo "C:\Program Files (x86)\picotool\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
