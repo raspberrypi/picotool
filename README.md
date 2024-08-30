@@ -380,7 +380,7 @@ OPTIONS:
         --family
             Specify the family ID of the file to load
         <family_id>
-            family id to use for load
+            family ID to use for load
         -p, --partition
             Specify the partition to load into
         <partition>
@@ -758,7 +758,7 @@ un-partitioned_space :  S(rw) NSBOOT(rw) NS(rw), uf2 { absolute }
 partitions:
   0(A)       00002000->00201000 S(rw) NSBOOT(rw) NS(rw), id=0000000000000000, "A", uf2 { rp2350-arm-s, rp2350-riscv }, arm_boot 1, riscv_boot 1
   1(B w/ 0)  00201000->00400000 S(rw) NSBOOT(rw) NS(rw), id=0000000000000001, "B", uf2 { rp2350-arm-s, rp2350-riscv }, arm_boot 1, riscv_boot 1
-Family id 'rp2350-arm-s' can be downloaded in partition 0:
+Family ID 'rp2350-arm-s' can be downloaded in partition 0:
   00002000->00201000
 ```
 
@@ -799,7 +799,7 @@ OPTIONS:
         --family
             Specify the family if for UF2 file output
         <family_id>
-            family id for UF2 (default absolute)
+            family ID for UF2 (default absolute)
     embed partition table into bootloader ELF
         <bootloader>
             The file name
@@ -860,7 +860,7 @@ OPTIONS:
             Load offset (memory address; default 0x10000000 for BIN file)
     UF2 Family options
         <family_id>
-            family id for UF2
+            family ID for UF2
     Errata RP2350-E10 Fix
         --abs-block
             Add an absolute block

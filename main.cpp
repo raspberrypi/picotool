@@ -674,7 +674,7 @@ struct save_command : public cmd {
                 ).min(0).doc_non_optional(true)
             ).min(0).doc_non_optional(true).no_match_beats_error(false) % "Selection of data to save" +
             (option("--family") % "Specify the family ID to save the file as" &
-                family_id("family_id").set(settings.family_id) % "family id to save file as").force_expand_help(true) +
+                family_id("family_id").set(settings.family_id) % "family ID to save file as").force_expand_help(true) +
             ( // note this parenthesis seems to help with error messages for say save --foo
                 device_selection % "Source device selection" +
                 file_selection % "File to save to"
@@ -695,7 +695,7 @@ struct load_command : public cmd {
             (
                 option("--ignore-partitions").set(settings.load.ignore_pt) % "When writing flash data, ignore the partition table and write to absolute space" +
                 (option("--family") % "Specify the family ID of the file to load" &
-                        family_id("family_id").set(settings.family_id) % "family id to use for load").force_expand_help(true) +
+                        family_id("family_id").set(settings.family_id) % "family ID to use for load").force_expand_help(true) +
                 (option('p', "--partition") % "Specify the partition to load into" &
                         integer("partition").set(settings.load.partition) % "partition to load into").force_expand_help(true) +
                 option('n', "--no-overwrite").set(settings.load.no_overwrite) % "When writing flash data, do not overwrite an existing program in flash. If picotool cannot determine the size/presence of the program in flash, the command fails" +
@@ -850,7 +850,7 @@ struct partition_info_command : public cmd {
 
     group get_cli() override {
         return (
-                (option('m', "--family") & family_id("family_id").set(settings.family_id)) % "family id (will show target partition for said family)" +
+                (option('m', "--family") & family_id("family_id").set(settings.family_id)) % "family ID (will show target partition for said family)" +
                 device_selection % "Target device selection"
         );
     }
@@ -879,7 +879,7 @@ struct partition_create_command : public cmd {
                     (option('o', "--offset").set(settings.offset_set) % "Specify the load address for UF2 file output" &
                         hex("offset").set(settings.offset) % "Load offset (memory address; default 0x10000000)").force_expand_help(true) +
                     (option("--family") % "Specify the family if for UF2 file output" &
-                        family_id("family_id").set(settings.family_id) % "family id for UF2 (default absolute)").force_expand_help(true)
+                        family_id("family_id").set(settings.family_id) % "family ID for UF2 (default absolute)").force_expand_help(true)
                 ).min(0).force_expand_help(true) % "UF2 output options") +
                 optional_typed_file_selection_x("bootloader", 2, "elf") % "embed partition table into bootloader ELF" + 
                 (
@@ -1175,7 +1175,7 @@ struct uf2_convert_command : public cmd {
                         hex("offset").set(settings.offset) % "Load offset (memory address; default 0x10000000 for BIN file)"
                 ).force_expand_help(true) % "Packaging Options" + 
                 (
-                    option("--family") & family_id("family_id").set(settings.family_id) % "family id for UF2"
+                    option("--family") & family_id("family_id").set(settings.family_id) % "family ID for UF2"
                 ).force_expand_help(true) % "UF2 Family options"
             #if SUPPORT_A2
                 + (
@@ -2636,10 +2636,11 @@ void build_rmap_elf(std::shared_ptr<std::iostream>file, range_map<size_t>& rmap)
     }
 }
 
-void build_rmap_uf2(std::shared_ptr<std::iostream>file, range_map<size_t>& rmap) {
+uint32_t build_rmap_uf2(std::shared_ptr<std::iostream>file, range_map<size_t>& rmap, uint32_t family_id=0) {
     file->seekg(0, ios::beg);
     uf2_block block;
     unsigned int pos = 0;
+    uint32_t next_family_id = 0;
     do {
         file->read((char*)&block, sizeof(uf2_block));
         if (file->fail()) {
@@ -2649,7 +2650,8 @@ void build_rmap_uf2(std::shared_ptr<std::iostream>file, range_map<size_t>& rmap)
         if (block.magic_start0 == UF2_MAGIC_START0 && block.magic_start1 == UF2_MAGIC_START1 &&
             block.magic_end == UF2_MAGIC_END) {
             if (block.flags & UF2_FLAG_FAMILY_ID_PRESENT &&
-                !(block.flags & UF2_FLAG_NOT_MAIN_FLASH) && block.payload_size == PAGE_SIZE) {
+                !(block.flags & UF2_FLAG_NOT_MAIN_FLASH) && block.payload_size == PAGE_SIZE &&
+                (!family_id || block.file_size == family_id)) {
                 #if SUPPORT_A2
                 // ignore the absolute block, but save the address
                 if (check_abs_block(block)) {
@@ -2657,14 +2659,28 @@ void build_rmap_uf2(std::shared_ptr<std::iostream>file, range_map<size_t>& rmap)
                     settings.uf2.abs_block_loc = block.target_addr;
                 } else {
                     rmap.insert(range(block.target_addr, block.target_addr + PAGE_SIZE), pos + offsetof(uf2_block, data[0]));
+                    family_id = block.file_size;
+                    next_family_id = 0;
                 }
                 #else
                 rmap.insert(range(block.target_addr, block.target_addr + PAGE_SIZE), pos + offsetof(uf2_block, data[0]));
+                family_id = block.file_size;
+                next_family_id = 0;
+                #endif
+            } else if (block.file_size != family_id && family_id && !next_family_id) {
+                #if SUPPORT_A2
+                if (!check_abs_block(block)) {
+                #endif
+                    next_family_id = block.file_size;
+                #if SUPPORT_A2
+                }
                 #endif
             }
         }
         pos += sizeof(uf2_block);
     } while (true);
+
+    return next_family_id;
 }
 
 uint32_t find_binary_start(range_map<size_t>& rmap) {
@@ -2688,9 +2704,11 @@ uint32_t find_binary_start(range_map<size_t>& rmap) {
     return binary_start;
 }
 
-template <typename ACCESS, typename STREAM> ACCESS get_iostream_memory_access(std::shared_ptr<STREAM> file, filetype type, bool writeable = false) {
+template <typename ACCESS, typename STREAM> ACCESS get_iostream_memory_access(std::shared_ptr<STREAM> file, filetype type, bool writeable = false, uint32_t *next_family_id=nullptr) {
     range_map<size_t> rmap;
     uint32_t binary_start = 0;
+    uint32_t tmp = 0;
+    if (next_family_id != nullptr) tmp = *next_family_id;
     switch (type) {
         case filetype::bin:
             file->seekg(0, std::ios::end);
@@ -2702,7 +2720,12 @@ template <typename ACCESS, typename STREAM> ACCESS get_iostream_memory_access(st
             binary_start = find_binary_start(rmap);
             break;
         case filetype::uf2:
-            build_rmap_uf2(file, rmap);
+            tmp = build_rmap_uf2(file, rmap, tmp);
+            if (next_family_id != nullptr) {
+                *next_family_id = tmp;
+            } else if (tmp) {
+                fos << "WARNING: Multiple family IDs in a single UF2 file - only using first one\n";
+            }
             binary_start = find_binary_start(rmap);
             break;
         default:
@@ -2717,11 +2740,11 @@ template <typename ACCESS, typename STREAM> ACCESS get_iostream_memory_access(st
     return ACCESS(file, rmap, binary_start);
 }
 
-file_memory_access get_file_memory_access(uint8_t idx, bool writeable = false) {
+file_memory_access get_file_memory_access(uint8_t idx, bool writeable = false, uint32_t *next_family_id=nullptr) {
     ios::openmode mode = (writeable ? ios::out|ios::in : ios::in)|ios::binary;
     auto file = get_file_idx(mode, idx);
     try {
-        return get_iostream_memory_access<file_memory_access>(file, get_file_type_idx(idx), writeable);
+        return get_iostream_memory_access<file_memory_access>(file, get_file_type_idx(idx), writeable, next_family_id);
     } catch (std::exception&) {
         file->close();
         throw;
@@ -3534,23 +3557,23 @@ uint32_t get_access_family_id(memory_access &file_access) {
             uint32_t checksum = file_access.read_int(FLASH_START + 252);
             if (checksum == calc_checksum(checksum_data)) {
                 // Checksum is correct, so RP2040
-                DEBUG_LOG("Detected family id %s due to boot2 checksum\n", family_name(RP2040_FAMILY_ID).c_str());
+                DEBUG_LOG("Detected family ID %s due to boot2 checksum\n", family_name(RP2040_FAMILY_ID).c_str());
                 return RP2040_FAMILY_ID;
             } else {
                 // Checksum incorrect, so absolute
-                DEBUG_LOG("Assumed family id %s\n", family_name(ABSOLUTE_FAMILY_ID).c_str());
+                DEBUG_LOG("Assumed family ID %s\n", family_name(ABSOLUTE_FAMILY_ID).c_str());
                 return ABSOLUTE_FAMILY_ID;
             }
         } else {
             // no_flash RP2040 binaries have no checksum
-            DEBUG_LOG("Assumed family id %s\n", family_name(RP2040_FAMILY_ID).c_str());
+            DEBUG_LOG("Assumed family ID %s\n", family_name(RP2040_FAMILY_ID).c_str());
             return RP2040_FAMILY_ID;
         }
     }
     auto first_item = best_block->items[0].get();
     if (first_item->type() != PICOBIN_BLOCK_ITEM_1BS_IMAGE_TYPE) {
         // This will apply for partition tables
-        DEBUG_LOG("Assumed family id %s due to block with no IMAGE_DEF\n", family_name(ABSOLUTE_FAMILY_ID).c_str());
+        DEBUG_LOG("Assumed family ID %s due to block with no IMAGE_DEF\n", family_name(ABSOLUTE_FAMILY_ID).c_str());
         return ABSOLUTE_FAMILY_ID;
     }
     auto image_def = dynamic_cast<image_type_item*>(first_item);
@@ -3606,7 +3629,7 @@ uint32_t get_family_id(uint8_t file_idx) {
         // todo this can be done - need to add block search for bin files
         fail(ERROR_FORMAT, "Cannot autodetect UF2 family - must specify the family\n");
     }
-    DEBUG_LOG("Detected family id %s\n", family_name(family_id).c_str());;
+    DEBUG_LOG("Detected family ID %s\n", family_name(family_id).c_str());;
     return family_id;
 }
 
@@ -3728,7 +3751,8 @@ bool config_command::execute(device_map &devices) {
 bool info_command::execute(device_map &devices) {
     fos.first_column(0); fos.hanging_indent(0);
     if (!settings.filenames[0].empty()) {
-        auto access = get_file_memory_access(0);
+        uint32_t next_id = 0;
+        auto access = get_file_memory_access(0, false, &next_id);
         uint32_t id = 0;
         id = get_family_id(0);
         if (id == RP2040_FAMILY_ID) {
@@ -3736,8 +3760,29 @@ bool info_command::execute(device_map &devices) {
         } else if (id >= RP2350_ARM_S_FAMILY_ID && id <= RP2350_ARM_NS_FAMILY_ID) {
             access.set_model(rp2350);
         }
-        fos << "File " << settings.filenames[0] << ":\n\n";
-        info_guts(access, nullptr);
+        if (next_id) {
+            next_id = id;
+            while (next_id) {
+                fos.first_column(0); fos.hanging_indent(0);
+                std::stringstream s;
+                s << "File " << settings.filenames[0] << " family ID " << family_name(next_id) << ":";
+                if (next_id != id) {
+                    string dashes;
+                    std::generate_n(std::back_inserter(dashes), s.str().length() + 1, [] { return '-'; });
+                    fos << "\n" << dashes << "\n";
+                }
+                fos << s.str() << "\n\n";
+                auto tmp_access = get_file_memory_access(0, false, &next_id);
+                info_guts(tmp_access, nullptr);
+            }
+        } else {
+            if (get_file_type() == filetype::uf2) {
+                fos << "File " << settings.filenames[0] << " family ID " << family_name(id) << ":\n\n";
+            } else {
+                fos << "File " << settings.filenames[0] << ":\n\n";
+            }
+            info_guts(access, nullptr);
+        }
         return false;
     }
 #if HAS_LIBUSB
@@ -4076,13 +4121,13 @@ bool get_target_partition(picoboot::connection &con, uint32_t* start = nullptr, 
     con.get_info(&cmd, loc_flags_id_buf, sizeof(loc_flags_id_buf));
     assert(loc_flags_id_buf_32[0] == 3);
     if ((int)loc_flags_id_buf_32[1] < 0) {
-        printf("Family id %s cannot be downloaded anywhere\n", family_name(settings.family_id).c_str());
+        printf("Family ID %s cannot be downloaded anywhere\n", family_name(settings.family_id).c_str());
         return false;
     } else {
         if (loc_flags_id_buf_32[1] == PARTITION_TABLE_NO_PARTITION_INDEX) {
-            printf("Family id %s can be downloaded in absolute space:\n", family_name(settings.family_id).c_str());
+            printf("Family ID %s can be downloaded in absolute space:\n", family_name(settings.family_id).c_str());
         } else {
-            printf("Family id %s can be downloaded in partition %d:\n", family_name(settings.family_id).c_str(), loc_flags_id_buf_32[1]);
+            printf("Family ID %s can be downloaded in partition %d:\n", family_name(settings.family_id).c_str(), loc_flags_id_buf_32[1]);
         }
         uint32_t location_and_permissions = loc_flags_id_buf_32[2];
         uint32_t saddr = ((location_and_permissions >> PICOBIN_PARTITION_LOCATION_FIRST_SECTOR_LSB) & 0x1fffu) * 4096;
