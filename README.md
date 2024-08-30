@@ -125,9 +125,9 @@ SYNOPSIS:
     picotool encrypt [--quiet] [--verbose] [--hash] [--sign] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] <aes_key> [-t <type>] [<signing_key>] [-t <type>]
     picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] [<key>] [-t <type>] [<otp>] [-t <type>] [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
     picotool link [--quiet] [--verbose] <outfile> [-t <type>] <infile1> [-t <type>] <infile2> [-t <type>] [<infile3>] [-t <type>] [-p] <pad>
-    picotool save [-p] [device-selection]
-    picotool save -a [device-selection]
-    picotool save -r <from> <to> [device-selection]
+    picotool save [-p] [-v] [--family <family_id>] [device-selection]
+    picotool save -a [-v] [--family <family_id>] [device-selection]
+    picotool save -r <from> <to> [-v] [--family <family_id>] [device-selection]
     picotool erase [-a] [device-selection]
     picotool erase [-p <partition>] [device-selection]
     picotool erase -r <from> <to> [device-selection]
@@ -444,9 +444,9 @@ SAVE:
     Save the program / memory stored in flash on the device to a file.
 
 SYNOPSIS:
-    picotool save [-p] [device-selection]
-    picotool save -a [device-selection]
-    picotool save -r <from> <to> [device-selection]
+    picotool save [-p] [-v] [--family <family_id>] [device-selection]
+    picotool save -a [-v] [--family <family_id>] [device-selection]
+    picotool save -r <from> <to> [-v] [--family <family_id>] [device-selection]
 
 OPTIONS:
     Selection of data to save
@@ -461,6 +461,13 @@ OPTIONS:
             The lower address bound in hex
         <to>
             The upper address bound in hex
+    Other
+        -v, --verify
+            Verify the data was saved correctly
+        --family
+            Specify the family ID to save the file as
+        <family_id>
+            family id to save file as
     Source device selection
         --bus <bus>
             Filter devices by USB bus number

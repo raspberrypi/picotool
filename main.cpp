@@ -459,6 +459,7 @@ struct _settings {
 
     struct {
         bool all = false;
+        bool verify = false;
     } save;
 
     struct {
@@ -673,6 +674,7 @@ struct save_command : public cmd {
                         hex("to").set(settings.to) % "The upper address bound in hex"
                 ).min(0).doc_non_optional(true)
             ).min(0).doc_non_optional(true).no_match_beats_error(false) % "Selection of data to save" +
+            option('v', "--verify").set(settings.save.verify) % "Verify the data was saved correctly" +
             (option("--family") % "Specify the family ID to save the file as" &
                 family_id("family_id").set(settings.family_id) % "family ID to save file as").force_expand_help(true) +
             ( // note this parenthesis seems to help with error messages for say save --foo
@@ -3896,6 +3898,33 @@ struct progress_bar {
 };
 
 #if HAS_LIBUSB
+vector<range> get_coalesced_ranges(iostream_memory_access &file_access, model_t model) {
+    auto rmap = file_access.get_rmap();
+    auto ranges = rmap.ranges();
+    std::sort(ranges.begin(), ranges.end(), [](const range& a, const range &b) {
+        return a.from < b.from;
+    });
+    // coalesce all the contiguous ranges
+    for(auto i = ranges.begin(); i < ranges.end(); ) {
+        if (i != ranges.end() - 1) {
+            uint32_t erase_size;
+            // we want to coalesce flash sectors together (this ends up creating ranges that may have holes)
+            if( get_memory_type(i->from, model) == flash ) {
+                erase_size = FLASH_SECTOR_ERASE_SIZE;
+            } else {
+                erase_size = 1;
+            }
+            if (i->to / erase_size == (i+1)->from / erase_size) {
+                i->to = (i+1)->to;
+                i = ranges.erase(i+1) - 1;
+                continue;
+            }
+        }
+        i++;
+    }
+    return ranges;
+}
+
 bool save_command::execute(device_map &devices) {
     auto con = get_single_bootsel_device_connection(devices);
     picoboot_memory_access raw_access(con);
@@ -4018,6 +4047,50 @@ bool save_command::execute(device_map &devices) {
             throw;
         }
     }
+
+    if (settings.save.verify) {
+        auto file_access = get_file_memory_access(0);
+        model_t model = get_model(raw_access);
+        auto ranges = get_coalesced_ranges(file_access, model);
+        for (auto mem_range : ranges) {
+            enum memory_type type = get_memory_type(mem_range.from, model);
+            bool ok = true;
+            {
+                progress_bar bar("Verifying " + memory_names[type] + ":    ");
+                uint32_t batch_size = FLASH_SECTOR_ERASE_SIZE;
+                vector<uint8_t> file_buf;
+                vector<uint8_t> device_buf;
+                uint32_t pos = mem_range.from;
+                for (uint32_t base = mem_range.from; base < mem_range.to && ok; base += batch_size) {
+                    uint32_t this_batch = std::min(std::min(mem_range.to, end) - base, batch_size);
+                    // note we pass zero_fill = true in case the file has holes, but this does
+                    // mean that the verification will fail if those holes are not filled with zeros
+                    // on the device
+                    file_access.read_into_vector(base, this_batch, file_buf, true);
+                    raw_access.read_into_vector(base, this_batch, device_buf);
+                    assert(file_buf.size() == device_buf.size());
+                    for (unsigned int i = 0; i < this_batch; i++) {
+                        if (file_buf[i] != device_buf[i]) {
+                            pos = base + i;
+                            printf("Unmatch file %x, device %x, pos %x\n", file_buf[i], device_buf[i], pos);
+                            ok = false;
+                            break;
+                        }
+                    }
+                    if (ok) {
+                        pos = base + this_batch;
+                    }
+                    bar.progress(pos - mem_range.from, mem_range.to - mem_range.from);
+                }
+            }
+            if (ok) {
+                std::cout << "  OK\n";
+            } else {
+                std::cout << "  FAILED\n";
+                fail(ERROR_VERIFICATION_FAILED, "The device contents did not match the saved file");
+            }
+        }
+    }
     return false;
 }
 
@@ -4081,33 +4154,6 @@ bool erase_command::execute(device_map &devices) {
 #endif
 
 #if HAS_LIBUSB
-vector<range> get_coalesced_ranges(iostream_memory_access &file_access, model_t model) {
-    auto rmap = file_access.get_rmap();
-    auto ranges = rmap.ranges();
-    std::sort(ranges.begin(), ranges.end(), [](const range& a, const range &b) {
-        return a.from < b.from;
-    });
-    // coalesce all the contiguous ranges
-    for(auto i = ranges.begin(); i < ranges.end(); ) {
-        if (i != ranges.end() - 1) {
-            uint32_t erase_size;
-            // we want to coalesce flash sectors together (this ends up creating ranges that may have holes)
-            if( get_memory_type(i->from, model) == flash ) {
-                erase_size = FLASH_SECTOR_ERASE_SIZE;
-            } else {
-                erase_size = 1;
-            }
-            if (i->to / erase_size == (i+1)->from / erase_size) {
-                i->to = (i+1)->to;
-                i = ranges.erase(i+1) - 1;
-                continue;
-            }
-        }
-        i++;
-    }
-    return ranges;
-}
-
 bool get_target_partition(picoboot::connection &con, uint32_t* start = nullptr, uint32_t* end = nullptr) {
 #if SUPPORT_A2
     con.exit_xip();
