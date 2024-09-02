@@ -29,8 +29,7 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           choco install -y .github/workflows/choco_packages.config
-          curl https://github.com/libusb/libusb/releases/download/v1.0.27/libusb-1.0.27.7z -o libusb.7z
-          dir
+          curl -L https://github.com/libusb/libusb/releases/download/v1.0.27/libusb-1.0.27.7z -o libusb.7z
           7z x libusb.7z -olibusb
       - name: Set LIBUSB_ROOT (Windows)
         if: runner.os == 'Windows'
@@ -66,9 +65,9 @@ jobs:
       - name: Test
         run: |
           picotool help
-          curl https://datasheets.raspberrypi.com/soft/blink.uf2 -o blink.uf2
-          curl https://datasheets.raspberrypi.com/soft/hello_world.uf2 -o hello_world.uf2
-          curl https://datasheets.raspberrypi.com/soft/flash_nuke.uf2 -o flash_nuke.uf2
+          curl -L https://datasheets.raspberrypi.com/soft/blink.uf2 -o blink.uf2
+          curl -L https://datasheets.raspberrypi.com/soft/hello_world.uf2 -o hello_world.uf2
+          curl -L https://datasheets.raspberrypi.com/soft/flash_nuke.uf2 -o flash_nuke.uf2
           picotool info -a blink.uf2
           picotool info -a hello_world.uf2
           picotool info -a flash_nuke.uf2
