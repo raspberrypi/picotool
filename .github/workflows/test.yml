@@ -4,6 +4,8 @@ on:
 
 jobs:
   build:
+    # Prevent running twice for PRs from same repo
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
     name: Build & Test
     strategy:
       fail-fast: false
@@ -28,6 +30,7 @@ jobs:
         run: |
           choco install -y .github/workflows/choco_packages.config
           curl https://github.com/libusb/libusb/releases/download/v1.0.27/libusb-1.0.27.7z -o libusb.7z
+          dir
           7z x libusb.7z -olibusb
       - name: Set LIBUSB_ROOT (Windows)
         if: runner.os == 'Windows'
