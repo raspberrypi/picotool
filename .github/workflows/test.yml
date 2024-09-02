@@ -27,7 +27,7 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           choco install -y .github/workflows/choco_packages.config
-          wget https://github.com/libusb/libusb/releases/download/v1.0.27/libusb-1.0.27.7z -O libusb.7z
+          curl https://github.com/libusb/libusb/releases/download/v1.0.27/libusb-1.0.27.7z -o libusb.7z
           7z x libusb.7z -olibusb
       - name: Set LIBUSB_ROOT (Windows)
         if: runner.os == 'Windows'
@@ -37,7 +37,7 @@ jobs:
       - name: Install dependencies (macOS)
         if: runner.os == 'macOS'
         run: |
-          brew install cmake libusb pkg-config ninja wget
+          brew install cmake libusb pkg-config ninja
           brew install --cask gcc-arm-embedded
 
       - name: Install dependencies (Linux)
@@ -63,9 +63,9 @@ jobs:
       - name: Test
         run: |
           picotool help
-          wget https://datasheets.raspberrypi.com/soft/blink.uf2 -O blink.uf2
-          wget https://datasheets.raspberrypi.com/soft/hello_world.uf2 -O hello_world.uf2
-          wget https://datasheets.raspberrypi.com/soft/flash_nuke.uf2 -O flash_nuke.uf2
+          curl https://datasheets.raspberrypi.com/soft/blink.uf2 -o blink.uf2
+          curl https://datasheets.raspberrypi.com/soft/hello_world.uf2 -o hello_world.uf2
+          curl https://datasheets.raspberrypi.com/soft/flash_nuke.uf2 -o flash_nuke.uf2
           picotool info -a blink.uf2
           picotool info -a hello_world.uf2
           picotool info -a flash_nuke.uf2
