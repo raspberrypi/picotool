@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.12)
 
 if (NOT USE_PRECOMPILED)
+        set(PICO_NO_PICOTOOL 1)
+
         set(PICO_PLATFORM rp2350-arm-s)
 
         # Pull in SDK (must be before project)
