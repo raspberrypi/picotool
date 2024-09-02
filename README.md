@@ -66,32 +66,23 @@ No need to download libusb separately or set `LIBUSB_ROOT`.
 pacman -S $MINGW_PACKAGE_PREFIX-{toolchain,cmake,libusb}
 mkdir build
 cd build
-MSYS2_ARG_CONV_EXCL=- cmake .. -G"MSYS Makefiles" -DCMAKE_INSTALL_PREFIX=$MINGW_PREFIX
-make
-make install DESTDIR=/  # optional
+cmake .. -DCMAKE_INSTALL_PREFIX=$MINGW_PREFIX
+cmake --build .
 ```
 
 ## Usage by the Raspberry Pi Pico SDK
 
-The Raspberry Pi Pico SDK ([pico-sdk](https://github.com/raspberrypi/pico-sdk)) version 2.0.0 and above, uses `picotool` to do the ELF->UF2 conversion previously handled by the `elf2uf2` tool in the SDK. `picootol` is also used by the SDK for hashing and/or signing binaries.
+The Raspberry Pi Pico SDK ([pico-sdk](https://github.com/raspberrypi/pico-sdk)) version 2.0.0 and above uses `picotool` to do the ELF-to-UF2 conversion previously handled by the `elf2uf2` tool in the SDK. The SDK also uses `picotool` to hash and sign binaries.
 
-Whilst the SDK can download picotool on its own per project, if you have multiple projects or build configurations, it is preferable to install a single copy of `picotool` locally.
+Whilst the SDK can download picotool on its own per project, if you have multiple projects or build configurations, it is preferable to install a single copy of `picotool` locally.  This can be done most simply with `make install` or `cmake --install .`; the SDK will use this installed version by default.
 
-This can be done most simply with `make install`; the SDK will use this installed version by default.
-
-Alternatively you can install in a custom path via:
+Alternatively, you can install to a custom path via:
 
 ```
 cmake -DCMAKE_INSTALL_PREFIX=$MY_INSTALL_DIR -DPICOTOOL_FLAT_INSTALL=1 ..
 ```
 
-In order for the SDK to find `picotool` in this custom path, you  will need to set the `picotool_DIR` variable in your project, either by passing to `-Dpicotool_DIR=$MY_INSTALL_DIR/picotool` to your SDK `cmake` command, or by adding
-
-```CMake
-set(picotool_DIR $MY_INSTALL_DIR/picotool)
-```
-
-to your CMakeLists.txt file.
+In order for the SDK to find `picotool` in this custom path, you will need to set the `picotool_DIR` variable in your project, either by setting the `picotool_DIR` environment variable, by passing `-Dpicotool_DIR=$MY_INSTALL_DIR/picotool` to your `cmake` command, or by adding `set(picotool_DIR $MY_INSTALL_DIR/picotool)` to your CMakeLists.txt file.
 
 ## Overview
 
