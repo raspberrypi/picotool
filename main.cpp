@@ -14,7 +14,7 @@
 #include <csignal>
 #include <cstdio>
 #include <regex>
-#ifndef __APPLE__
+#if !defined(__APPLE__) && !defined(__FreeBSD__)
 #include <cuchar>
 #endif
 #include <cwchar>
