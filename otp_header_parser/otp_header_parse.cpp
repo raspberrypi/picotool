@@ -15,7 +15,7 @@
 #include "nlohmann/json.hpp"
 
 // missing __builtins on windows
-#ifdef _MSC_VER
+#if defined(_MSC_VER) && !defined(__clang__)
 #  include <intrin.h>
 #  define __builtin_popcount __popcnt
 static __forceinline int __builtin_ctz(unsigned x) {
