@@ -25,7 +25,9 @@ else (LIBUSB_INCLUDE_DIR AND LIBUSB_LIBRARIES)
 
     if (PKG_CONFIG_FOUND)
         pkg_check_modules(PC_LIBUSB libusb-1.0)
-    else ()
+    endif()
+
+    if (NOT PC_LIBUSB_FOUND)
         # As the pkg-config was not found we are probably building under windows.
         # Determine the architecture of the host, to choose right library
         if (NOT DEFINED ARCHITECTURE)
