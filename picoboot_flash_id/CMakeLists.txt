@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.12)
 
 if (NOT USE_PRECOMPILED)
+    set(PICO_NO_PICOTOOL 1)
+
     # default build type
     set(CMAKE_BUILD_TYPE "MinSizeRel" CACHE STRING "build type")
 

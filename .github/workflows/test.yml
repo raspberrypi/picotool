@@ -1,0 +1,73 @@
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    # Prevent running twice for PRs from same repo
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
+    name: Build & Test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        generator: ["Ninja", "Unix Makefiles"]
+        mbedtls: ["mbedtls", ""]
+        libusb: ["libusb", ""]
+        compile: ["compile", ""]
+        exclude:
+          - os: 'windows-latest'
+            generator: "Unix Makefiles"
+          - libusb: ""
+            compile: "compile"
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install dependencies (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          choco install -y .github/workflows/choco_packages.config
+          curl -L https://github.com/libusb/libusb/releases/download/v1.0.27/libusb-1.0.27.7z -o libusb.7z
+          7z x libusb.7z -olibusb
+      - name: Set LIBUSB_ROOT (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: echo "LIBUSB_ROOT=$(pwd)/libusb" >> "$GITHUB_ENV"
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install cmake libusb pkg-config ninja
+          brew install --cask gcc-arm-embedded
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt install cmake ninja-build python3 build-essential gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib libusb-1.0-0-dev
+      - name: Checkout Pico SDK
+        uses: actions/checkout@v4
+        with:
+          repository: raspberrypi/pico-sdk
+          ref: develop
+          path: pico-sdk
+          submodules: ${{ !(!matrix.mbedtls) }}
+
+      - name: Build and Install
+        run: |
+          cmake -S . -B build -G "${{ matrix.generator }}" -D PICO_SDK_PATH="${{ github.workspace }}/pico-sdk" ${{ !matrix.libusb && '-D PICOTOOL_NO_LIBUSB=1' || '' }} ${{ matrix.compile && '-D USE_PRECOMPILED=false' || '' }}
+          cmake --build build
+          ${{ runner.os != 'Windows' && 'sudo' || '' }} cmake --install build
+      - name: Add to path (Windows)
+        if: runner.os == 'Windows'
+        run: echo "C:\Program Files (x86)\picotool\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Test
+        run: |
+          picotool help
+          curl -L https://datasheets.raspberrypi.com/soft/blink.uf2 -o blink.uf2
+          curl -L https://datasheets.raspberrypi.com/soft/hello_world.uf2 -o hello_world.uf2
+          curl -L https://datasheets.raspberrypi.com/soft/flash_nuke.uf2 -o flash_nuke.uf2
+          picotool info -a blink.uf2
+          picotool info -a hello_world.uf2
+          picotool info -a flash_nuke.uf2

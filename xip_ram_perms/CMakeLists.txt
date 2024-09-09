@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.12)
 
 if (NOT USE_PRECOMPILED)
     set(PICO_PLATFORM rp2350-arm-s)
+    
+    set(PICO_NO_PICOTOOL 1)
 
     # Pull in SDK (must be before project)
     include(${PICO_SDK_PATH}/external/pico_sdk_import.cmake)
