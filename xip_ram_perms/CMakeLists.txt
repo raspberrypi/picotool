@@ -5,6 +5,14 @@ if (NOT USE_PRECOMPILED)
     
     set(PICO_NO_PICOTOOL 1)
 
+    # If the user set these environment variables to influence the picotool
+    # build, unset them here so that they do not influence the pico-sdk
+    # build. This is especially required for flags that are not supported
+    # by arm-none-eabi compilers.
+    unset(ENV{CFLAGS})
+    unset(ENV{CXXFLAGS})
+    unset(ENV{LDFLAGS})
+
     # Pull in SDK (must be before project)
     include(${PICO_SDK_PATH}/external/pico_sdk_import.cmake)
 
