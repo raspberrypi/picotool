@@ -70,6 +70,7 @@ if (NOT PICOTOOL_NO_LIBUSB)
                 "-DCMAKE_MAKE_PROGRAM:FILEPATH=${CMAKE_MAKE_PROGRAM}"
                 "-DPICO_SDK_PATH:FILEPATH=${PICO_SDK_PATH}"
                 "-DUSE_PRECOMPILED:BOOL=${USE_PRECOMPILED}"
+                "-DPICO_DEBUG_INFO_IN_RELEASE=OFF"
             BUILD_ALWAYS 1 # todo remove this
             INSTALL_COMMAND ""
             )
@@ -93,6 +94,7 @@ if (NOT PICOTOOL_NO_LIBUSB)
                 "-DCMAKE_MAKE_PROGRAM:FILEPATH=${CMAKE_MAKE_PROGRAM}"
                 "-DPICO_SDK_PATH:FILEPATH=${PICO_SDK_PATH}"
                 "-DUSE_PRECOMPILED:BOOL=${USE_PRECOMPILED}"
+                "-DPICO_DEBUG_INFO_IN_RELEASE=OFF"
             BUILD_ALWAYS 1 # todo remove this
             INSTALL_COMMAND ""
             )
