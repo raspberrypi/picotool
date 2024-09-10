@@ -9,10 +9,10 @@ cc_library(
             "library/*.h",
         ],
     ),
+    includes = ["include"],
     linkopts = select({
         "@rules_cc//cc/compiler:msvc-cl": ["-DEFAULTLIB:AdvAPI32.Lib"],
         "//conditions:default": [],
     }),
-    includes = ["include"],
     deps = ["@picotool//lib:mbedtls_config"],
 )

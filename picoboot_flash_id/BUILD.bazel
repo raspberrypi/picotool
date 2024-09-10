@@ -1,0 +1,8 @@
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "picoboot_flash_id_prebuilt",
+    srcs = ["flash_id.bin"],
+)
+
+# TODO: Make it possible to build flash_id.bin from source.

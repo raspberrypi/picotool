@@ -9,6 +9,7 @@ cc_library(
     hdrs = [
         "picoboot_connection.h",
         "picoboot_connection_cxx.h",
+        "//:flash_id_bin.h",
     ],
     defines = ["HAS_LIBUSB=1"],  # Bazel build always has libusb.
     includes = ["."],
@@ -16,6 +17,7 @@ cc_library(
         "//elf",
         "@libusb",
         "@pico-sdk//src/common/boot_picoboot_headers",
+        "@pico-sdk//src/rp2_common/boot_bootrom_headers",
         "@pico-sdk//src/rp2_common/pico_bootrom:pico_bootrom_headers",
     ],
 )
