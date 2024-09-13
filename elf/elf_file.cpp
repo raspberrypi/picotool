@@ -210,14 +210,14 @@ void elf_file::flatten(void) {
 
     elf_bytes.resize(std::max(eh.ph_offset + sizeof(elf32_ph_entry) * eh.ph_num, elf_bytes.size()));
     auto ph_entries_out = ph_entries;
-    for (auto ph : ph_entries_out) {
+    for (auto &ph : ph_entries_out) {
         ph_le(ph);  // swap to LE for writing
     }
     memcpy(&elf_bytes[eh.ph_offset], &ph_entries_out[0], sizeof(elf32_ph_entry) * eh.ph_num);
 
     elf_bytes.resize(std::max(eh.sh_offset + sizeof(elf32_sh_entry) * eh.sh_num, elf_bytes.size()));
     auto sh_entries_out = sh_entries;
-    for (auto sh : sh_entries_out) {
+    for (auto &sh : sh_entries_out) {
         sh_le(sh);  // swap to LE for writing
     }
     memcpy(&elf_bytes[eh.sh_offset], &sh_entries_out[0], sizeof(elf32_sh_entry) * eh.sh_num);
@@ -245,7 +245,7 @@ void elf_file::read_sh(void) {
     if (eh.sh_num) {
         sh_entries.resize(eh.sh_num);
         read_bytes(eh.sh_offset, sizeof(elf32_sh_entry) * eh.sh_num, &sh_entries[0]);
-        for (auto sh : sh_entries) {
+        for (auto &sh : sh_entries) {
             sh_he(sh);  // swap to Host for processing
         }
     }
@@ -356,7 +356,7 @@ void elf_file::read_ph(void) {
     if (eh.ph_num) {
         ph_entries.resize(eh.ph_num);
         read_bytes(eh.ph_offset, sizeof(elf32_ph_entry) * eh.ph_num, &ph_entries[0]);
-        for (auto ph : ph_entries) {
+        for (auto &ph : ph_entries) {
             ph_he(ph);  // swap to Host for processing
         }
     }

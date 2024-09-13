@@ -125,6 +125,31 @@ static bool is_address_mapped(const std::map<uint32_t, std::vector<page_fragment
     return true;
 }
 
+void uf2_he(uf2_block &block) {
+    // Swap to host endianness
+    block.magic_start0 = le32toh(block.magic_start0);
+    block.magic_start1 = le32toh(block.magic_start1);
+    block.flags        = le32toh(block.flags);
+    block.target_addr  = le32toh(block.target_addr);
+    block.payload_size = le32toh(block.payload_size);
+    block.block_no     = le32toh(block.block_no);
+    block.num_blocks   = le32toh(block.num_blocks);
+    block.file_size    = le32toh(block.file_size);
+    block.magic_end    = le32toh(block.magic_end);
+}
+void uf2_le(uf2_block &block) {
+    // Swap to little endianness
+    block.magic_start0 = htole32(block.magic_start0);
+    block.magic_start1 = htole32(block.magic_start1);
+    block.flags        = htole32(block.flags);
+    block.target_addr  = htole32(block.target_addr);
+    block.payload_size = htole32(block.payload_size);
+    block.block_no     = htole32(block.block_no);
+    block.num_blocks   = htole32(block.num_blocks);
+    block.file_size    = htole32(block.file_size);
+    block.magic_end    = htole32(block.magic_end);
+}
+
 uf2_block gen_abs_block(uint32_t abs_block_loc) {
     uf2_block block;
     block.magic_start0 = UF2_MAGIC_START0;
@@ -160,22 +185,23 @@ int pages2uf2(std::map<uint32_t, std::vector<page_fragment>>& pages, std::shared
         address_ranges flash_range = rp2350_address_ranges_flash;
         if (is_address_initialized(flash_range, base_addr)) {
             uf2_block block = gen_abs_block(abs_block_loc);
+            uf2_le(block);
             out->write((char*)&block, sizeof(uf2_block));
             if (out->fail()) {
                 fail_write_error();
             }
         }
     }
-    uf2_block block;
     unsigned int page_num = 0;
-    block.magic_start0 = UF2_MAGIC_START0;
-    block.magic_start1 = UF2_MAGIC_START1;
-    block.flags = UF2_FLAG_FAMILY_ID_PRESENT;
-    block.payload_size = UF2_PAGE_SIZE;
-    block.num_blocks = (uint32_t)pages.size();
-    block.file_size = family_id;
-    block.magic_end = UF2_MAGIC_END;
     for(auto& page_entry : pages) {
+        uf2_block block;
+        block.magic_start0 = UF2_MAGIC_START0;
+        block.magic_start1 = UF2_MAGIC_START1;
+        block.flags = UF2_FLAG_FAMILY_ID_PRESENT;
+        block.payload_size = UF2_PAGE_SIZE;
+        block.num_blocks = (uint32_t)pages.size();
+        block.file_size = family_id;
+        block.magic_end = UF2_MAGIC_END;
         block.target_addr = page_entry.first;
         block.block_no = page_num++;
         if (verbose) {
@@ -185,6 +211,7 @@ int pages2uf2(std::map<uint32_t, std::vector<page_fragment>>& pages, std::shared
         memset(block.data, 0, sizeof(block.data));
         int rc = realize_page(in, page_entry.second, block.data, sizeof(block.data));
         if (rc) return rc;
+        uf2_le(block);
         out->write((char*)&block, sizeof(uf2_block));
         if (out->fail()) {
             fail_write_error();

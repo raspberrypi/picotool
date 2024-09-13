@@ -2130,6 +2130,7 @@ private:
 
 static void read_and_check_elf32_header(std::shared_ptr<std::iostream>in, elf32_header& eh_out) {
     in->read((char*)&eh_out, sizeof(eh_out));
+    eh_he(eh_out);
     if (in->fail()) {
         fail(ERROR_FORMAT, "'" + settings.filenames[0] +"' is not an ELF file");
     }
@@ -2622,6 +2623,9 @@ void build_rmap_elf(std::shared_ptr<std::iostream>file, range_map<size_t>& rmap)
         if (file->fail()) {
             fail_read_error();
         }
+        for (auto &ph : entries) {
+            ph_he(ph);  // swap to Host for processing
+        }
         for (unsigned int i = 0; i < eh.ph_num; i++) {
              elf32_ph_entry &entry = entries[i];
              if (entry.type == PT_LOAD && entry.memsz) {
@@ -2645,6 +2649,7 @@ uint32_t build_rmap_uf2(std::shared_ptr<std::iostream>file, range_map<size_t>& r
     uint32_t next_family_id = 0;
     do {
         file->read((char*)&block, sizeof(uf2_block));
+        uf2_he(block);
         if (file->fail()) {
             if (file->eof()) { file->clear(); break; }
             fail(ERROR_READ_FAILED, "unexpected end of input file");
@@ -3619,6 +3624,7 @@ uint32_t get_family_id(uint8_t file_idx) {
         auto file = get_file_idx(ios::in|ios::binary, file_idx);
         uf2_block block;
         file->read((char*)&block, sizeof(block));
+        uf2_he(block);
         #if SUPPORT_A2
         // ignore the absolute block
         if (check_abs_block(block)) {
@@ -4017,6 +4023,7 @@ bool save_command::execute(device_map &devices) {
                 assert(size <= PAGE_SIZE);
                 memcpy(block.data, buffer, size);
                 if (size < PAGE_SIZE) memset(block.data + size, 0, PAGE_SIZE);
+                uf2_le(block);
                 if (1 != fwrite(&block, sizeof(block), 1, out)) {
                     fail_write_error();
                 }

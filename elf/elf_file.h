@@ -69,4 +69,7 @@ private:
 };
 int rp_check_elf_header(const elf32_header &eh);
 int rp_determine_binary_type(const elf32_header &eh, const std::vector<elf32_ph_entry>& entries, address_ranges flash_range, address_ranges ram_range, bool *ram_style);
+
+void eh_he(elf32_header &eh);
+void ph_he(elf32_ph_entry &ph);
 #endif

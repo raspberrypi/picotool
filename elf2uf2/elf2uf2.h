@@ -19,6 +19,9 @@
 #define LOG2_PAGE_SIZE 8u
 #define UF2_PAGE_SIZE (1u << LOG2_PAGE_SIZE)
 
+void uf2_he(uf2_block &block);
+void uf2_le(uf2_block &block);
+
 
 bool check_abs_block(uf2_block block);
 int bin2uf2(std::shared_ptr<std::iostream> in, std::shared_ptr<std::iostream> out, uint32_t address, uint32_t family_id, uint32_t abs_block_loc=0);
