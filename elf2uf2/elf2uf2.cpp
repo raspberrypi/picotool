@@ -17,6 +17,8 @@
 #include "elf2uf2.h"
 #include "errors.h"
 
+#include "portable_endian.h"
+
 #define FLASH_SECTOR_ERASE_SIZE 4096u
 
 static bool verbose;
