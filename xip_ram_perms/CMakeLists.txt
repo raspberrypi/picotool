@@ -41,4 +41,5 @@ else()
     # Use manually specified variables
     set(NULL ${CMAKE_MAKE_PROGRAM})
     set(NULL ${PICO_SDK_PATH})
+    set(NULL ${PICO_DEBUG_INFO_IN_RELEASE})
 endif()
