@@ -7646,8 +7646,11 @@ int main(int argc, char **argv) {
                                 libusb_get_device_descriptor(to_reboot, &desc);
                                 char ser_str[128];
                                 libusb_get_string_descriptor_ascii(to_reboot_handle, desc.iSerialNumber, (unsigned char*)ser_str, sizeof(ser_str));
-                                settings.ser = ser_str;
-                                fos << "Tracking device serial number " << ser_str << " for reboot\n";
+                                if (strcmp(ser_str, "EEEEEEEEEEEEEEEE") != 0) {
+                                    // don't store EEs serial number, as that is an RP2040 running a no_flash binary
+                                    settings.ser = ser_str;
+                                    fos << "Tracking device serial number " << ser_str << " for reboot\n";
+                                }
                             }
 
                             reboot_device(to_reboot, to_reboot_handle, true, 1);
