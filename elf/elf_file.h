@@ -55,6 +55,7 @@ private:
     void read_ph(void);
     void read_sh(void);
     void read_sh_data(void);
+    void read_ph_data(void);
     void read_bytes(unsigned offset, unsigned length, void *dest);
     uint32_t append_section_name(const std::string &sh_name_str);
     void flatten(void);
@@ -65,6 +66,7 @@ private:
     std::vector<elf32_ph_entry> ph_entries;
     std::vector<elf32_sh_entry> sh_entries;
     std::vector<std::vector<uint8_t>> sh_data;
+    std::vector<std::vector<uint8_t>> ph_data;
     bool verbose;
 };
 int rp_check_elf_header(const elf32_header &eh);
