@@ -5281,14 +5281,21 @@ bool otp_get_command::execute(device_map &devices) {
         uint32_t corrected_val = 0;
         if (m.reg_row / OTP_PAGE_ROWS != last_page) {
             // todo pre-check page lock
-            // todo this is a bit inefficient; we should probably read a page at a time
-            //    struct picoboot_otp_cmd otp_cmd = {0};
-            last_page = m.reg_row / OTP_PAGE_ROWS;
             struct picoboot_otp_cmd otp_cmd;
-            otp_cmd.wRow = last_page * OTP_PAGE_ROWS;
-            otp_cmd.wRowCount = OTP_PAGE_ROWS;
-            otp_cmd.bEcc = 0;
-            con.otp_read(&otp_cmd, (uint8_t *)raw_buffer, sizeof(raw_buffer));
+            if (m.reg_row / OTP_PAGE_ROWS >= 62) {
+                // Read individual rows for lock words
+                otp_cmd.wRow = m.reg_row;
+                otp_cmd.wRowCount = 1;
+                otp_cmd.bEcc = 0;
+                con.otp_read(&otp_cmd, (uint8_t *)&(raw_buffer[m.reg_row % OTP_PAGE_ROWS]), sizeof(raw_buffer[0]));
+            } else {
+                // Otherwise read a page at a time
+                last_page = m.reg_row / OTP_PAGE_ROWS;
+                otp_cmd.wRow = last_page * OTP_PAGE_ROWS;
+                otp_cmd.wRowCount = OTP_PAGE_ROWS;
+                otp_cmd.bEcc = 0;
+                con.otp_read(&otp_cmd, (uint8_t *)raw_buffer, sizeof(raw_buffer));
+            }
         }
         if (m.reg_row != last_reg_row) {
             last_reg_row = m.reg_row;
@@ -5432,10 +5439,10 @@ bool otp_dump_command::execute(device_map &devices) {
     otp_cmd.wRow = 0;
     otp_cmd.wRowCount = OTP_ROW_COUNT;
     otp_cmd.bEcc = settings.otp.ecc && !settings.otp.raw;
-    std::unique_ptr<uint32_t[]> unique_raw_buffer(new uint32_t[otp_cmd.wRowCount / (otp_cmd.bEcc ? 2 : 1)]());
-    uint32_t* raw_buffer = unique_raw_buffer.get();
+    vector<uint8_t> raw_buffer;
+    raw_buffer.resize(otp_cmd.wRowCount * (otp_cmd.bEcc ? 2 : 4));
     picoboot_memory_access raw_access(con);
-    con.otp_read(&otp_cmd, (uint8_t *)raw_buffer, sizeof(raw_buffer));
+    con.otp_read(&otp_cmd, raw_buffer.data(), raw_buffer.size());
     fos.first_column(0);
     char buf[256];
     for(int i=0;i<OTP_ROW_COUNT;i+=8) {
@@ -5443,9 +5450,9 @@ bool otp_dump_command::execute(device_map &devices) {
         fos << buf;
         for (int j = i; j < i + 8; j++) {
             if (otp_cmd.bEcc) {
-                snprintf(buf, sizeof(buf), "%04x, ", ((uint16_t *) raw_buffer)[j]);
+                snprintf(buf, sizeof(buf), "%04x, ", ((uint16_t *) raw_buffer.data())[j]);
             } else {
-                snprintf(buf, sizeof(buf), "%08x, ", ((uint16_t *) raw_buffer)[j]);
+                snprintf(buf, sizeof(buf), "%08x, ", ((uint32_t *) raw_buffer.data())[j]);
             }
             fos << buf;
         }
