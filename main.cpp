@@ -592,7 +592,7 @@ struct info_command : public cmd {
             ).min(0).doc_non_optional(true) % "Information to display" +
             (
             #if HAS_LIBUSB
-                device_selection % "To target one or more connected RP2040 device(s) in BOOTSEL mode (the default)" |
+                device_selection % "To target one or more connected RP2xxx device(s) in BOOTSEL mode (the default)" |
             #endif
                 file_selection % "To target a file"
             ).major_group("TARGET SELECTION").min(0).doc_non_optional(true)
@@ -600,7 +600,7 @@ struct info_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Display information from the target device(s) or file.\nWithout any arguments, this will display basic information for all connected RP2040 devices in BOOTSEL mode";
+        return "Display information from the target device(s) or file.\nWithout any arguments, this will display basic information for all connected RP2xxx devices in BOOTSEL mode";
     }
 };
 
@@ -623,7 +623,7 @@ struct config_command : public cmd {
             (option('g', "--group") & value("group").set(settings.config.group)) % "Filter by feature group" + 
             (
             #if HAS_LIBUSB
-                device_selection % "To target one or more connected RP2040 device(s) in BOOTSEL mode (the default)" |
+                device_selection % "To target one or more connected RP2xxx device(s) in BOOTSEL mode (the default)" |
             #endif
                 file_selection % "To target a file"
             ).major_group("TARGET SELECTION").min(0).doc_non_optional(true)
@@ -1396,9 +1396,9 @@ int parse(const int argc, char **argv) {
             section_header(tool_name);
             fos.first_column(tab);
         #if HAS_LIBUSB
-            fos << "Tool for interacting with RP2040/RP2350 device(s) in BOOTSEL mode, or with an RP2040/RP2350 binary" << "\n";
+            fos << "Tool for interacting with RP2xxx device(s) in BOOTSEL mode, or with an RP2xxx binary" << "\n";
         #else
-            fos << "Tool for interacting with an RP2040/RP2350 binary" << "\n";
+            fos << "Tool for interacting with an RP2xxx binary" << "\n";
         #endif
         }
         vector<string> synopsis;
@@ -1779,7 +1779,7 @@ uint32_t bootrom_func_lookup(memory_access& access, uint16_t tag) {
 
 uint32_t bootrom_table_lookup_rp2350(memory_access& access, uint16_t tag, uint16_t flags) {
     model_t model = get_model(access);
-    // we are only used on RP2040
+    // we are only used on RP2350
     if (model != rp2350) {
         fail(ERROR_INCOMPATIBLE, "RP2350 BOOT ROM not found");
     }
@@ -3518,7 +3518,7 @@ void config_guts(memory_access &raw_access) {
 
 string missing_device_string(bool wasRetry, bool requires_rp2350 = false) {
     char b[256];
-    const char* device_name = requires_rp2350 ? "RP2350" : "RP2040/RP2350";
+    const char* device_name = requires_rp2350 ? "RP2350" : "RP2xxx";
     if (wasRetry) {
         strcpy(b, "Despite the reboot attempt, no ");
     } else {
@@ -3711,7 +3711,7 @@ bool config_command::execute(device_map &devices) {
     int size = devices[dr_vidpid_bootrom_ok].size();
     if (size) {
         if (size > 1) {
-            fos << "Multiple RP2040 devices in BOOTSEL mode found:\n";
+            fos << "Multiple RP2xxx devices in BOOTSEL mode found:\n";
         }
         for (auto handles : devices[dr_vidpid_bootrom_ok]) {
             fos.first_column(0); fos.hanging_indent(0);
@@ -3791,7 +3791,7 @@ bool info_command::execute(device_map &devices) {
     int size = devices[dr_vidpid_bootrom_ok].size();
     if (size) {
         if (size > 1) {
-            fos << "Multiple RP2040 devices in BOOTSEL mode found:\n";
+            fos << "Multiple RP2xxx devices in BOOTSEL mode found:\n";
         }
         for (auto handles : devices[dr_vidpid_bootrom_ok]) {
             fos.first_column(0); fos.hanging_indent(0);
@@ -7581,27 +7581,27 @@ int main(int argc, char **argv) {
                             };
     #if defined(__linux__) || defined(__APPLE__)
                             printer(dr_vidpid_bootrom_cant_connect,
-                                    " appears to be a RP2040 device in BOOTSEL mode, but picotool was unable to connect. Maybe try 'sudo' or check your permissions.");
+                                    " appears to be a RP2xxx device in BOOTSEL mode, but picotool was unable to connect. Maybe try 'sudo' or check your permissions.");
     #else
                             printer(dr_vidpid_bootrom_cant_connect,
-                                    " appears to be a RP2040 device in BOOTSEL mode, but picotool was unable to connect. You may need to install a driver via Zadig. See \"Getting started with Raspberry Pi Pico\" for more information");
+                                    " appears to be a RP2xxx device in BOOTSEL mode, but picotool was unable to connect. You may need to install a driver via Zadig. See \"Getting started with Raspberry Pi Pico\" for more information");
     #endif
                             printer(dr_vidpid_picoprobe,
-                                    " appears to be a RP2040 PicoProbe device not in BOOTSEL mode.");
+                                    " appears to be a RP2xxx PicoProbe device not in BOOTSEL mode.");
                             printer(dr_vidpid_micropython,
-                                    " appears to be a RP2040 MicroPython device not in BOOTSEL mode.");
+                                    " appears to be a RP2xxx MicroPython device not in BOOTSEL mode.");
                             if (selected_cmd->force_requires_pre_reboot()) {
     #if defined(_WIN32)
                                 printer(dr_vidpid_stdio_usb,
-                                        " appears to be a RP2040 device with a USB serial connection, not in BOOTSEL mode. You can force reboot into BOOTSEL mode via 'picotool reboot -f -u' first.");
+                                        " appears to be a RP2xxx device with a USB serial connection, not in BOOTSEL mode. You can force reboot into BOOTSEL mode via 'picotool reboot -f -u' first.");
     #else
                                 printer(dr_vidpid_stdio_usb,
-                                        " appears to be a RP2040 device with a USB serial connection, so consider -f (or -F) to force reboot in order to run the command.");
+                                        " appears to be a RP2xxx device with a USB serial connection, so consider -f (or -F) to force reboot in order to run the command.");
     #endif
                             } else {
                                 // special case message for what is actually just reboot (the only command that doesn't require reboot first)
                                 printer(dr_vidpid_stdio_usb,
-                                        " appears to be a RP2040 device with a USB serial connection, so consider -f to force the reboot.");
+                                        " appears to be a RP2xxx device with a USB serial connection, so consider -f to force the reboot.");
                             }
                             rc = ERROR_NO_DEVICE;
                         } else {
@@ -7611,7 +7611,7 @@ int main(int argc, char **argv) {
                     } else if (supported == cmd::device_support::one) {
                         if (devices[dr_vidpid_bootrom_ok].size() > 1 ||
                             (devices[dr_vidpid_bootrom_ok].empty() && devices[dr_vidpid_stdio_usb].size() > 1)) {
-                            fail(ERROR_NOT_POSSIBLE, "Command requires a single RP2040 device to be targeted.");
+                            fail(ERROR_NOT_POSSIBLE, "Command requires a single RP2xxx device to be targeted.");
                         }
                         if (!devices[dr_vidpid_bootrom_ok].empty()) {
                             settings.force = false; // we have a device, so we're not forcing
@@ -7630,7 +7630,7 @@ int main(int argc, char **argv) {
                 if (settings.force && ctx) { // actually ctx should never be null as we are targeting device if force is set, but still
                     if (devices[dr_vidpid_stdio_usb].size() != 1 && !tries) {
                         fail(ERROR_NOT_POSSIBLE,
-                             "Forced command requires a single rebootable RP2040 device to be targeted.");
+                             "Forced command requires a single rebootable RP2xxx device to be targeted.");
                     }
                     if (selected_cmd->force_requires_pre_reboot()) {
                         if (!tries) {
@@ -7707,11 +7707,11 @@ int main(int argc, char **argv) {
         rc = e.code();
     } catch (picoboot::command_failure& e) {
         // todo rp2350/rp2040
-        std::cout << "ERROR: The RP2040 device returned an error: " << e.what() << "\n";
+        std::cout << "ERROR: The RP2xxx device returned an error: " << e.what() << "\n";
         rc = ERROR_UNKNOWN;
     } catch (picoboot::connection_error&) {
         // todo rp2350/rp2040
-        std::cout << "ERROR: Communication with RP2040 device failed\n";
+        std::cout << "ERROR: Communication with RP2xxx device failed\n";
         rc = ERROR_CONNECTION;
     } catch (cancelled_exception&) {
         rc = ERROR_CANCELLED;
