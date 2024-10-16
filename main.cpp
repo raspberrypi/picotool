@@ -151,8 +151,16 @@ std::array<std::array<string, 48>, 12> pin_functions_rp2350{{
 std::map<uint32_t, otp_reg> otp_regs;
 
 #if HAS_LIBUSB
-auto bus_device_string = [](struct libusb_device *device) {
-    return string("Device at bus ") + std::to_string(libusb_get_bus_number(device)) + ", address " + std::to_string(libusb_get_device_address(device));
+auto bus_device_string = [](struct libusb_device *device, model_t model) {
+    string bus_device;
+    if (model == rp2040) {
+        bus_device = string("RP2040 device at bus ");
+    } else if (model == rp2350) {
+        bus_device = string("RP2350 device at bus ");
+    } else {
+        bus_device = string("Device at bus ");
+    }
+    return bus_device + std::to_string(libusb_get_bus_number(device)) + ", address " + std::to_string(libusb_get_device_address(device));
 };
 #endif
 
@@ -488,6 +496,7 @@ struct _settings {
 };
 _settings settings;
 std::shared_ptr<cmd> selected_cmd;
+model_t selected_model = unknown;
 
 auto device_selection =
     (
@@ -592,7 +601,7 @@ struct info_command : public cmd {
             ).min(0).doc_non_optional(true) % "Information to display" +
             (
             #if HAS_LIBUSB
-                device_selection % "To target one or more connected RP2xxx device(s) in BOOTSEL mode (the default)" |
+                device_selection % "To target one or more connected RP-series device(s) in BOOTSEL mode (the default)" |
             #endif
                 file_selection % "To target a file"
             ).major_group("TARGET SELECTION").min(0).doc_non_optional(true)
@@ -600,7 +609,7 @@ struct info_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Display information from the target device(s) or file.\nWithout any arguments, this will display basic information for all connected RP2xxx devices in BOOTSEL mode";
+        return "Display information from the target device(s) or file.\nWithout any arguments, this will display basic information for all connected RP-series devices in BOOTSEL mode";
     }
 };
 
@@ -623,7 +632,7 @@ struct config_command : public cmd {
             (option('g', "--group") & value("group").set(settings.config.group)) % "Filter by feature group" + 
             (
             #if HAS_LIBUSB
-                device_selection % "To target one or more connected RP2xxx device(s) in BOOTSEL mode (the default)" |
+                device_selection % "To target one or more connected RP-series device(s) in BOOTSEL mode (the default)" |
             #endif
                 file_selection % "To target a file"
             ).major_group("TARGET SELECTION").min(0).doc_non_optional(true)
@@ -1396,9 +1405,9 @@ int parse(const int argc, char **argv) {
             section_header(tool_name);
             fos.first_column(tab);
         #if HAS_LIBUSB
-            fos << "Tool for interacting with RP2xxx device(s) in BOOTSEL mode, or with an RP2xxx binary" << "\n";
+            fos << "Tool for interacting with RP-series device(s) in BOOTSEL mode, or with an RP-series binary" << "\n";
         #else
-            fos << "Tool for interacting with an RP2xxx binary" << "\n";
+            fos << "Tool for interacting with an RP-series binary" << "\n";
         #endif
         }
         vector<string> synopsis;
@@ -3518,7 +3527,7 @@ void config_guts(memory_access &raw_access) {
 
 string missing_device_string(bool wasRetry, bool requires_rp2350 = false) {
     char b[256];
-    const char* device_name = requires_rp2350 ? "RP2350" : "RP2xxx";
+    const char* device_name = requires_rp2350 ? "RP2350" : "RP-series";
     if (wasRetry) {
         strcpy(b, "Despite the reboot attempt, no ");
     } else {
@@ -3711,12 +3720,13 @@ bool config_command::execute(device_map &devices) {
     int size = devices[dr_vidpid_bootrom_ok].size();
     if (size) {
         if (size > 1) {
-            fos << "Multiple RP2xxx devices in BOOTSEL mode found:\n";
+            fos << "Multiple RP-series devices in BOOTSEL mode found:\n";
         }
         for (auto handles : devices[dr_vidpid_bootrom_ok]) {
+            selected_model = std::get<0>(handles);
             fos.first_column(0); fos.hanging_indent(0);
             if (size > 1) {
-                auto s = bus_device_string(std::get<1>(handles));
+                auto s = bus_device_string(std::get<1>(handles), std::get<0>(handles));
                 string dashes;
                 std::generate_n(std::back_inserter(dashes), s.length() + 1, [] { return '-'; });
                 fos << "\n" << s << ":\n" << dashes << "\n";
@@ -3791,12 +3801,13 @@ bool info_command::execute(device_map &devices) {
     int size = devices[dr_vidpid_bootrom_ok].size();
     if (size) {
         if (size > 1) {
-            fos << "Multiple RP2xxx devices in BOOTSEL mode found:\n";
+            fos << "Multiple RP-series devices in BOOTSEL mode found:\n";
         }
         for (auto handles : devices[dr_vidpid_bootrom_ok]) {
+            selected_model = std::get<0>(handles);
             fos.first_column(0); fos.hanging_indent(0);
             if (size > 1) {
-                auto s = bus_device_string(std::get<1>(handles));
+                auto s = bus_device_string(std::get<1>(handles), std::get<0>(handles));
                 string dashes;
                 std::generate_n(std::back_inserter(dashes), s.length() + 1, [] { return '-'; });
                 fos << "\n" << s << ":\n" << dashes << "\n";
@@ -3855,6 +3866,7 @@ bool info_command::execute(device_map &devices) {
 static picoboot::connection get_single_bootsel_device_connection(device_map& devices, bool exclusive = true) {
     assert(devices[dr_vidpid_bootrom_ok].size() == 1);
     auto device = devices[dr_vidpid_bootrom_ok][0];
+    selected_model = std::get<0>(device);
     libusb_device_handle *rc = std::get<2>(device);
     if (!rc) fail(ERROR_USB, "Unable to connect to device");
     return picoboot::connection(rc, std::get<0>(device), exclusive);
@@ -7369,6 +7381,7 @@ bool reboot_command::execute(device_map &devices) {
         if (!settings.switch_cpu.empty()) {
             fail(ERROR_ARGS, "--cpu may not be specified for forced reboot");
         }
+        selected_model = std::get<0>(devices[dr_vidpid_stdio_usb][0]);
         reboot_device(std::get<1>(devices[dr_vidpid_stdio_usb][0]), std::get<2>(devices[dr_vidpid_stdio_usb][0]), settings.reboot_usb);
         if (!quiet) {
             if (settings.reboot_usb) {
@@ -7576,32 +7589,32 @@ int main(int argc, char **argv) {
                                     had_note = true;
                                 }
                                 for (auto d : devices[r]) {
-                                    fos << bus_device_string(std::get<1>(d)) << description << "\n";
+                                    fos << bus_device_string(std::get<1>(d), std::get<0>(d)) << description << "\n";
                                 }
                             };
     #if defined(__linux__) || defined(__APPLE__)
                             printer(dr_vidpid_bootrom_cant_connect,
-                                    " appears to be a RP2xxx device in BOOTSEL mode, but picotool was unable to connect. Maybe try 'sudo' or check your permissions.");
+                                    " appears to be in BOOTSEL mode, but picotool was unable to connect. Maybe try 'sudo' or check your permissions.");
     #else
                             printer(dr_vidpid_bootrom_cant_connect,
-                                    " appears to be a RP2xxx device in BOOTSEL mode, but picotool was unable to connect. You may need to install a driver via Zadig. See \"Getting started with Raspberry Pi Pico\" for more information");
+                                    " appears to be in BOOTSEL mode, but picotool was unable to connect. You may need to install a driver via Zadig. See \"Getting started with Raspberry Pi Pico\" for more information");
     #endif
                             printer(dr_vidpid_picoprobe,
-                                    " appears to be a RP2xxx PicoProbe device not in BOOTSEL mode.");
+                                    " appears to be an RP-series PicoProbe device not in BOOTSEL mode.");
                             printer(dr_vidpid_micropython,
-                                    " appears to be a RP2xxx MicroPython device not in BOOTSEL mode.");
+                                    " appears to be an RP-series MicroPython device not in BOOTSEL mode.");
                             if (selected_cmd->force_requires_pre_reboot()) {
     #if defined(_WIN32)
                                 printer(dr_vidpid_stdio_usb,
-                                        " appears to be a RP2xxx device with a USB serial connection, not in BOOTSEL mode. You can force reboot into BOOTSEL mode via 'picotool reboot -f -u' first.");
+                                        " appears to have a USB serial connection, not in BOOTSEL mode. You can force reboot into BOOTSEL mode via 'picotool reboot -f -u' first.");
     #else
                                 printer(dr_vidpid_stdio_usb,
-                                        " appears to be a RP2xxx device with a USB serial connection, so consider -f (or -F) to force reboot in order to run the command.");
+                                        " appears to have a USB serial connection, so consider -f (or -F) to force reboot in order to run the command.");
     #endif
                             } else {
                                 // special case message for what is actually just reboot (the only command that doesn't require reboot first)
                                 printer(dr_vidpid_stdio_usb,
-                                        " appears to be a RP2xxx device with a USB serial connection, so consider -f to force the reboot.");
+                                        " appears to have a USB serial connection, so consider -f to force the reboot.");
                             }
                             rc = ERROR_NO_DEVICE;
                         } else {
@@ -7611,7 +7624,7 @@ int main(int argc, char **argv) {
                     } else if (supported == cmd::device_support::one) {
                         if (devices[dr_vidpid_bootrom_ok].size() > 1 ||
                             (devices[dr_vidpid_bootrom_ok].empty() && devices[dr_vidpid_stdio_usb].size() > 1)) {
-                            fail(ERROR_NOT_POSSIBLE, "Command requires a single RP2xxx device to be targeted.");
+                            fail(ERROR_NOT_POSSIBLE, "Command requires a single RP-series device to be targeted.");
                         }
                         if (!devices[dr_vidpid_bootrom_ok].empty()) {
                             settings.force = false; // we have a device, so we're not forcing
@@ -7630,7 +7643,7 @@ int main(int argc, char **argv) {
                 if (settings.force && ctx) { // actually ctx should never be null as we are targeting device if force is set, but still
                     if (devices[dr_vidpid_stdio_usb].size() != 1 && !tries) {
                         fail(ERROR_NOT_POSSIBLE,
-                             "Forced command requires a single rebootable RP2xxx device to be targeted.");
+                             "Forced command requires a single rebootable RP-series device to be targeted.");
                     }
                     if (selected_cmd->force_requires_pre_reboot()) {
                         if (!tries) {
@@ -7707,11 +7720,23 @@ int main(int argc, char **argv) {
         rc = e.code();
     } catch (picoboot::command_failure& e) {
         // todo rp2350/rp2040
-        std::cout << "ERROR: The RP2xxx device returned an error: " << e.what() << "\n";
+        string device = "RP-series";
+        if (selected_model == rp2040) {
+            device = "RP2040";
+        } else if (selected_model == rp2350) {
+            device = "RP2350";
+        }
+        std::cout << "ERROR: The " << device << " device returned an error: " << e.what() << "\n";
         rc = ERROR_UNKNOWN;
     } catch (picoboot::connection_error&) {
         // todo rp2350/rp2040
-        std::cout << "ERROR: Communication with RP2xxx device failed\n";
+        string device = "RP-series";
+        if (selected_model == rp2040) {
+            device = "RP2040";
+        } else if (selected_model == rp2350) {
+            device = "RP2350";
+        }
+        std::cout << "ERROR: Communication with " << device << " device failed\n";
         rc = ERROR_CONNECTION;
     } catch (cancelled_exception&) {
         rc = ERROR_CANCELLED;
