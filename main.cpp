@@ -7595,9 +7595,13 @@ int main(int argc, char **argv) {
     #if defined(__linux__) || defined(__APPLE__)
                             printer(dr_vidpid_bootrom_cant_connect,
                                     " appears to be in BOOTSEL mode, but picotool was unable to connect. Maybe try 'sudo' or check your permissions.");
+                            printer(dr_vidpid_stdio_usb_cant_connect,
+                                    " appears to have a USB serial connection, but picotool was unable to connect. Maybe try 'sudo' or check your permissions.");
     #else
                             printer(dr_vidpid_bootrom_cant_connect,
                                     " appears to be in BOOTSEL mode, but picotool was unable to connect. You may need to install a driver via Zadig. See \"Getting started with Raspberry Pi Pico\" for more information");
+                            printer(dr_vidpid_stdio_usb_cant_connect,
+                                    " appears to have a USB serial connection, but picotool was unable to connect.");
     #endif
                             printer(dr_vidpid_picoprobe,
                                     " appears to be an RP-series PicoProbe device not in BOOTSEL mode.");
