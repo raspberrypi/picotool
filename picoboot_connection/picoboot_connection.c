@@ -87,7 +87,11 @@ enum picoboot_device_result picoboot_open_device(libusb_device *device, libusb_d
                 case PRODUCT_ID_PICOPROBE:
                     return dr_vidpid_picoprobe;
                 case PRODUCT_ID_RP2040_STDIO_USB:
+                    *model = rp2040;
+                    res = dr_vidpid_stdio_usb;
+                    break;
                 case PRODUCT_ID_STDIO_USB:
+                    *model = rp2350;
                     res = dr_vidpid_stdio_usb;
                     break;
                 case PRODUCT_ID_RP2040_USBBOOT:
