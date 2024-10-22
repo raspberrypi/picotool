@@ -47,7 +47,7 @@ otp_header_parse(
     target_compatible_with = select({
         "@rules_cc//cc/compiler:msvc-cl": ["@platforms//:incompatible"],
         "//conditions:default": [],
-    })
+    }),
 )
 
 cc_binary(
