@@ -87,7 +87,11 @@ enum picoboot_device_result picoboot_open_device(libusb_device *device, libusb_d
                 case PRODUCT_ID_PICOPROBE:
                     return dr_vidpid_picoprobe;
                 case PRODUCT_ID_RP2040_STDIO_USB:
+                    *model = rp2040;
+                    res = dr_vidpid_stdio_usb;
+                    break;
                 case PRODUCT_ID_STDIO_USB:
+                    *model = rp2350;
                     res = dr_vidpid_stdio_usb;
                     break;
                 case PRODUCT_ID_RP2040_USBBOOT:
@@ -115,15 +119,15 @@ enum picoboot_device_result picoboot_open_device(libusb_device *device, libusb_d
             if (vid == 0 || strlen(ser) != 0) {
                 // didn't check vid or ser, so treat as unknown
                 return dr_vidpid_unknown;
-            } else if (res != dr_vidpid_unknown) {
-                return res;
+            } else if (res == dr_vidpid_stdio_usb) {
+                return dr_vidpid_stdio_usb_cant_connect;
             } else {
                 return dr_vidpid_bootrom_cant_connect;
             }
         }
     }
 
-    if (res == dr_vidpid_stdio_usb) {
+    if (!ret && res == dr_vidpid_stdio_usb) {
         if (strlen(ser) != 0) {
             // Check USB serial number
             char ser_str[128];
