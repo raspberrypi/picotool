@@ -12,6 +12,7 @@ cc_library(
         "metadata.h",
     ],
     copts = select({
+        "@rules_cc//cc/compiler:msvc-cl": ["/std:c++20"],
         "@platforms//os:windows": [],
         "//conditions:default": [
             "-Wno-unused-variable",

@@ -1,5 +1,11 @@
 package(default_visibility = ["//visibility:public"])
 
+cc_library(
+    name = "pre_generated_otp_header",
+    includes = ["."],
+    hdrs = ["rp2350.json.h"],
+)
+
 cc_binary(
     name = "otp_header_parser",
     srcs = ["otp_header_parse.cpp"],
