@@ -2897,8 +2897,6 @@ std::unique_ptr<block> find_last_block(memory_access &raw_access, vector<uint8_t
 std::shared_ptr<memory_access> get_bi_access(memory_access &raw_access) {
     vector<uint8_t> bin;
     std::unique_ptr<block> best_block = find_best_block(raw_access, bin);
-
-    // std::shared_ptr<memory_access> bi_access;
     if (best_block) {
         auto load_map = best_block->get_item<load_map_item>();
         if (load_map != nullptr) {
@@ -3219,7 +3217,7 @@ void info_guts(memory_access &raw_access, void *con) {
                 if (sig_verified != none) {
                     info_pair("signature", sig_verified == passed ? "verified" : "incorrect");
                 }
-            } else if (has_binary_info && get_model(raw_access) == rp2350) {
+            } else if (!best_block && has_binary_info && get_model(raw_access) == rp2350) {
                 fos << "WARNING: Binary on RP2350 device does not contain a block loop - this binary will not boot\n";
             }
         } catch (std::invalid_argument &e) {
