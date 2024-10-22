@@ -127,7 +127,7 @@ enum picoboot_device_result picoboot_open_device(libusb_device *device, libusb_d
         }
     }
 
-    if (res == dr_vidpid_stdio_usb) {
+    if (!ret && res == dr_vidpid_stdio_usb) {
         if (strlen(ser) != 0) {
             // Check USB serial number
             char ser_str[128];
