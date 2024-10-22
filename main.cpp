@@ -2897,17 +2897,16 @@ std::unique_ptr<block> find_last_block(memory_access &raw_access, vector<uint8_t
 std::shared_ptr<memory_access> get_bi_access(memory_access &raw_access) {
     vector<uint8_t> bin;
     std::unique_ptr<block> best_block = find_best_block(raw_access, bin);
+    range_map<uint32_t> rmap;
     if (best_block) {
         auto load_map = best_block->get_item<load_map_item>();
         if (load_map != nullptr) {
             // Remap for find_binary_info
-            range_map<uint32_t> rmap;
             build_rmap_load_map(load_map, rmap);
-            return std::make_shared<remapped_memory_access>(raw_access, rmap);
         }
     }
 
-    return std::shared_ptr<memory_access>(&raw_access);
+    return std::make_shared<remapped_memory_access>(raw_access, rmap);
 }
 
 #if HAS_LIBUSB
