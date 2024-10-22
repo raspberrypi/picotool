@@ -2,6 +2,8 @@ load("//bazel:defs.bzl", "otp_header_parse", "picotool_binary_data_header")
 
 package(default_visibility = ["//visibility:public"])
 
+PICOTOOL_SDK_VERSION_STRING = module_version() if module_version() != None else "0.0.1-WORKSPACE"
+
 picotool_binary_data_header(
     name = "rp2350_rom",
     src = "bootrom.end.bin",
@@ -71,8 +73,7 @@ cc_binary(
         ],
     }),
     defines = [
-        # TODO: There's probably a nicer way to share the version with CMake.
-        'PICOTOOL_VERSION=\\"2.0.0\\"',
+        'PICOTOOL_VERSION=\\"{}\\"'.format(PICOTOOL_VERSION_STRING),
         'SYSTEM_VERSION=\\"host\\"',
         'COMPILER_INFO=\\"local\\"',
         "SUPPORT_A0=0",
