@@ -2694,6 +2694,15 @@ uint32_t build_rmap_uf2(std::shared_ptr<std::iostream>file, range_map<size_t>& r
     return next_family_id;
 }
 
+void build_rmap_load_map(std::shared_ptr<load_map_item>load_map, range_map<uint32_t>& rmap) {
+    for (unsigned int i=0; i < load_map->entries.size(); i++) {
+        auto e = load_map->entries[i];
+        if (e.storage_address != 0) {
+            rmap.insert(range(e.runtime_address, e.runtime_address + e.size), e.storage_address);
+        }
+    }
+}
+
 uint32_t find_binary_start(range_map<size_t>& rmap) {
     range flash(FLASH_START, FLASH_END_RP2350); // pick biggest (rp2350) here for now
     range sram(SRAM_START, SRAM_END_RP2350); // pick biggest (rp2350) here for now
@@ -2885,6 +2894,24 @@ std::unique_ptr<block> find_last_block(memory_access &raw_access, vector<uint8_t
     return nullptr;
 }
 
+std::shared_ptr<memory_access> get_bi_access(memory_access &raw_access) {
+    vector<uint8_t> bin;
+    std::unique_ptr<block> best_block = find_best_block(raw_access, bin);
+
+    // std::shared_ptr<memory_access> bi_access;
+    if (best_block) {
+        auto load_map = best_block->get_item<load_map_item>();
+        if (load_map != nullptr) {
+            // Remap for find_binary_info
+            range_map<uint32_t> rmap;
+            build_rmap_load_map(load_map, rmap);
+            return std::make_shared<remapped_memory_access>(raw_access, rmap);
+        }
+    }
+
+    return std::shared_ptr<memory_access>(&raw_access);
+}
+
 #if HAS_LIBUSB
 void info_guts(memory_access &raw_access, picoboot::connection *con) {
 #else
@@ -2933,9 +2960,10 @@ void info_guts(memory_access &raw_access, void *con) {
         select_group(device_info);
         binary_info_header hdr;
         try {
-            bool has_binary_info = find_binary_info(raw_access, hdr);
+            auto bi_access = get_bi_access(raw_access);
+            bool has_binary_info = find_binary_info(*bi_access, hdr);
             if (has_binary_info) {
-                auto access = remapped_memory_access(raw_access, hdr.reverse_copy_mapping);
+                auto access = remapped_memory_access(*bi_access, hdr.reverse_copy_mapping);
                 auto visitor = bi_visitor{};
                 map<string, string> output;
                 map<unsigned int, vector<string>> pins;
@@ -3419,8 +3447,9 @@ void config_guts(memory_access &raw_access) {
         }
     }
 
-    if (find_binary_info(raw_access, hdr)) {
-        auto access = remapped_memory_access(raw_access, hdr.reverse_copy_mapping);
+    auto bi_access = get_bi_access(raw_access);
+    if (find_binary_info(*bi_access, hdr)) {
+        auto access = remapped_memory_access(*bi_access, hdr.reverse_copy_mapping);
         auto visitor = bi_visitor{};
 
         map<pair<int, uint32_t>, pair<string, unsigned int>> named_feature_groups;
