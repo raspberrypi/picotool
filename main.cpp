@@ -1909,13 +1909,13 @@ struct picoboot_memory_access : public memory_access {
         }
     }
 
-    // note this does not automatically erase flash
+    // note this does not automatically erase flash unless erase is set
     void write(uint32_t address, uint8_t *buffer, unsigned int size) override {
+        vector<uint8_t> write_data; // used when erasing flash
         if (flash == get_memory_type(address, model)) {
             connection.exit_xip();
             if (erase) {
                 // Do automatically erase flash, and make it aligned
-                vector<uint8_t> write_data;
                 // we have to erase in whole pages
                 range aligned_range(address & ~(FLASH_SECTOR_ERASE_SIZE - 1),
                                     ((address + size) & ~(FLASH_SECTOR_ERASE_SIZE - 1)) + FLASH_SECTOR_ERASE_SIZE);
