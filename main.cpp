@@ -6592,7 +6592,7 @@ bool coprodis_command::execute(device_map &devices) {
     string line;
     fos << "Replacing " << proc_insts.size() << " instructions\n";
     while (getline(buffer, line)) {
-        if (line == std::get<0>(proc_insts[0])) {
+        if (!proc_insts.empty() && line == std::get<0>(proc_insts[0])) {
             fos << "\nFound instruction\n";
             fos << line;
             fos << "\n";
@@ -6605,7 +6605,6 @@ bool coprodis_command::execute(device_map &devices) {
             fos << line;
             fos << "\n";
             proc_insts.erase(proc_insts.begin());
-            if (proc_insts.size() == 0) break;
         }
         *out << line << "\n";
     }
