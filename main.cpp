@@ -6838,7 +6838,7 @@ bool otp_load_command::execute(device_map &devices) {
     uint8_t* file_buffer = unique_file_buffer.get();
     file->read((char*)file_buffer, file_size);
     try {
-        con.otp_write(&otp_cmd, (uint8_t *)file_buffer, sizeof(file_buffer));
+        con.otp_write(&otp_cmd, (uint8_t *)file_buffer, file_size);
     } catch (picoboot::command_failure &e) {
         check_otp_write_error(e, otp_cmd.bEcc);
         throw e;
