@@ -1914,13 +1914,13 @@ struct picoboot_memory_access : public memory_access {
         }
     }
 
-    // note this does not automatically erase flash
+    // note this does not automatically erase flash unless erase is set
     void write(uint32_t address, uint8_t *buffer, unsigned int size) override {
+        vector<uint8_t> write_data; // used when erasing flash
         if (flash == get_memory_type(address, model)) {
             connection.exit_xip();
             if (erase) {
                 // Do automatically erase flash, and make it aligned
-                vector<uint8_t> write_data;
                 // we have to erase in whole pages
                 range aligned_range(address & ~(FLASH_SECTOR_ERASE_SIZE - 1),
                                     ((address + size) & ~(FLASH_SECTOR_ERASE_SIZE - 1)) + FLASH_SECTOR_ERASE_SIZE);
@@ -2705,6 +2705,15 @@ uint32_t build_rmap_uf2(std::shared_ptr<std::iostream>file, range_map<size_t>& r
     return next_family_id;
 }
 
+void build_rmap_load_map(std::shared_ptr<load_map_item>load_map, range_map<uint32_t>& rmap) {
+    for (unsigned int i=0; i < load_map->entries.size(); i++) {
+        auto e = load_map->entries[i];
+        if (e.storage_address != 0) {
+            rmap.insert(range(e.runtime_address, e.runtime_address + e.size), e.storage_address);
+        }
+    }
+}
+
 uint32_t find_binary_start(range_map<size_t>& rmap) {
     range flash(FLASH_START, FLASH_END_RP2350); // pick biggest (rp2350) here for now
     range sram(SRAM_START, SRAM_END_RP2350); // pick biggest (rp2350) here for now
@@ -2896,6 +2905,21 @@ std::unique_ptr<block> find_last_block(memory_access &raw_access, vector<uint8_t
     return nullptr;
 }
 
+std::shared_ptr<memory_access> get_bi_access(memory_access &raw_access) {
+    vector<uint8_t> bin;
+    std::unique_ptr<block> best_block = find_best_block(raw_access, bin);
+    range_map<uint32_t> rmap;
+    if (best_block) {
+        auto load_map = best_block->get_item<load_map_item>();
+        if (load_map != nullptr) {
+            // Remap for find_binary_info
+            build_rmap_load_map(load_map, rmap);
+        }
+    }
+
+    return std::make_shared<remapped_memory_access>(raw_access, rmap);
+}
+
 #if HAS_LIBUSB
 void info_guts(memory_access &raw_access, picoboot::connection *con) {
 #else
@@ -2944,9 +2968,10 @@ void info_guts(memory_access &raw_access, void *con) {
         select_group(device_info);
         binary_info_header hdr;
         try {
-            bool has_binary_info = find_binary_info(raw_access, hdr);
+            auto bi_access = get_bi_access(raw_access);
+            bool has_binary_info = find_binary_info(*bi_access, hdr);
             if (has_binary_info) {
-                auto access = remapped_memory_access(raw_access, hdr.reverse_copy_mapping);
+                auto access = remapped_memory_access(*bi_access, hdr.reverse_copy_mapping);
                 auto visitor = bi_visitor{};
                 map<string, string> output;
                 map<unsigned int, vector<string>> pins;
@@ -3202,7 +3227,7 @@ void info_guts(memory_access &raw_access, void *con) {
                 if (sig_verified != none) {
                     info_pair("signature", sig_verified == passed ? "verified" : "incorrect");
                 }
-            } else if (has_binary_info && get_model(raw_access) == rp2350) {
+            } else if (!best_block && has_binary_info && get_model(raw_access) == rp2350) {
                 fos << "WARNING: Binary on RP2350 device does not contain a block loop - this binary will not boot\n";
             }
         } catch (std::invalid_argument &e) {
@@ -3430,8 +3455,9 @@ void config_guts(memory_access &raw_access) {
         }
     }
 
-    if (find_binary_info(raw_access, hdr)) {
-        auto access = remapped_memory_access(raw_access, hdr.reverse_copy_mapping);
+    auto bi_access = get_bi_access(raw_access);
+    if (find_binary_info(*bi_access, hdr)) {
+        auto access = remapped_memory_access(*bi_access, hdr.reverse_copy_mapping);
         auto visitor = bi_visitor{};
 
         map<pair<int, uint32_t>, pair<string, unsigned int>> named_feature_groups;
@@ -3487,6 +3513,7 @@ void config_guts(memory_access &raw_access) {
             for (auto n : group_names) {
                 auto ints = named_feature_group_ints[n];
                 auto strings = named_feature_group_strings[n];
+                fos.first_column(fr_col);
                 if (!n.empty()) {
                     fos << n << ":\n";
                     fos.first_column(fr_col + 1);
