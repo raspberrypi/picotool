@@ -321,22 +321,26 @@ struct family_id : public cli::value_base<family_id> {
             } else if (value == rp2350_riscv_family_name) {
                 t = RP2350_RISCV_FAMILY_ID;
             } else {
-                if (value.find("0x") == 0) value = value.substr(2);
-                size_t pos = 0;
-                long lvalue = std::numeric_limits<long>::max();
-                try {
-                    lvalue = std::stoul(value, &pos, 16);
-                    if (pos != value.length()) {
-                        return "Garbage after hex value: " + value.substr(pos);
+                if (value.find("0x") == 0) {
+                    value = value.substr(2);
+                    size_t pos = 0;
+                    long lvalue = std::numeric_limits<long>::max();
+                    try {
+                        lvalue = std::stoul(value, &pos, 16);
+                        if (pos != value.length()) {
+                            return "Garbage after hex value: " + value.substr(pos);
+                        }
+                    } catch (std::invalid_argument &) {
+                        return ovalue + " is not a valid hex value";
+                    } catch (std::out_of_range &) {
                     }
-                } catch (std::invalid_argument &) {
-                    return ovalue + " is not a valid hex value";
-                } catch (std::out_of_range &) {
+                    if (lvalue != (unsigned int) lvalue) {
+                        return value + " is not a valid 32 bit value";
+                    }
+                    t = (unsigned int) lvalue;
+                } else {
+                    return value + " is not a valid family ID";
                 }
-                if (lvalue != (unsigned int) lvalue) {
-                    return value + " is not a valid 32 bit value";
-                }
-                t = (unsigned int) lvalue;
             }
             return string("");
         });
