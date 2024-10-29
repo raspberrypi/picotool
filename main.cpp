@@ -3502,6 +3502,7 @@ void config_guts(memory_access &raw_access) {
             for (auto n : group_names) {
                 auto ints = named_feature_group_ints[n];
                 auto strings = named_feature_group_strings[n];
+                fos.first_column(fr_col);
                 if (!n.empty()) {
                     fos << n << ":\n";
                     fos.first_column(fr_col + 1);
