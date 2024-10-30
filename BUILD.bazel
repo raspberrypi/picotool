@@ -46,6 +46,10 @@ otp_header_parse(
     name = "otp_header",
     src = "@pico-sdk//src/rp2350/hardware_regs:otp_data_header",
     out = "rp2350.json.h",
+    target_compatible_with = select({
+        "@rules_cc//cc/compiler:msvc-cl": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
 )
 
 cc_binary(
@@ -56,10 +60,14 @@ cc_binary(
         "main.cpp",
         "otp.cpp",
         "otp.h",
-        "rp2350.json.h",
         "rp2350.rom.h",
         "xip_ram_perms.cpp",
-    ],
+    ] + select({
+        # MSVC can't handle long strings, so use this manually generated
+        # header instead.
+        "@rules_cc//cc/compiler:msvc-cl": [],
+        "//conditions:default": ["rp2350.json.h"],
+    }),
     copts = select({
         "@rules_cc//cc/compiler:msvc-cl": [
             "/std:c++20",
@@ -106,5 +114,10 @@ cc_binary(
         "@pico-sdk//src/rp2350/hardware_regs:otp_data",
         "@pico-sdk//src/rp2_common/pico_bootrom:pico_bootrom_headers",
         "@pico-sdk//src/rp2_common/pico_stdio_usb:reset_interface_headers",
-    ],
+    ] + select({
+        # MSVC can't handle long strings, so use this manually generated
+        # header instead.
+        "@rules_cc//cc/compiler:msvc-cl": ["//otp_header_parser:pre_generated_otp_header"],
+        "//conditions:default": [],
+    }),
 )
