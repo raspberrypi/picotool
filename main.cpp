@@ -4306,11 +4306,13 @@ bool load_guts(picoboot::connection con, iostream_memory_access &file_access) {
             }
         }
     }
-    for (auto mem_range : ranges) {
-        enum memory_type type = get_memory_type(mem_range.from, model);
-        // new scope for progress bar
-        {
-            progress_bar bar("Loading into " + memory_names[type] + ": ");
+    size_t total_bytes = 0;
+    for (auto r : ranges) { total_bytes += r.to - r.from; }
+    {
+        progress_bar bar("Loading:   ");
+        size_t loaded_bytes = 0;
+        for (auto mem_range : ranges) {
+            enum memory_type type = get_memory_type(mem_range.from, model);
             uint32_t batch_size = FLASH_SECTOR_ERASE_SIZE;
             bool ok = true;
             vector<uint8_t> file_buf;
@@ -4346,16 +4348,17 @@ bool load_guts(picoboot::connection con, iostream_memory_access &file_access) {
                     raw_access.write_vector(base, file_buf);
                     base += this_batch;
                 }
-                bar.progress(base - mem_range.from, mem_range.to - mem_range.from);
+                bar.progress(base - mem_range.from + loaded_bytes, total_bytes);
             }
+            loaded_bytes += mem_range.to - mem_range.from;
         }
     }
-    for (auto mem_range : ranges) {
-        enum memory_type type = get_memory_type(mem_range.from, model);
-        if (settings.load.verify) {
+    if (settings.load.verify) {
+        progress_bar bar("Verifying: ");
+        size_t verified_bytes = 0;
+        for (auto mem_range : ranges) {
             bool ok = true;
             {
-                progress_bar bar("Verifying " + memory_names[type] + ":    ");
                 uint32_t batch_size = FLASH_SECTOR_ERASE_SIZE;
                 vector<uint8_t> file_buf;
                 vector<uint8_t> device_buf;
@@ -4377,16 +4380,14 @@ bool load_guts(picoboot::connection con, iostream_memory_access &file_access) {
                     }
                     if (ok) {
                         pos = base + this_batch;
+                        bar.progress(pos - mem_range.from + verified_bytes, total_bytes);
                     }
-                    bar.progress(pos - mem_range.from, mem_range.to - mem_range.from);
                 }
             }
-            if (ok) {
-                std::cout << "  OK\n";
-            } else {
-                std::cout << "  FAILED\n";
+            if (!ok) {
                 fail(ERROR_VERIFICATION_FAILED, "The device contents did not match the file");
             }
+            verified_bytes += mem_range.to - mem_range.from;
         }
     }
     if (settings.load.execute) {
