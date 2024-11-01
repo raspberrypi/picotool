@@ -19,11 +19,6 @@
 // Size of a flash sector in bytes
 #define FLASH_SECTOR_ERASE_SIZE 4096u
 
-// Define the page size for UF2 (256 Bytes)
-// These definitions are already present in the header file and should not be redefined here.
-// #define LOG2_PAGE_SIZE 8u
-// #define UF2_PAGE_SIZE (1u << LOG2_PAGE_SIZE)
-
 // Global variable to control verbose mode
 static bool verbose;
 
@@ -61,11 +56,11 @@ struct page_fragment {
 };
 
 /**
- * @brief Checks if an address is within the valid ranges.
+ * @brief Checks if an address and the size is within the valid range. 
  * 
  * @param valid_ranges Valid address ranges.
  * @param addr Physical address to check.
- * @param vaddr Virtual address.
+ * @param vaddr Virtual address. Only used in verbose mode.
  * @param size Size of the area to check.
  * @param uninitialized Flag indicating if the area is uninitialized.
  * @param ar Reference to an address_range that will be set on success.
@@ -91,9 +86,9 @@ int check_address_range(const address_ranges& valid_ranges, uint32_t addr, uint3
 }
 
 /**
- * @brief Checks ELF-32 program header entries and populates the page fragments map.
+ * @brief Checks ELF32 program header entries and populates the page fragments map.
  * 
- * @param entries Vector of ELF-32 program header entries.
+ * @param entries Vector of ELF32 program header entries.
  * @param valid_ranges Valid address ranges.
  * @param pages Map of pages with their fragments.
  * @return 0 on success, error code otherwise.
@@ -189,7 +184,7 @@ static bool is_address_mapped(const std::map<uint32_t, std::vector<page_fragment
 }
 
 /**
- * @brief Generates an absolute UF2 block.
+ * @brief Generates an absolute UF2 block. The absolute block is required to work around Errata E10 in the RP2040 datasheet.
  * 
  * @param abs_block_loc Target address for the absolute block.
  * @return Generated UF2 block.
@@ -304,7 +299,6 @@ int bin2uf2(std::shared_ptr<std::iostream> in, std::shared_ptr<std::iostream> ou
     if (size <= 0) {
         fail_read_error();
     }
-    in->seekg(0, in->beg); // Reset to beginning
 
     unsigned int addr = address;
     unsigned int remaining = size;
