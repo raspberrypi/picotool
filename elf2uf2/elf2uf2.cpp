@@ -389,7 +389,7 @@ int elf2uf2(std::shared_ptr<std::iostream> in, std::shared_ptr<std::iostream> ou
 
         // Determine expected entry points
         for(auto& page_entry : pages) {
-            if (((page_entry.first >= SRAM_START) && (page_entry.first < ram_range[0].to)) && (page_entry.first < expected_ep_main_ram)) {
+            if ((page_entry.first >= SRAM_START) && (page_entry.first < ram_range[0].to) && (page_entry.first < expected_ep_main_ram)) {
                 expected_ep_main_ram = page_entry.first | thumb_bit;
             } else if (((page_entry.first >= ram_range[1].from) && (page_entry.first < ram_range[1].to)) && (page_entry.first < expected_ep_xip_sram)) { 
                 expected_ep_xip_sram = page_entry.first | thumb_bit;
