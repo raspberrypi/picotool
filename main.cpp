@@ -4607,6 +4607,29 @@ void sign_guts_elf(elf_file* elf, private_t private_key, public_t public_key) {
         new_block.items.push_back(version);
     }
 
+    // Add entry point when signing Arm images
+    std::shared_ptr<image_type_item> image_type = new_block.get_item<image_type_item>();
+    if (settings.seal.sign && image_type != nullptr && image_type->image_type() == type_exe && image_type->cpu() == cpu_arm) {
+        std::shared_ptr<entry_point_item> entry_point = new_block.get_item<entry_point_item>();
+        if (entry_point == nullptr) {
+            std::shared_ptr<vector_table_item> vtor = new_block.get_item<vector_table_item>();
+            uint32_t vtor_loc = 0x10000000;
+            if (vtor != nullptr) {
+                vtor_loc = vtor->addr;
+            }
+            auto segment = elf->segment_from_physical_address(vtor_loc);
+            auto content = elf->content(*segment);
+            auto offset = vtor_loc - segment->physical_address();
+            uint32_t ep;
+            memcpy(&ep, content.data() + offset + 4, sizeof(ep));
+            uint32_t sp;
+            memcpy(&sp, content.data() + offset, sizeof(sp));
+            DEBUG_LOG("Adding entry_point_item: ep %08x, sp %08x\n", ep, sp);
+            entry_point = std::make_shared<entry_point_item>(ep, sp);
+            new_block.items.push_back(entry_point);
+        }
+    }
+
     hash_andor_sign(
         elf, &new_block, public_key, private_key,
         settings.seal.hash, settings.seal.sign,
@@ -4641,6 +4664,27 @@ vector<uint8_t> sign_guts_bin(iostream_memory_access in, private_t private_key, 
             version = std::make_shared<version_item>(settings.seal.major_version, settings.seal.minor_version);
         }
         new_block.items.push_back(version);
+    }
+
+    // Add entry point when signing Arm images
+    std::shared_ptr<image_type_item> image_type = new_block.get_item<image_type_item>();
+    if (settings.seal.sign && image_type != nullptr && image_type->image_type() == type_exe && image_type->cpu() == cpu_arm) {
+        std::shared_ptr<entry_point_item> entry_point = new_block.get_item<entry_point_item>();
+        if (entry_point == nullptr) {
+            std::shared_ptr<vector_table_item> vtor = new_block.get_item<vector_table_item>();
+            uint32_t vtor_loc = 0x10000000;
+            if (vtor != nullptr) {
+                vtor_loc = vtor->addr;
+            }
+            auto offset = vtor_loc - bin_start;
+            uint32_t ep;
+            memcpy(&ep, bin.data() + offset + 4, sizeof(ep));
+            uint32_t sp;
+            memcpy(&sp, bin.data() + offset, sizeof(sp));
+            DEBUG_LOG("Adding entry_point_item: ep %08x, sp %08x\n", ep, sp);
+            entry_point = std::make_shared<entry_point_item>(ep, sp);
+            new_block.items.push_back(entry_point);
+        }
     }
 
     auto sig_data = hash_andor_sign(
