@@ -184,7 +184,7 @@ static bool is_address_mapped(const std::map<uint32_t, std::vector<page_fragment
 }
 
 /**
- * @brief Generates an absolute UF2 block. The absolute block is required to work around Errata E10 in the RP2040 datasheet.
+ * @brief Generates an absolute UF2 block. The absolute block is required to work around Errata E10 in the RP2350 datasheet.
  * 
  * @param abs_block_loc Target address for the absolute block.
  * @return Generated UF2 block.
