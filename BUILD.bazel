@@ -81,7 +81,7 @@ cc_binary(
         ],
     }),
     defines = [
-        'PICOTOOL_VERSION=\\"{}\\"'.format(PICOTOOL_VERSION_STRING),
+        'PICOTOOL_VERSION=\\"{}\\"'.format(PICOTOOL_SDK_VERSION_STRING),
         'SYSTEM_VERSION=\\"host\\"',
         'COMPILER_INFO=\\"local\\"',
         "SUPPORT_A0=0",

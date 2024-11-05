@@ -1,0 +1,36 @@
+name: Bazel presubmit checks
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  bazel-build-check:
+    strategy:
+        matrix:
+          os: [ubuntu-latest, macos-latest]
+        fail-fast: false
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Get Bazel
+        uses: bazel-contrib/setup-bazel@0.9.0
+        with:
+          # Avoid downloading Bazel every time.
+          bazelisk-cache: true
+          # Store build cache per workflow.
+          disk-cache: ${{ github.workflow }}
+          # Share repository cache between workflows.
+          repository-cache: true
+      - name: Fetch latest Pico SDK
+        uses: actions/checkout@v4
+        with:
+          repository: raspberrypi/pico-sdk
+          ref: develop
+          fetch-depth: 0
+          path: lib/pico-sdk
+      - name: Bazel Picotool with develop pico-sdk
+        run: bazel build @picotool//:picotool --override_module=pico-sdk=lib/pico-sdk
