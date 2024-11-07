@@ -5774,7 +5774,10 @@ bool partition_create_command::execute(device_map &devices) {
             new_p.flags |= (link_value << PICOBIN_PARTITION_FLAGS_LINK_VALUE_LSB) & PICOBIN_PARTITION_FLAGS_LINK_VALUE_BITS;
         }
         if (p.contains("name")) { new_p.name = p["name"]; new_p.flags |= PICOBIN_PARTITION_FLAGS_HAS_NAME_BITS; }
-        if (p.contains("id")) { get_json_int(p["id"], new_p.id); new_p.flags |= PICOBIN_PARTITION_FLAGS_HAS_ID_BITS; }
+        if (p.contains("id")) {
+            if (get_json_int(p["id"], new_p.id)) {new_p.flags |= PICOBIN_PARTITION_FLAGS_HAS_ID_BITS;}
+            else {string p_id = p["id"]; fail(ERROR_INCOMPATIBLE, "Partition ID \"%s\" is not a valid 64bit integer\n", p_id.c_str());}
+        }
 
         if(p.contains("no_reboot_on_uf2_download")) new_p.flags |= PICOBIN_PARTITION_FLAGS_UF2_DOWNLOAD_NO_REBOOT_BITS;
         if(p.contains("ab_non_bootable_owner_affinity")) new_p.flags |= PICOBIN_PARTITION_FLAGS_UF2_DOWNLOAD_AB_NON_BOOTABLE_OWNER_AFFINITY;

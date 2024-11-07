@@ -432,13 +432,18 @@ namespace cli {
                 base = 2;
             }
             try {
-                lvalue = std::stoll(value, &pos, base);
+                if (std::is_signed<T>()) {
+                    lvalue = std::stoll(value, &pos, base);
+                } else {
+                    lvalue = std::stoull(value, &pos, base);
+                }
                 if (pos != value.length()) {
                     return "Garbage after integer value: " + value.substr(pos);
                 }
             } catch (std::invalid_argument&) {
                 return value + " is not a valid integer";
             } catch (std::out_of_range&) {
+                return value + " is out of range";
             }
             if (lvalue != (int64_t)lvalue) {
                 return value + " is too big";
