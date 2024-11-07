@@ -31,6 +31,12 @@ On Linux you can add udev rules in order to run picotool without sudo:
 sudo cp udev/99-picotool.rules /etc/udev/rules.d/
 ```
 
+You will need to add your account to the plugdev group for the udev rules to apply:
+
+```bash
+sudo usermod -a -G plugdev $USERNAME
+```
+
 ### Windows
 
 ##### For Windows without MinGW
