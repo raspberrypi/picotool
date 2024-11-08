@@ -97,7 +97,6 @@ typedef map<enum picoboot_device_result,vector<tuple<model_t, void *, void *>>> 
 
 auto memory_names = map<enum memory_type, string>{
         {memory_type::sram, "RAM"},
-        {memory_type::sram_unstriped, "Unstriped RAM"},
         {memory_type::flash, "Flash"},
         {memory_type::xip_sram, "XIP RAM"},
         {memory_type::rom, "ROM"}
@@ -4037,7 +4036,7 @@ bool save_command::execute(device_map &devices) {
     model_t model = get_model(raw_access);
     enum memory_type t1 = get_memory_type(start , model);
     enum memory_type t2 = get_memory_type(end, model);
-    if (t1 == invalid || t1 != t2) {
+    if (t1 != t2 || t1 == invalid || t1 == sram_unstriped) {
         fail(ERROR_NOT_POSSIBLE, "Save range crosses unmapped memory");
     }
     uint32_t size = end - start;
@@ -4272,7 +4271,7 @@ bool load_guts(picoboot::connection con, iostream_memory_access &file_access) {
     for (auto mem_range : ranges) {
         enum memory_type t1 = get_memory_type(mem_range.from, model);
         enum memory_type t2 = get_memory_type(mem_range.to, model);
-        if (t1 != t2 || t1 == invalid || t1 == rom) {
+        if (t1 != t2 || t1 == invalid || t1 == rom || t1 == sram_unstriped) {
             fail(ERROR_FORMAT, "File to load contained an invalid memory range 0x%08x-0x%08x", mem_range.from,
                  mem_range.to);
         }
@@ -4934,7 +4933,7 @@ bool verify_command::execute(device_map &devices) {
         for (auto mem_range : ranges) {
             enum memory_type t1 = get_memory_type(mem_range.from, model);
             enum memory_type t2 = get_memory_type(mem_range.to, model);
-            if (t1 != t2 || t1 == invalid) {
+            if (t1 != t2 || t1 == invalid || t1 == sram_unstriped) {
                 fail(ERROR_NOT_POSSIBLE, "invalid memory range for verification %08x-%08x", mem_range.from, mem_range.to);
             } else {
                 bool ok = true;
