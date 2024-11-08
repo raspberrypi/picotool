@@ -434,6 +434,7 @@ struct _settings {
     struct {
         bool show_basic = false;
         bool all = false;
+        bool show_metadata = false;
         bool show_pins = false;
         bool show_device = false;
         bool show_debug = false;
@@ -598,6 +599,7 @@ struct info_command : public cmd {
         return (
             (
                 option('b', "--basic").set(settings.info.show_basic) % "Include basic information. This is the default" +
+                option('m', "--metadata").set(settings.info.show_metadata) % "Include all metadata blocks" +
                 option('p', "--pins").set(settings.info.show_pins) % "Include pin information" +
                 option('d', "--device").set(settings.info.show_device) % "Include device information" +
                 option("--debug").set(settings.info.show_debug) % "Include device debug information" +
@@ -2936,11 +2938,18 @@ void info_guts(memory_access &raw_access, void *con) {
         vector<group> groups;
         string current_group;
         map<string, vector<pair<string,string>>> infos;
-        auto select_group = [&](const group &g1, bool enabled = true) {
+        // Set enable to true to enable the selected group
+        auto select_group = [&](const group &g1, bool enable = false) {
             if (std::find_if(groups.begin(), groups.end(), [&](const group &g2) {
                 return g1.name == g2.name;
             }) == groups.end()) {
                 groups.push_back(g1);
+            }
+            auto enable_changed = std::find_if(groups.begin(), groups.end(), [&](const group &g2) {
+                return g1.name == g2.name && (enable && !g2.enabled);
+            });
+            if (enable_changed != groups.end()) {
+                enable_changed->enabled = true;
             }
             current_group = g1.name;
         };
@@ -2950,20 +2959,145 @@ void info_guts(memory_access &raw_access, void *con) {
                 infos[current_group].emplace_back(std::make_pair(name, value));
             }
         };
+        auto info_metadata = [&](std::vector<uint8_t> bin, block *best_block, bool show_addr = false) {
+            verified_t hash_verified = none;
+            verified_t sig_verified = none;
+        #if HAS_MBEDTLS
+            verify_block(bin, raw_access.get_binary_start(), raw_access.get_binary_start(), best_block, hash_verified, sig_verified);
+        #endif
+
+            // Addresses
+            if (show_addr) {
+                info_pair("address", hex_string(best_block->physical_addr));
+                info_pair("next block address", hex_string(best_block->next_block_rel + best_block->physical_addr));
+            }
+
+            // Image Def
+            auto image_def = best_block->get_item<image_type_item>();
+            if (image_def != nullptr) {
+                if (image_def->image_type() == type_exe) {
+                    switch (image_def->chip()) {
+                        case chip_rp2040:
+                            info_pair("target chip", "RP2040");
+                            break;
+                        case chip_rp2350:
+                            info_pair("target chip", "RP2350");
+                            switch (image_def->cpu()) {
+                                case cpu_riscv:
+                                    info_pair("image type", "RISC-V");
+                                    break;
+                                case cpu_varmulet:
+                                    info_pair("image type", "Varmulet");
+                                    break;
+                                case cpu_arm:
+                                    if (image_def->security() == sec_s) {
+                                        info_pair("image type", "ARM Secure");
+                                    } else if (image_def->security() == sec_ns) {
+                                        info_pair("image type", "ARM Non-Secure");
+                                    } else if (image_def->security() == sec_unspecified) {
+                                        info_pair("image type", "ARM");
+                                    }
+                            }
+                            break;
+                        default:
+                            break;
+                    }
+                } else if (image_def->image_type() == type_data) {
+                    info_pair("image type", "data");
+                }
+            }
+
+            // Version
+            auto version = best_block->get_item<version_item>();
+            if (version != nullptr) {
+                info_pair("version", std::to_string(version->major) + "." + std::to_string(version->minor));
+                if (version->otp_rows.size() > 0) {
+                    info_pair("rollback version", std::to_string(version->rollback));
+                    std::stringstream rows;
+                    for (const auto row : version->otp_rows) { rows << hex_string(row, 3) << " "; }
+                    info_pair("rollback rows", rows.str());
+                }
+            }
+
+            // Load Map
+            // todo what should this really report
+            auto load_map = best_block->get_item<load_map_item>();
+            if (load_map != nullptr) {
+                for (unsigned int i=0; i < load_map->entries.size(); i++) {
+                    std::stringstream ss;
+                    auto e = load_map->entries[i];
+                    if (e.storage_address == 0) {
+                        ss << "Clear 0x" << std::hex << e.runtime_address;
+                        ss << "+0x" << std::hex << e.size;
+                    } else if (e.storage_address != e.runtime_address) {
+                        if (is_address_initialized(rp2350_address_ranges_flash, e.runtime_address)) {
+                            ss << "ERROR: COPY TO FLASH NOT PERMITTED ";
+                        }
+                        ss << "Copy 0x" << std::hex << e.storage_address;
+                        ss << "+0x" << std::hex << e.size;
+                        ss << " to 0x" << std::hex << e.runtime_address;
+                    } else {
+                        ss << "Load 0x" << std::hex << e.storage_address;
+                        ss << "+0x" << std::hex << e.size;
+                    }
+                    info_pair("load map entry " + std::to_string(i), ss.str());
+                }
+            }
+
+            // Rolling Window Delta
+            auto rwd = best_block->get_item<rolling_window_delta_item>();
+            if (rwd != nullptr) {
+                info_pair("rolling window delta", hex_string(rwd->addr));
+            }
+
+            // Vector Table
+            auto vtor = best_block->get_item<vector_table_item>();
+            if (vtor != nullptr) {
+                info_pair("vector table", hex_string(vtor->addr));
+            }
+
+            // Entry Point
+            auto entry_point = best_block->get_item<entry_point_item>();
+            if (entry_point != nullptr) {
+                std::stringstream ss;
+                ss << "EP " << hex_string(entry_point->ep);
+                ss << ", SP " << hex_string(entry_point->sp);
+                if (entry_point->splim_set) ss << ", SPLIM " << hex_string(entry_point->splim);
+                info_pair("entry point", ss.str());
+            }
+
+            // Hash and Sig
+            if (hash_verified != none) {
+                info_pair("hash value", hash_verified == passed ? "verified" : "incorrect");
+            }
+            if (sig_verified != none) {
+                info_pair("signature", sig_verified == passed ? "verified" : "incorrect");
+            }
+        };
 
         // establish core groups and their order
-        if (!settings.info.show_basic && !settings.info.all && !settings.info.show_pins && !settings.info.show_device && !settings.info.show_debug && !settings.info.show_build) {
+        if (!settings.info.show_basic && !settings.info.all && !settings.info.show_metadata && !settings.info.show_pins && !settings.info.show_device && !settings.info.show_debug && !settings.info.show_build) {
             settings.info.show_basic = true;
         }
         if (settings.info.show_debug && !settings.info.show_device) {
             settings.info.show_device = true;
         }
         auto program_info = group("Program Information", settings.info.show_basic || settings.info.all);
+        auto no_metadata_info = group("Metadata Blocks", false);
+        vector<group> metadata_info;
+        #define MAX_METADATA_BLOCKS 10
+        for (int i=1; i <= MAX_METADATA_BLOCKS; i++) {
+            // These groups are enabled later, depending on how many metadata blocks the binary has
+            metadata_info.push_back(group("Metadata Block " + std::to_string(i), false));
+        }
         auto pin_info = group("Fixed Pin Information", settings.info.show_pins || settings.info.all);
         auto build_info = group("Build Information", settings.info.show_build || settings.info.all);
         auto device_info = group("Device Information", (settings.info.show_device || settings.info.all) & raw_access.is_device());
         // select them up front to impose order
         select_group(program_info);
+        for (auto mb : metadata_info) {
+            select_group(mb);
+        }
         select_group(pin_info);
         select_group(build_info);
         select_group(device_info);
@@ -3118,116 +3252,35 @@ void info_guts(memory_access &raw_access, void *con) {
                 }
             }
             vector<uint8_t> bin;
+            if (settings.info.show_metadata || settings.info.all) {
+                uint32_t read_size = 0x1000;
+                DEBUG_LOG("Reading from %x size %x\n", raw_access.get_binary_start(), read_size);
+                bin = raw_access.read_vector<uint8_t>(raw_access.get_binary_start(), read_size, true);
+                std::unique_ptr<block> best_block = find_first_block(bin, raw_access.get_binary_start());
+                if (best_block) {
+                    // verify stuff
+                    get_more_bin_cb more_cb = [&raw_access](std::vector<uint8_t> &bin, uint32_t new_size) {
+                        DEBUG_LOG("Now reading from %x size %x\n", raw_access.get_binary_start(), new_size);
+                        bin = raw_access.read_vector<uint8_t>(raw_access.get_binary_start(), new_size, true);
+                    };
+                    auto all_blocks = get_all_blocks(bin, raw_access.get_binary_start(), best_block, more_cb);
+
+                    int block_i = 0;
+                    select_group(metadata_info[block_i++], true);
+                    info_metadata(bin, best_block.get(), true);
+                    for (auto &block : all_blocks) {
+                        select_group(metadata_info[block_i++], true);
+                        info_metadata(bin, block.get(), true);
+                    }
+                } else {
+                    // This displays that there are no metadata blocks
+                    select_group(no_metadata_info, true);
+                }
+            }
             std::unique_ptr<block> best_block = find_best_block(raw_access, bin);
             if (best_block && (settings.info.show_basic || settings.info.all)) {
                 select_group(program_info);
-                verified_t hash_verified = none;
-                verified_t sig_verified = none;
-            #if HAS_MBEDTLS
-                verify_block(bin, raw_access.get_binary_start(), raw_access.get_binary_start(), best_block.get(), hash_verified, sig_verified);
-            #endif
-
-                // Image Def
-                auto image_def = best_block->get_item<image_type_item>();
-                if (image_def != nullptr) {
-                    if (image_def->image_type() == type_exe) {
-                        switch (image_def->chip()) {
-                            case chip_rp2040:
-                                info_pair("target chip", "RP2040");
-                                break;
-                            case chip_rp2350:
-                                info_pair("target chip", "RP2350");
-                                switch (image_def->cpu()) {
-                                    case cpu_riscv:
-                                        info_pair("image type", "RISC-V");
-                                        break;
-                                    case cpu_varmulet:
-                                        info_pair("image type", "Varmulet");
-                                        break;
-                                    case cpu_arm:
-                                        if (image_def->security() == sec_s) {
-                                            info_pair("image type", "ARM Secure");
-                                        } else if (image_def->security() == sec_ns) {
-                                            info_pair("image type", "ARM Non-Secure");
-                                        } else if (image_def->security() == sec_unspecified) {
-                                            info_pair("image type", "ARM");
-                                        }
-                                }
-                                break;
-                            default:
-                                break;
-                        }
-                    } else if (image_def->image_type() == type_data) {
-                        info_pair("image type", "data");
-                    }
-                }
-
-                // Version
-                auto version = best_block->get_item<version_item>();
-                if (version != nullptr) {
-                    info_pair("version", std::to_string(version->major) + "." + std::to_string(version->minor));
-                    if (version->otp_rows.size() > 0) {
-                        info_pair("rollback version", std::to_string(version->rollback));
-                        std::stringstream rows;
-                        for (const auto row : version->otp_rows) { rows << hex_string(row, 3) << " "; }
-                        info_pair("rollback rows", rows.str());
-                    }
-                }
-
-                // Load Map
-                // todo what should this really report
-                auto load_map = best_block->get_item<load_map_item>();
-                if (load_map != nullptr) {
-                    for (unsigned int i=0; i < load_map->entries.size(); i++) {
-                        std::stringstream ss;
-                        auto e = load_map->entries[i];
-                        if (e.storage_address == 0) {
-                            ss << "Clear 0x" << std::hex << e.runtime_address;
-                            ss << "+0x" << std::hex << e.size;
-                        } else if (e.storage_address != e.runtime_address) {
-                            if (is_address_initialized(rp2350_address_ranges_flash, e.runtime_address)) {
-                                ss << "ERROR: COPY TO FLASH NOT PERMITTED ";
-                            }
-                            ss << "Copy 0x" << std::hex << e.storage_address;
-                            ss << "+0x" << std::hex << e.size;
-                            ss << " to 0x" << std::hex << e.runtime_address;
-                        } else {
-                            ss << "Load 0x" << std::hex << e.storage_address;
-                            ss << "+0x" << std::hex << e.size;
-                        }
-                        info_pair("load map entry " + std::to_string(i), ss.str());
-                    }
-                }
-
-                // Rolling Window Delta
-                auto rwd = best_block->get_item<rolling_window_delta_item>();
-                if (rwd != nullptr) {
-                    info_pair("rolling window delta", hex_string(rwd->addr));
-                }
-
-                // Vector Table
-                auto vtor = best_block->get_item<vector_table_item>();
-                if (vtor != nullptr) {
-                    info_pair("vector table", hex_string(vtor->addr));
-                }
-
-                // Entry Point
-                auto entry_point = best_block->get_item<entry_point_item>();
-                if (entry_point != nullptr) {
-                    std::stringstream ss;
-                    ss << "EP " << hex_string(entry_point->ep);
-                    ss << ", SP " << hex_string(entry_point->sp);
-                    if (entry_point->splim_set) ss << ", SPLIM " << hex_string(entry_point->splim);
-                    info_pair("entry point", ss.str());
-                }
-
-                // Hash and Sig
-                if (hash_verified != none) {
-                    info_pair("hash value", hash_verified == passed ? "verified" : "incorrect");
-                }
-                if (sig_verified != none) {
-                    info_pair("signature", sig_verified == passed ? "verified" : "incorrect");
-                }
+                info_metadata(bin, best_block.get());
             } else if (!best_block && has_binary_info && get_model(raw_access) == rp2350) {
                 fos << "WARNING: Binary on RP2350 device does not contain a block loop - this binary will not boot\n";
             }
@@ -3409,6 +3462,19 @@ void info_guts(memory_access &raw_access, void *con) {
     #endif
         bool first = true;
         int fr_col = fos.first_column();
+        // Standardise indent for whole info printout
+        int tab = 0;
+        for(const auto& group : groups) {
+            if (group.enabled) {
+                const auto& info = infos[group.name];
+                if (!info.empty()) {
+                    tab = std::max(tab, group.min_tab);
+                    for(const auto& item : info) {
+                        tab = std::max(tab, 3 + (int)item.first.length()); // +3 for ":  "
+                    }
+                }
+            }
+        }
         for(const auto& group : groups) {
             if (group.enabled) {
                 const auto& info = infos[group.name];
@@ -3424,10 +3490,6 @@ void info_guts(memory_access &raw_access, void *con) {
                 if (info.empty()) {
                    fos << "none\n";
                 } else {
-                    int tab = group.min_tab;
-                    for(const auto& item : info) {
-                        tab = std::max(tab, 3 + (int)item.first.length()); // +3 for ":  "
-                    }
                     for(const auto& item : info) {
                         fos.first_column(fr_col + 1);
                         fos << (item.first + ":");
