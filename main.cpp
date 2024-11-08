@@ -3930,7 +3930,15 @@ struct progress_bar {
         if (_percent != percent) {
             percent = _percent;
             unsigned int len = (width * percent) / 100;
-            std::cout << prefix << "[" << string(len, '=') << string(width-len, ' ') << "]  " << std::to_string(percent) << "%\r" << std::flush;
+            // Align all bars with the longest possible prefix string
+            auto longest_mem = std::max_element(
+                std::begin(memory_names), std::end(memory_names),
+                [] (const auto & p1, const auto & p2) {
+                    return p1.second.length() < p2.second.length();
+                }
+            );
+            string extra_space(string("Loading into " + longest_mem->second + ": ").length() - prefix.length(), ' ');
+            std::cout << prefix << extra_space << "[" << string(len, '=') << string(width-len, ' ') << "]  " << std::to_string(percent) << "%\r" << std::flush;
         }
     }
 
@@ -4106,7 +4114,7 @@ bool save_command::execute(device_map &devices) {
             enum memory_type type = get_memory_type(mem_range.from, model);
             bool ok = true;
             {
-                progress_bar bar("Verifying " + memory_names[type] + ":    ");
+                progress_bar bar("Verifying " + memory_names[type] + ": ");
                 uint32_t batch_size = FLASH_SECTOR_ERASE_SIZE;
                 vector<uint8_t> file_buf;
                 vector<uint8_t> device_buf;
@@ -4355,7 +4363,7 @@ bool load_guts(picoboot::connection con, iostream_memory_access &file_access) {
         if (settings.load.verify) {
             bool ok = true;
             {
-                progress_bar bar("Verifying " + memory_names[type] + ":    ");
+                progress_bar bar("Verifying " + memory_names[type] + ": ");
                 uint32_t batch_size = FLASH_SECTOR_ERASE_SIZE;
                 vector<uint8_t> file_buf;
                 vector<uint8_t> device_buf;
