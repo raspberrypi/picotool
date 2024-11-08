@@ -81,6 +81,9 @@ int picoboot_flash_id(libusb_device_handle *usb_device, uint64_t *data);
 
 // we require 256 (as this is the page size supported by the device)
 #define LOG2_PAGE_SIZE 8u
+#ifdef PAGE_SIZE
+#undef PAGE_SIZE
+#endif
 #define PAGE_SIZE (1u << LOG2_PAGE_SIZE)
 #define FLASH_SECTOR_ERASE_SIZE 4096u
 
