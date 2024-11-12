@@ -7496,7 +7496,7 @@ bool reboot_command::execute(device_map &devices) {
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
 #define VC_EXTRALEAN
-#include <Windows.h>
+#include <windows.h>
 #elif defined(__linux__) || defined(__APPLE__)
 #include <sys/ioctl.h>
 #endif
