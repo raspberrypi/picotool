@@ -4000,6 +4000,9 @@ bool save_command::execute(device_map &devices) {
             } else {
                 start = settings.from;
                 end = settings.to;
+                // Set offset for verifying
+                settings.offset = start;
+                settings.offset_set = true;
             }
             if (end <= start) {
                 fail(ERROR_ARGS, "Save range is invalid/empty");
