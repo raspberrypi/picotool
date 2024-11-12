@@ -417,6 +417,7 @@ struct _settings {
         int redundancy = -1;
         bool raw = false;
         bool ecc = false;
+        bool ignore_set = false;
         bool fuzzy = false;
         uint32_t value = 0;
         uint8_t lock0 = 0;
@@ -1071,6 +1072,7 @@ struct otp_set_command : public cmd {
                         (option('c', "--copies") & integer("copies").min(1).set(settings.otp.redundancy)) % "Read multiple redundant values" +
                         option('r', "--raw").set(settings.otp.raw) % "Set raw 24 bit values" +
                         option('e', "--ecc").set(settings.otp.ecc) % "Use error correction" +
+                        option('s', "--ignore-set").set(settings.otp.ignore_set) % "Ignore any already-set bits" +
                         (option('i', "--include") & value("filename").add_to(settings.otp.extra_files)).min(0).max(1) % "Include extra otp definition" // todo more than 1
                 ).min(0).doc_non_optional(true) % "Redundancy/Error Correction Overrides" +
                 (
@@ -7102,6 +7104,10 @@ bool otp_set_command::execute(device_map &devices) {
         settings.otp.value <<= low;
         settings.otp.value &= field->mask;
         settings.otp.value |= old_raw_value & ~field->mask;
+    }
+    if (settings.otp.ignore_set) {
+        // OR with current value, to ignore any already-set bits
+        settings.otp.value |= old_raw_value;
     }
     // todo check for clearing bits
     if (old_raw_value && settings.otp.ecc) {
