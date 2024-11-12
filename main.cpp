@@ -876,9 +876,6 @@ struct partition_info_command : public cmd {
     string get_doc() const override {
         return "Print the device's partition table.";
     }
-
-    void print_permissions(unsigned int p) const;
-    void insert_default_families(uint32_t flags_and_permissions, vector<std::string> &family_ids) const;
 };
 #endif
 
@@ -923,9 +920,6 @@ struct partition_create_command : public cmd {
     string get_doc() const override {
         return "Create a partition table from json";
     }
-
-    void print_permissions(unsigned int p) const;
-    void insert_default_families(uint32_t flags_and_permissions, vector<std::string> &family_ids) const;
 };
 
 
@@ -2923,6 +2917,39 @@ std::shared_ptr<memory_access> get_bi_access(memory_access &raw_access) {
     return std::make_shared<remapped_memory_access>(raw_access, rmap);
 }
 
+string str_permissions(unsigned int p) {
+    static_assert(PICOBIN_PARTITION_PERMISSION_S_R_BITS == (1u << 26), "");
+    static_assert(PICOBIN_PARTITION_PERMISSION_S_W_BITS == (1u << 27), "");
+    static_assert(PICOBIN_PARTITION_PERMISSION_NS_W_BITS == (1u << 29), "");
+    static_assert(PICOBIN_PARTITION_PERMISSION_NSBOOT_W_BITS == (1u << 31), "");
+
+    std::stringstream ss;
+    ss << " S(";
+    unsigned int r = (p >> 26) & 3;
+    if (r & 1) ss << "r";
+    if (r & 2) ss << "w"; else if (!r) ss << "-";
+    ss << ") NSBOOT(";
+    r = (p >> 30) & 3;
+    if (r & 1) ss << "r";
+    if (r & 2) ss << "w"; else if (!r) ss << "-";
+    ss << ") NS(";
+    r = (p >> 28) & 3;
+    if (r & 1) ss << "r";
+    if (r & 2) ss << "w"; else if (!r) ss << "-";
+    ss << ")";
+
+    return ss.str();
+}
+
+void insert_default_families(uint32_t flags_and_permissions, vector<std::string> &family_ids) {
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_ABSOLUTE_BITS) family_ids.emplace_back(absolute_family_name);
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2040_BITS) family_ids.emplace_back(rp2040_family_name);
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_S_BITS) family_ids.emplace_back(rp2350_arm_s_family_name);
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_NS_BITS) family_ids.emplace_back(rp2350_arm_ns_family_name);
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_RISCV_BITS) family_ids.emplace_back(rp2350_riscv_family_name);
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_DATA_BITS) family_ids.emplace_back(data_family_name);
+}
+
 #if HAS_LIBUSB
 void info_guts(memory_access &raw_access, picoboot::connection *con) {
 #else
@@ -3004,6 +3031,61 @@ void info_guts(memory_access &raw_access, void *con) {
                     }
                 } else if (image_def->image_type() == type_data) {
                     info_pair("image type", "data");
+                }
+            }
+
+            // Partition Table
+            auto partition_table = best_block->get_item<partition_table_item>();
+            if (partition_table != nullptr) {
+                info_pair("partition table", partition_table->singleton ? "singleton" : "non-singleton");
+                std::stringstream unpartitioned;
+                unpartitioned << str_permissions(partition_table->unpartitioned_flags);
+                std::vector<std::string> family_ids;
+                insert_default_families(partition_table->unpartitioned_flags, family_ids);
+                unpartitioned << ", uf2 { " << cli::join(family_ids, ", ") << " }";
+                info_pair("un-partitioned space", unpartitioned.str());
+
+                for (int i=0; i < partition_table->partitions.size(); i++) {
+                    std::stringstream pstring;
+                    std::stringstream pname;
+                    auto partition = partition_table->partitions[i];
+                    uint32_t flags = partition.flags;
+                    uint64_t id = partition.id;
+                    pname << "partition " << i;
+                    if ((flags & PICOBIN_PARTITION_FLAGS_LINK_TYPE_BITS) ==
+                        PICOBIN_PARTITION_FLAGS_LINK_TYPE_AS_BITS(A_PARTITION)) {
+                        pname << " (B w/ " << ((flags & PICOBIN_PARTITION_FLAGS_LINK_VALUE_BITS)
+                                            >> PICOBIN_PARTITION_FLAGS_LINK_VALUE_LSB)
+                           << ")";
+                    } else if ((flags & PICOBIN_PARTITION_FLAGS_LINK_TYPE_BITS) ==
+                            PICOBIN_PARTITION_FLAGS_LINK_TYPE_AS_BITS(OWNER_PARTITION)) {
+                            pname << " (A ob/ " << ((flags & PICOBIN_PARTITION_FLAGS_LINK_VALUE_BITS)
+                                                 >> PICOBIN_PARTITION_FLAGS_LINK_VALUE_LSB)
+                               << ")";
+                    } else {
+                        pname << " (A)";
+                    }
+                    pstring << hex_string(partition.first_sector * 4096, 8, false) << "->" << hex_string((partition.last_sector + 1) * 4096, 8, false);
+                    unsigned int p = partition.permissions;
+                    pstring << str_permissions(p << PICOBIN_PARTITION_PERMISSIONS_LSB);
+                    if (flags & PICOBIN_PARTITION_FLAGS_HAS_ID_BITS) {
+                        pstring << ", id=" << hex_string(id, 16, false);
+                    }
+                    uint32_t num_extra_families = partition.extra_families.size();
+                    family_ids.clear();
+                    insert_default_families(flags, family_ids);
+                    for (auto family : partition.extra_families) {
+                        family_ids.emplace_back(hex_string(family));
+                    }
+                    if (flags & PICOBIN_PARTITION_FLAGS_HAS_NAME_BITS) {
+                        pstring << ", \"";
+                        pstring << partition.name;
+                        pstring << '"';
+                    }
+                    pstring << ", uf2 { " << cli::join(family_ids, ", ") << " }";
+                    pstring << ", arm_boot " << !(flags & PICOBIN_PARTITION_FLAGS_IGNORED_DURING_ARM_BOOT_BITS);
+                    pstring << ", riscv_boot " << !(flags & PICOBIN_PARTITION_FLAGS_IGNORED_DURING_RISCV_BOOT_BITS);
+                    info_pair(pname.str(), pstring.str());
                 }
             }
 
@@ -5619,7 +5701,7 @@ bool partition_info_command::execute(device_map &devices) {
         printf("the partition table is empty\n");
     }
     printf("un-partitioned_space : ");
-    print_permissions(unpartitioned.permissions_and_flags);
+    fos << str_permissions(unpartitioned.permissions_and_flags);
     std::vector<std::string> family_ids;
     insert_default_families(unpartitioned.permissions_and_flags, family_ids);
     printf(", uf2 { %s }\n", cli::join(family_ids, ", ").c_str());
@@ -5659,7 +5741,7 @@ bool partition_info_command::execute(device_map &devices) {
                 return -1;
             }
             unsigned int p = location_and_permissions & flags_and_permissions;
-            print_permissions(p);
+            fos << str_permissions(p);
             if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_HAS_ID_BITS) {
                 printf(", id=%016" PRIx64, id);
             }
@@ -6727,35 +6809,6 @@ bool coprodis_command::execute(device_map &devices) {
 
 
 #if HAS_LIBUSB
-void partition_info_command::insert_default_families(uint32_t flags_and_permissions, vector<std::string> &family_ids) const {
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_ABSOLUTE_BITS) family_ids.emplace_back(absolute_family_name);
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2040_BITS) family_ids.emplace_back(rp2040_family_name);
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_S_BITS) family_ids.emplace_back(rp2350_arm_s_family_name);
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_NS_BITS) family_ids.emplace_back(rp2350_arm_ns_family_name);
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_RISCV_BITS) family_ids.emplace_back(rp2350_riscv_family_name);
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_DATA_BITS) family_ids.emplace_back(data_family_name);
-}
-
-void partition_info_command::print_permissions(unsigned int p) const {
-    static_assert(PICOBIN_PARTITION_PERMISSION_S_R_BITS == (1u << 26), "");
-    static_assert(PICOBIN_PARTITION_PERMISSION_S_W_BITS == (1u << 27), "");
-    static_assert(PICOBIN_PARTITION_PERMISSION_NS_W_BITS == (1u << 29), "");
-    static_assert(PICOBIN_PARTITION_PERMISSION_NSBOOT_W_BITS == (1u << 31), "");
-    printf(" S(");
-    unsigned int r = (p >> 26) & 3;
-    if (r & 1) printf("r");
-    if (r & 2) printf("w"); else if (!r) printf("-");
-    printf(") NSBOOT(");
-    r = (p >> 30) & 3;
-    if (r & 1) printf("r");
-    if (r & 2) printf("w"); else if (!r) printf("-");
-    printf(") NS(");
-    r = (p >> 28) & 3;
-    if (r & 1) printf("r");
-    if (r & 2) printf("w"); else if (!r) printf("-");
-    printf(")");
-}
-
 static void check_otp_write_error(picoboot::command_failure &e, bool ecc) {
     if (e.get_code() == PICOBOOT_UNSUPPORTED_MODIFICATION) {
         if (ecc) fail(ERROR_NOT_POSSIBLE, "Attempted to modify OTP ECC row(s)\n");

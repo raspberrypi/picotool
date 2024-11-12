@@ -225,8 +225,55 @@ struct partition_table_item : public single_byte_size_item {
     partition_table_item() = default;
 
     explicit partition_table_item(uint32_t unpartitioned_flags, bool singleton) : unpartitioned_flags(unpartitioned_flags), singleton(singleton) {}
-    template <typename I> static std::shared_ptr<item> parse(I it, I end, uint32_t header) {
-        return nullptr;
+    template <typename I> static std::shared_ptr<item> parse(I& it, I end, uint32_t header) {
+        uint32_t size = decode_size(header);
+        uint8_t singleton_count = header >> 24;
+        bool singleton = singleton_count & 0x80;
+        uint8_t partition_count = singleton_count & 0x0f;
+        uint32_t unpartitioned_flags = *it++;
+
+        auto pt = std::make_shared<partition_table_item>(unpartitioned_flags, singleton);
+
+        std::vector<uint32_t> data;
+        for (unsigned int i=2; i < size; i++) {
+            data.push_back(*it++);
+        }
+        int i=0;
+        while (i < data.size()) {
+            partition new_p;
+            uint32_t permissions_locations = data[i++];
+            new_p.permissions = (permissions_locations & PICOBIN_PARTITION_PERMISSIONS_BITS) >> PICOBIN_PARTITION_PERMISSIONS_LSB;
+            new_p.first_sector = (permissions_locations & PICOBIN_PARTITION_LOCATION_FIRST_SECTOR_BITS) >> PICOBIN_PARTITION_LOCATION_FIRST_SECTOR_LSB;
+            new_p.last_sector = (permissions_locations & PICOBIN_PARTITION_LOCATION_LAST_SECTOR_BITS) >> PICOBIN_PARTITION_LOCATION_LAST_SECTOR_LSB;
+
+            uint32_t permissions_flags = data[i++];
+            uint8_t permissions2 = (permissions_flags & PICOBIN_PARTITION_PERMISSIONS_BITS) >> PICOBIN_PARTITION_PERMISSIONS_LSB;
+            if (new_p.permissions != permissions2) {
+                printf("Permissions mismatch %02x %02x\n", new_p.permissions, permissions2);
+                assert(false);
+            }
+            new_p.flags = permissions_flags & (~PICOBIN_PARTITION_PERMISSIONS_BITS);
+
+            if (new_p.flags & PICOBIN_PARTITION_FLAGS_HAS_ID_BITS) {
+                new_p.id = (uint64_t)data[i++] | ((uint64_t)data[i++] << 32);
+            }
+
+            uint8_t num_extra_families = (new_p.flags & PICOBIN_PARTITION_FLAGS_ACCEPTS_NUM_EXTRA_FAMILIES_BITS) >> PICOBIN_PARTITION_FLAGS_ACCEPTS_NUM_EXTRA_FAMILIES_LSB;
+            for (int fam=0; fam < num_extra_families; fam++) {
+                new_p.extra_families.push_back(data[i++]);
+            }
+
+            if (new_p.flags & PICOBIN_PARTITION_FLAGS_HAS_NAME_BITS) {
+                auto bytes = words_to_lsb_bytes(data.begin() + i++, data.end());
+                int name_size = bytes[0];
+                // This works neatly - accounts for the size byte at the start
+                i += name_size / 4;
+                new_p.name = std::string((char*)(bytes.data() + 1), name_size);
+            }
+
+            pt->partitions.push_back(new_p);
+        }
+        return pt;
     }
 
     std::vector<uint32_t> to_words(item_writer_context& ctx) const override {
@@ -574,7 +621,7 @@ struct block {
                     i = image_type_item::parse(it, end, header);
                     break;
                 case PICOBIN_BLOCK_ITEM_PARTITION_TABLE:
-                    i = ignored_item::parse(it, end, header);
+                    i = partition_table_item::parse(it, end, header);
                     break;
                 case PICOBIN_BLOCK_ITEM_1BS_VECTOR_TABLE:
                     i = vector_table_item::parse(it, end, header);
