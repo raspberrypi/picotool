@@ -426,6 +426,7 @@ struct _settings {
         std::vector<uint32_t> pages;
         bool list_pages = false;
         bool list_no_descriptions = false;
+        bool list_field_descriptions = false;
         std::vector<std::string> selectors;
         uint32_t row = 0;
         std::vector<std::string> extra_files;
@@ -952,6 +953,7 @@ struct otp_list_command : public cmd {
                 (
                         option('p', "--pages").set(settings.otp.list_pages) % "Show page number/page row number" +
                         option('n', "--no-descriptions").set(settings.otp.list_no_descriptions) % "Don't show descriptions" +
+                        option('f', "--field-descriptions").set(settings.otp.list_field_descriptions) % "Show all field descriptions" +
                         (option('i', "--include") & value("filename").add_to(settings.otp.extra_files)).min(0).max(1) % "Include extra otp definition" + // todo more than 1
                         (value("selector").add_to(settings.otp.selectors) %
                          "The row/field selector, each of which can select a whole row:\n\n" \
@@ -6962,6 +6964,15 @@ bool otp_list_command::execute(device_map &devices) {
                     fos << " (bit " << low << ")\n";
                 } else {
                     fos << " (bits " << low << "-" << high << ")\n";
+                }
+                const otp_field *field = m.field;
+                if ((m.field || settings.otp.list_field_descriptions) && !settings.otp.list_no_descriptions && !f.description.empty()) {
+                    // Only print field descriptors if matching a field, or if list_field_descriptions is set
+                    fos.first_column(indent0);
+                    fos.hanging_indent(0);
+                    fos << "\"" << f.description << "\"";
+                    fos.first_column(0);
+                    fos << "\n";
                 }
             }
         }
