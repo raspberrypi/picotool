@@ -129,7 +129,7 @@ uf2_block gen_abs_block(uint32_t abs_block_loc) {
     uf2_block block;
     block.magic_start0 = UF2_MAGIC_START0;
     block.magic_start1 = UF2_MAGIC_START1;
-    block.flags = UF2_FLAG_FAMILY_ID_PRESENT;
+    block.flags = UF2_FLAG_FAMILY_ID_PRESENT | UF2_FLAG_EXTENSION_FLAGS_PRESENT;
     block.payload_size = UF2_PAGE_SIZE;
     block.num_blocks = 2;
     block.file_size = ABSOLUTE_FAMILY_ID;
@@ -138,6 +138,7 @@ uf2_block gen_abs_block(uint32_t abs_block_loc) {
     block.block_no = 0;
     memset(block.data, 0, sizeof(block.data));
     memset(block.data, 0xef, UF2_PAGE_SIZE);
+    *(uint32_t*)&(block.data[UF2_PAGE_SIZE]) = UF2_EXTENSION_RP2_IGNORE_BLOCK;
     return block;
 }
 
@@ -145,12 +146,13 @@ bool check_abs_block(uf2_block block) {
     return std::all_of(block.data, block.data + UF2_PAGE_SIZE, [](uint8_t i) { return i == 0xef; }) &&
         block.magic_start0 == UF2_MAGIC_START0 &&
         block.magic_start1 == UF2_MAGIC_START1 &&
-        block.flags == UF2_FLAG_FAMILY_ID_PRESENT &&
+        (block.flags & ~UF2_FLAG_EXTENSION_FLAGS_PRESENT) == UF2_FLAG_FAMILY_ID_PRESENT &&
         block.payload_size == UF2_PAGE_SIZE &&
         block.num_blocks == 2 &&
         block.file_size == ABSOLUTE_FAMILY_ID &&
         block.magic_end == UF2_MAGIC_END &&
-        block.block_no == 0;
+        block.block_no == 0 &&
+        !(block.flags & UF2_FLAG_EXTENSION_FLAGS_PRESENT && *(uint32_t*)&(block.data[UF2_PAGE_SIZE]) != UF2_EXTENSION_RP2_IGNORE_BLOCK);
 }
 
 int pages2uf2(std::map<uint32_t, std::vector<page_fragment>>& pages, std::shared_ptr<std::iostream> in, std::shared_ptr<std::iostream> out, uint32_t family_id, uint32_t abs_block_loc=0) {
