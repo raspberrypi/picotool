@@ -267,6 +267,7 @@ target_link_libraries(picotool
         elf2uf2
         errors
         nlohmann_json
+        littlefs
         whereami)
 
 if (NOT TARGET mbedtls)
