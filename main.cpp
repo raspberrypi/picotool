@@ -3922,6 +3922,14 @@ static picoboot::connection get_single_rp2350_bootsel_device_connection(device_m
 
 struct progress_bar {
     explicit progress_bar(string prefix, int width = 30) : prefix(std::move(prefix)), width(width) {
+        // Align all bars with the longest possible prefix string
+        auto longest_mem = std::max_element(
+            std::begin(memory_names), std::end(memory_names),
+            [] (const auto & p1, const auto & p2) {
+                return p1.second.length() < p2.second.length();
+            }
+        );
+        longest_mem_str = longest_mem->second;
         progress(0);
     }
 
@@ -3929,14 +3937,7 @@ struct progress_bar {
         if (_percent != percent) {
             percent = _percent;
             unsigned int len = (width * percent) / 100;
-            // Align all bars with the longest possible prefix string
-            auto longest_mem = std::max_element(
-                std::begin(memory_names), std::end(memory_names),
-                [] (const auto & p1, const auto & p2) {
-                    return p1.second.length() < p2.second.length();
-                }
-            );
-            string extra_space(string("Loading into " + longest_mem->second + ": ").length() - prefix.length(), ' ');
+            string extra_space(string("Loading into " + longest_mem_str + ": ").length() - prefix.length(), ' ');
             std::cout << prefix << extra_space << "[" << string(len, '=') << string(width-len, ' ') << "]  " << std::to_string(percent) << "%\r" << std::flush;
         }
     }
@@ -3952,6 +3953,7 @@ struct progress_bar {
     std::string prefix;
     int percent = -1;
     int width;
+    std::string longest_mem_str;
 };
 
 #if HAS_LIBUSB
