@@ -1,4 +1,5 @@
 {
+    "$schema": "./whitelabel-schema.json",
     "device": {
         "vid": "0x2e8b",
         "pid": "0x000e",

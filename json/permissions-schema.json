@@ -1,0 +1,52 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "OTP Permissions",
+    "description": "Setup of OTP page permissions",
+    "type": "object",
+    "properties": {"$schema": {}},
+    "patternProperties": {
+        "^[0-6][0-9]$": {
+            "description": "OTP Page Permissions",
+            "type": "object",
+            "properties": {
+                "no_key_state": {
+                    "description": "State when at least one key is registered for this page and no matching key has been entered: 0 -> read_only, 1 -> inaccessible",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1
+                },
+                "key_r": {
+                    "description": "Index 1-6 of a hardware key which must be entered to grant read access, or 0 if no such key is required",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 6
+                },
+                "key_w": {
+                    "description": "Index 1-6 of a hardware key which must be entered to grant write access, or 0 if no such key is required",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 6
+                },
+                "lock_bl": {
+                    "description": "Dummy lock bits reserved for bootloaders (including the RP2350 USB bootloader) to store their own OTP access permissions: 0 -> read_write, 1 -> read_only, 2 -> Do not use (behaves the same as incaccessible), 3 -> inaccessible",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3
+                },
+                "lock_ns": {
+                    "description": "Lock state for Non-secure accesses to this page: 0 -> read_write, 1 -> read_only, 2 -> Do not use (behaves the same as incaccessible), 3 -> inaccessible",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3
+                },
+                "lock_s": {
+                    "description": "Lock state for Secure accesses to this page: 0 -> read_write, 1 -> read_only, 2 -> Do not use (behaves the same as incaccessible), 3 -> inaccessible",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3
+                }
+            }
+        }
+    },
+    "additionalProperties": false
+}

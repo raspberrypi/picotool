@@ -1,4 +1,5 @@
 {
+    "$schema": "./permissions-schema.json",
     "10": {
         "no_key_state": 0,
         "key_r": 0,
