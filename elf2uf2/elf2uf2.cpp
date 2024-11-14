@@ -284,7 +284,8 @@ int pages2uf2(std::map<uint32_t, std::vector<page_fragment>>& pages, std::shared
  * @param out Output stream for UF2 data.
  * @param address Start address in the target memory.
  * @param family_id Family ID for UF2.
- * @param abs_block_loc Optional absolute block location.
+ * @param abs_block_loc Optional absolute block location. If set to 0, this is ignored. Any non-zero value will
+ *                      be used to add an absolute UF2 block, targeting the specified location.
  * @return 0 on success, error code otherwise.
  */
 int bin2uf2(std::shared_ptr<std::iostream> in, std::shared_ptr<std::iostream> out, uint32_t address, uint32_t family_id, uint32_t abs_block_loc) {
