@@ -763,7 +763,7 @@ Family ID 'rp2350-arm-s' can be downloaded in partition 0:
 ### create
 
 This command allows you to create partition tables, and additionally embed them into the block loop if ELF files (for example, for bootloaders).
-By default, all partition tables are hashed, and you can also sign them.
+By default, all partition tables are hashed, and you can also sign them. The schema for this JSON file is [here](json/schemas/partition-table-schema.json).
 
 ```text
 $ picotool help partition create
@@ -907,7 +907,7 @@ The `otp` commands are for interacting with the RP2350 OTP Memory. They are not 
 Note that the OTP Memory is One-Time-Programmable, which means that once a bit has been changed from 0 to 1, it cannot be changed back.
 Therefore, caution should be used when using these commands, as they risk bricking your RP2350 device. For example, if you set SECURE_BOOT_ENABLE but don't set a boot key, and disable the PICOBOOT interface, then your device will be unusable.
 
-For the `list`, `set`, `get` and `load` commands, you can define your own OTP layout in a JSON file and pass that in with the `-i` argument. These rows will be added to the default rows when parsing.
+For the `list`, `set`, `get` and `load` commands, you can define your own OTP layout in a JSON file and pass that in with the `-i` argument. These rows will be added to the default rows when parsing. The schema for this JSON file is [here](json/schemas/otp-contents-schema.json)
 
 ```text
 $ picotool help otp
@@ -952,7 +952,7 @@ $ picotool reboot
 ### white-label
 
 This command allows for OTP white-labelling, which sets the USB configuration used by the device in BOOTSEL mode.
-This can be configured from a JSON file, an example of which is in [sample-wl.json](sample-wl.json).
+This can be configured from a JSON file, an example of which is in [sample-wl.json](sample-wl.json). The schema for this JSON file is [here](json/schemas/whitelabel-schema.json)
 
 ```text
 $ picotool help otp white-label
@@ -1032,7 +1032,7 @@ Device Descriptor:
 This command will run a binary on your device in order to set the OTP permissions, as these are not directly accessible from `picotool` on due to the default permissions settings required to fix  errata XXX on RP2350. 
 Because it runs a binary, the binary needs to be sign it if secure boot is enabled. The binary will print what it is doing over uart, which
 can be configured using the UART Configuration arguments. You can define your OTP permissions in a json file, an example of which
-is in [sample-permissions.json](sample-permissions.json).
+is in [sample-permissions.json](sample-permissions.json). The schema for this JSON file is [here](json/schemas/permissions-schema.json)
 
 ```text
 $ picotool help otp permissions
