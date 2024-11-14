@@ -1,4 +1,5 @@
 {
+  "$schema": "./pt-schema.json",
   "version": [1, 0],
   "unpartitioned": {
     "families": ["absolute"],
