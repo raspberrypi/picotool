@@ -49,14 +49,19 @@
                     "description": "Max power consumption, in 2mA units",
                     "type": ["integer", "string"],
                     "maximum": 255,
-                    "pattern": "^0x[0-9a-fA-F]{0,2}$"
+                    "pattern": "^0x[0-9a-fA-F]{1,2}$"
                 },
                 "attributes": {
                     "description": "Device attributes: bit 7 must be 1, bit 6 is self-powered, bit 5 is remote wakeup, bits 0-4 must be 0",
                     "type": ["integer", "string"],
-                    "maximum": 255,
-                    "pattern": "^0x[0-9a-fA-F]{0,2}$"
+                    "minimum": 128,
+                    "maximum": 224,
+                    "pattern": "^0x[0-9a-fA-F]{2}$"
                 }
+            },
+            "dependentRequired": {
+                "max_power": ["attributes"],
+                "attributes": ["max_power"]
             },
             "additionalProperties": false
         },
