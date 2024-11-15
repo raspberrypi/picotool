@@ -1,7 +1,7 @@
 {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "OTP Contents",
-    "description": "Defined contents of the OTP",
+    "description": "Defined contents of the RP-series device OTP",
     "type": "array",
     "items": {
         "description": "OTP Row",

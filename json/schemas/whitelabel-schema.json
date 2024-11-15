@@ -46,7 +46,7 @@
                     "maxLength": 30
                 },
                 "max_power": {
-                    "description": "Max power consumption. in 2mA units",
+                    "description": "Max power consumption, in 2mA units",
                     "type": ["integer", "string"],
                     "maximum": 255,
                     "pattern": "^0x[0-9a-fA-F]{0,2}$"

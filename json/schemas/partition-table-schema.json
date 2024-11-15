@@ -39,27 +39,7 @@
                         ]
                     }
                 },
-                "permissions": {
-                    "description": "Permissions",
-                    "type": "object",
-                    "properties": {
-                        "secure": {
-                            "description": "Secure Permissions",
-                            "type": "string",
-                            "pattern": "^(r|w){0,2}$"
-                        },
-                        "nonsecure": {
-                            "description": "Non-Secure Permissions",
-                            "type": "string",
-                            "pattern": "^(r|w){0,2}$"
-                        },
-                        "bootloader": {
-                            "description": "Bootloader Permissions",
-                            "type": "string",
-                            "pattern": "^(r|w){0,2}$"
-                        }
-                    }
-                }
+                "permissions": {"$ref": "#/$defs/permissions"}
             },
             "required": ["permissions", "families"],
             "additionalProperties": false
@@ -114,27 +94,7 @@
                             ]
                         }
                     },
-                    "permissions": {
-                        "description": "Permissions",
-                        "type": "object",
-                        "properties": {
-                            "secure": {
-                                "description": "Secure Permissions",
-                                "type": "string",
-                                "pattern": "^(r|w){0,2}$"
-                            },
-                            "nonsecure": {
-                                "description": "Non-Secure Permissions",
-                                "type": "string",
-                                "pattern": "^(r|w){0,2}$"
-                            },
-                            "bootloader": {
-                                "description": "Bootloader Permissions",
-                                "type": "string",
-                                "pattern": "^(r|w){0,2}$"
-                            }
-                        }
-                    },
+                    "permissions": {"$ref": "#/$defs/permissions"},
                     "link": {
                         "type": "array",
                         "prefixItems": [
@@ -171,5 +131,28 @@
         }
     },
     "required": ["unpartitioned", "partitions"],
-    "additionalProperties": false
+    "additionalProperties": false,
+    "$defs": {
+        "permissions": {
+            "description": "Permissions",
+            "type": "object",
+            "properties": {
+                "secure": {
+                    "description": "Secure Permissions",
+                    "type": "string",
+                    "pattern": "^(r|w){0,2}$"
+                },
+                "nonsecure": {
+                    "description": "Non-Secure Permissions",
+                    "type": "string",
+                    "pattern": "^(r|w){0,2}$"
+                },
+                "bootloader": {
+                    "description": "Bootloader Permissions",
+                    "type": "string",
+                    "pattern": "^(r|w){0,2}$"
+                }
+            }
+        }
+    }
 }
