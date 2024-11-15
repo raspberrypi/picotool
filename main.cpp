@@ -4000,6 +4000,11 @@ bool info_command::execute(device_map &devices) {
             auto partitions = get_partitions(connection);
             vector<uint32_t> starts;
             if (partitions) {
+                // Check if bootloader is present, based on presence of binary info
+                binary_info_header hdr;
+                auto bi_access = get_bi_access(access);
+                bool has_bootloader = find_binary_info(*bi_access, hdr);
+
                 // Don't show device, until all partitions done
                 bool device = settings.info.show_device || settings.info.all;
                 bool debug = settings.info.show_debug || settings.info.all;
@@ -4007,13 +4012,22 @@ bool info_command::execute(device_map &devices) {
                     settings.info.show_basic = true;
                     settings.info.show_pins = true;
                     settings.info.show_build = true;
+                    settings.info.show_metadata = true;
                     settings.info.all = false;
                 }
-                if ((settings.info.show_basic || settings.info.show_pins || settings.info.show_build) || !(settings.info.show_device || settings.info.show_debug)) {
+                if ((settings.info.show_basic || settings.info.show_pins || settings.info.show_build || settings.info.show_metadata) || !(settings.info.show_device || settings.info.show_debug)) {
                     settings.info.show_device = false;
                     settings.info.show_debug = false;
                     for (auto range : *partitions) {
                         starts.push_back(std::get<0>(range));
+                    }
+                    if (has_bootloader && std::none_of(starts.cbegin(), starts.cend(), [](int i) { return i == 0; })) {
+                        // Print bootloader info, only if bootloader is present and not in a partition
+                        fos.first_column(0); fos.hanging_indent(0);
+                        fos << "\nBootloader\n";
+                        fos.first_column(1);
+                        partition_memory_access part_access(access, 0);
+                        info_guts(part_access, &connection);
                     }
                     for (unsigned int i=0; i < starts.size(); i++) {
                         uint32_t start = starts[i];
@@ -4030,6 +4044,7 @@ bool info_command::execute(device_map &devices) {
                     settings.info.show_basic = false;
                     settings.info.show_pins = false;
                     settings.info.show_build = false;
+                    settings.info.show_metadata = false;
                     settings.info.show_device = device;
                     settings.info.show_debug = debug;
                     info_guts(access, &connection);
