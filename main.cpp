@@ -6965,7 +6965,6 @@ bool otp_list_command::execute(device_map &devices) {
                 } else {
                     fos << " (bits " << low << "-" << high << ")\n";
                 }
-                const otp_field *field = m.field;
                 if ((m.field || settings.otp.list_field_descriptions) && !settings.otp.list_no_descriptions && !f.description.empty()) {
                     // Only print field descriptors if matching a field, or if list_field_descriptions is set
                     fos.first_column(indent0);
