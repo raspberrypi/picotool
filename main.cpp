@@ -3110,17 +3110,18 @@ void info_guts(memory_access &raw_access, void *con) {
                     auto e = load_map->entries[i];
                     if (e.storage_address == 0) {
                         ss << "Clear 0x" << std::hex << e.runtime_address;
-                        ss << "+0x" << std::hex << e.size;
+                        ss << "->0x" << std::hex << e.runtime_address + e.size;
                     } else if (e.storage_address != e.runtime_address) {
                         if (is_address_initialized(rp2350_address_ranges_flash, e.runtime_address)) {
                             ss << "ERROR: COPY TO FLASH NOT PERMITTED ";
                         }
                         ss << "Copy 0x" << std::hex << e.storage_address;
-                        ss << "+0x" << std::hex << e.size;
+                        ss << "->0x" << std::hex << e.storage_address + e.size;
                         ss << " to 0x" << std::hex << e.runtime_address;
+                        ss << "->0x" << std::hex << e.runtime_address; + e.size;
                     } else {
                         ss << "Load 0x" << std::hex << e.storage_address;
-                        ss << "+0x" << std::hex << e.size;
+                        ss << "->0x" << std::hex << e.storage_address + e.size;
                     }
                     info_pair("load map entry " + std::to_string(i), ss.str());
                 }
