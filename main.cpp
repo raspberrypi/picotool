@@ -97,7 +97,6 @@ typedef map<enum picoboot_device_result,vector<tuple<model_t, void *, void *>>> 
 
 auto memory_names = map<enum memory_type, string>{
         {memory_type::sram, "RAM"},
-        {memory_type::sram_unstriped, "Unstriped RAM"},
         {memory_type::flash, "Flash"},
         {memory_type::xip_sram, "XIP RAM"},
         {memory_type::rom, "ROM"}
@@ -3922,7 +3921,16 @@ static picoboot::connection get_single_rp2350_bootsel_device_connection(device_m
 #endif
 
 struct progress_bar {
-    explicit progress_bar(string prefix, int width = 30) : prefix(std::move(prefix)), width(width) {
+    explicit progress_bar(string new_prefix, int width = 30) : width(width) {
+        // Align all bars with the longest possible prefix string
+        auto longest_mem = std::max_element(
+            std::begin(memory_names), std::end(memory_names),
+            [] (const auto & p1, const auto & p2) {
+                return p1.second.length() < p2.second.length();
+            }
+        );
+        string extra_space(string("Loading into " + longest_mem->second + ": ").length() - new_prefix.length(), ' ');
+        prefix = new_prefix + extra_space;
         progress(0);
     }
 
@@ -3991,6 +3999,9 @@ bool save_command::execute(device_map &devices) {
             } else {
                 start = settings.from;
                 end = settings.to;
+                // Set offset for verifying
+                settings.offset = start;
+                settings.offset_set = true;
             }
             if (end <= start) {
                 fail(ERROR_ARGS, "Save range is invalid/empty");
@@ -4029,7 +4040,7 @@ bool save_command::execute(device_map &devices) {
     model_t model = get_model(raw_access);
     enum memory_type t1 = get_memory_type(start , model);
     enum memory_type t2 = get_memory_type(end, model);
-    if (t1 == invalid || t1 != t2) {
+    if (t1 != t2 || t1 == invalid || t1 == sram_unstriped) {
         fail(ERROR_NOT_POSSIBLE, "Save range crosses unmapped memory");
     }
     uint32_t size = end - start;
@@ -4106,7 +4117,7 @@ bool save_command::execute(device_map &devices) {
             enum memory_type type = get_memory_type(mem_range.from, model);
             bool ok = true;
             {
-                progress_bar bar("Verifying " + memory_names[type] + ":    ");
+                progress_bar bar("Verifying " + memory_names[type] + ": ");
                 uint32_t batch_size = FLASH_SECTOR_ERASE_SIZE;
                 vector<uint8_t> file_buf;
                 vector<uint8_t> device_buf;
@@ -4264,7 +4275,7 @@ bool load_guts(picoboot::connection con, iostream_memory_access &file_access) {
     for (auto mem_range : ranges) {
         enum memory_type t1 = get_memory_type(mem_range.from, model);
         enum memory_type t2 = get_memory_type(mem_range.to, model);
-        if (t1 != t2 || t1 == invalid || t1 == rom) {
+        if (t1 != t2 || t1 == invalid || t1 == rom || t1 == sram_unstriped) {
             fail(ERROR_FORMAT, "File to load contained an invalid memory range 0x%08x-0x%08x", mem_range.from,
                  mem_range.to);
         }
@@ -4355,7 +4366,7 @@ bool load_guts(picoboot::connection con, iostream_memory_access &file_access) {
         if (settings.load.verify) {
             bool ok = true;
             {
-                progress_bar bar("Verifying " + memory_names[type] + ":    ");
+                progress_bar bar("Verifying " + memory_names[type] + ": ");
                 uint32_t batch_size = FLASH_SECTOR_ERASE_SIZE;
                 vector<uint8_t> file_buf;
                 vector<uint8_t> device_buf;
@@ -4926,7 +4937,7 @@ bool verify_command::execute(device_map &devices) {
         for (auto mem_range : ranges) {
             enum memory_type t1 = get_memory_type(mem_range.from, model);
             enum memory_type t2 = get_memory_type(mem_range.to, model);
-            if (t1 != t2 || t1 == invalid) {
+            if (t1 != t2 || t1 == invalid || t1 == sram_unstriped) {
                 fail(ERROR_NOT_POSSIBLE, "invalid memory range for verification %08x-%08x", mem_range.from, mem_range.to);
             } else {
                 bool ok = true;
