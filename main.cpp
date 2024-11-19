@@ -2997,11 +2997,13 @@ void info_guts(memory_access &raw_access, void *con) {
             if (show_addr) {
                 info_pair("address", hex_string(best_block->physical_addr));
                 info_pair("next block address", hex_string(best_block->next_block_rel + best_block->physical_addr));
+                if (best_block->get_item<ignored_item>() != nullptr) info_pair("block type", "ignored");
             }
 
             // Image Def
             auto image_def = best_block->get_item<image_type_item>();
             if (image_def != nullptr) {
+                if (show_addr) info_pair("block type", "image def");
                 if (image_def->image_type() == type_exe) {
                     switch (image_def->chip()) {
                         case chip_rp2040:
@@ -3037,6 +3039,7 @@ void info_guts(memory_access &raw_access, void *con) {
             // Partition Table
             auto partition_table = best_block->get_item<partition_table_item>();
             if (partition_table != nullptr) {
+                if (show_addr) info_pair("block type", "partition table");
                 info_pair("partition table", partition_table->singleton ? "singleton" : "non-singleton");
                 std::stringstream unpartitioned;
                 unpartitioned << str_permissions(partition_table->unpartitioned_flags);
@@ -3118,7 +3121,7 @@ void info_guts(memory_access &raw_access, void *con) {
                         ss << "Copy 0x" << std::hex << e.storage_address;
                         ss << "->0x" << std::hex << e.storage_address + e.size;
                         ss << " to 0x" << std::hex << e.runtime_address;
-                        ss << "->0x" << std::hex << e.runtime_address; + e.size;
+                        ss << "->0x" << std::hex << e.runtime_address + e.size;
                     } else {
                         ss << "Load 0x" << std::hex << e.storage_address;
                         ss << "->0x" << std::hex << e.storage_address + e.size;
