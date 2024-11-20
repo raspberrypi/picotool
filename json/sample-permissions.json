@@ -1,5 +1,5 @@
 {
-    "$schema": "https://raw.githubusercontent.com/raspberrypi/picotool/jsonschema/json/schemas/permissions-schema.json",
+    "$schema": "https://raw.githubusercontent.com/raspberrypi/picotool/develop/json/schemas/permissions-schema.json",
     "10": {
         "no_key_state": 0,
         "key_r": 0,
