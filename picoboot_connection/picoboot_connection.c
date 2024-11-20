@@ -11,6 +11,7 @@
 
 #include "picoboot_connection.h"
 #include "boot/bootrom_constants.h"
+#include "pico/stdio_usb/reset_interface.h"
 
 #if ENABLE_DEBUG_LOG
 #include <stdio.h>
@@ -139,6 +140,17 @@ enum picoboot_device_result picoboot_open_device(libusb_device *device, libusb_d
             }
         } else {
             return res;
+        }
+    }
+
+    // Runtime reset interface with thirdparty VID
+    if (!ret) {
+        for (int i = 0; i < config->bNumInterfaces; i++) {
+            if (config->interface[i].altsetting[0].bInterfaceClass == 0xff &&
+                config->interface[i].altsetting[0].bInterfaceSubClass == RESET_INTERFACE_SUBCLASS &&
+                config->interface[i].altsetting[0].bInterfaceProtocol == RESET_INTERFACE_PROTOCOL) {
+                return dr_vidpid_stdio_usb;
+            }
         }
     }
 
