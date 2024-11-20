@@ -4684,7 +4684,7 @@ vector<uint8_t> sign_guts_bin(iostream_memory_access in, private_t private_key, 
         std::shared_ptr<entry_point_item> entry_point = new_block.get_item<entry_point_item>();
         if (entry_point == nullptr) {
             std::shared_ptr<vector_table_item> vtor = new_block.get_item<vector_table_item>();
-            uint32_t vtor_loc = 0x10000000;
+            uint32_t vtor_loc = bin_start;
             if (vtor != nullptr) {
                 vtor_loc = vtor->addr;
             }
