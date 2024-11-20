@@ -2986,7 +2986,7 @@ void info_guts(memory_access &raw_access, void *con) {
                 infos[current_group].emplace_back(std::make_pair(name, value));
             }
         };
-        auto info_metadata = [&](std::vector<uint8_t> bin, block *best_block, bool show_addr = false) {
+        auto info_metadata = [&](std::vector<uint8_t> bin, block *best_block, bool verbose_metadata = false) {
             verified_t hash_verified = none;
             verified_t sig_verified = none;
         #if HAS_MBEDTLS
@@ -2994,7 +2994,7 @@ void info_guts(memory_access &raw_access, void *con) {
         #endif
 
             // Addresses
-            if (show_addr) {
+            if (verbose_metadata) {
                 info_pair("address", hex_string(best_block->physical_addr));
                 info_pair("next block address", hex_string(best_block->next_block_rel + best_block->physical_addr));
                 if (best_block->get_item<ignored_item>() != nullptr) info_pair("block type", "ignored");
@@ -3003,7 +3003,7 @@ void info_guts(memory_access &raw_access, void *con) {
             // Image Def
             auto image_def = best_block->get_item<image_type_item>();
             if (image_def != nullptr) {
-                if (show_addr) info_pair("block type", "image def");
+                if (verbose_metadata) info_pair("block type", "image def");
                 if (image_def->image_type() == type_exe) {
                     switch (image_def->chip()) {
                         case chip_rp2040:
@@ -3039,7 +3039,7 @@ void info_guts(memory_access &raw_access, void *con) {
             // Partition Table
             auto partition_table = best_block->get_item<partition_table_item>();
             if (partition_table != nullptr) {
-                if (show_addr) info_pair("block type", "partition table");
+                if (verbose_metadata) info_pair("block type", "partition table");
                 info_pair("partition table", partition_table->singleton ? "singleton" : "non-singleton");
                 std::stringstream unpartitioned;
                 unpartitioned << str_permissions(partition_table->unpartitioned_flags);
@@ -3104,60 +3104,85 @@ void info_guts(memory_access &raw_access, void *con) {
                 }
             }
 
-            // Load Map
-            // todo what should this really report
-            auto load_map = best_block->get_item<load_map_item>();
-            if (load_map != nullptr) {
-                for (unsigned int i=0; i < load_map->entries.size(); i++) {
-                    std::stringstream ss;
-                    auto e = load_map->entries[i];
-                    if (e.storage_address == 0) {
-                        ss << "Clear 0x" << std::hex << e.runtime_address;
-                        ss << "->0x" << std::hex << e.runtime_address + e.size;
-                    } else if (e.storage_address != e.runtime_address) {
-                        if (is_address_initialized(rp2350_address_ranges_flash, e.runtime_address)) {
-                            ss << "ERROR: COPY TO FLASH NOT PERMITTED ";
+            if (verbose_metadata) {
+                // Load Map
+                // todo what should this really report
+                auto load_map = best_block->get_item<load_map_item>();
+                if (load_map != nullptr) {
+                    for (unsigned int i=0; i < load_map->entries.size(); i++) {
+                        std::stringstream ss;
+                        auto e = load_map->entries[i];
+                        if (e.storage_address == 0) {
+                            ss << "Clear 0x" << std::hex << e.runtime_address;
+                            ss << "->0x" << std::hex << e.runtime_address + e.size;
+                        } else if (e.storage_address != e.runtime_address) {
+                            if (is_address_initialized(rp2350_address_ranges_flash, e.runtime_address)) {
+                                ss << "ERROR: COPY TO FLASH NOT PERMITTED ";
+                            }
+                            ss << "Copy 0x" << std::hex << e.storage_address;
+                            ss << "->0x" << std::hex << e.storage_address + e.size;
+                            ss << " to 0x" << std::hex << e.runtime_address;
+                            ss << "->0x" << std::hex << e.runtime_address + e.size;
+                        } else {
+                            ss << "Load 0x" << std::hex << e.storage_address;
+                            ss << "->0x" << std::hex << e.storage_address + e.size;
                         }
-                        ss << "Copy 0x" << std::hex << e.storage_address;
-                        ss << "->0x" << std::hex << e.storage_address + e.size;
-                        ss << " to 0x" << std::hex << e.runtime_address;
-                        ss << "->0x" << std::hex << e.runtime_address + e.size;
-                    } else {
-                        ss << "Load 0x" << std::hex << e.storage_address;
-                        ss << "->0x" << std::hex << e.storage_address + e.size;
+                        info_pair("load map entry " + std::to_string(i), ss.str());
                     }
-                    info_pair("load map entry " + std::to_string(i), ss.str());
                 }
-            }
 
-            // Rolling Window Delta
-            auto rwd = best_block->get_item<rolling_window_delta_item>();
-            if (rwd != nullptr) {
-                info_pair("rolling window delta", hex_string(rwd->addr));
-            }
+                // Rolling Window Delta
+                auto rwd = best_block->get_item<rolling_window_delta_item>();
+                if (rwd != nullptr) {
+                    info_pair("rolling window delta", hex_string(rwd->addr));
+                }
 
-            // Vector Table
-            auto vtor = best_block->get_item<vector_table_item>();
-            if (vtor != nullptr) {
-                info_pair("vector table", hex_string(vtor->addr));
-            }
+                // Vector Table
+                auto vtor = best_block->get_item<vector_table_item>();
+                if (vtor != nullptr) {
+                    info_pair("vector table", hex_string(vtor->addr));
+                }
 
-            // Entry Point
-            auto entry_point = best_block->get_item<entry_point_item>();
-            if (entry_point != nullptr) {
-                std::stringstream ss;
-                ss << "EP " << hex_string(entry_point->ep);
-                ss << ", SP " << hex_string(entry_point->sp);
-                if (entry_point->splim_set) ss << ", SPLIM " << hex_string(entry_point->splim);
-                info_pair("entry point", ss.str());
+                // Entry Point
+                auto entry_point = best_block->get_item<entry_point_item>();
+                if (entry_point != nullptr) {
+                    std::stringstream ss;
+                    ss << "EP " << hex_string(entry_point->ep);
+                    ss << ", SP " << hex_string(entry_point->sp);
+                    if (entry_point->splim_set) ss << ", SPLIM " << hex_string(entry_point->splim);
+                    info_pair("entry point", ss.str());
+                }
             }
 
             // Hash and Sig
             if (hash_verified != none) {
-                info_pair("hash value", hash_verified == passed ? "verified" : "incorrect");
+                info_pair("hash", hash_verified == passed ? "verified" : "incorrect");
+                if (verbose_metadata) {
+                    std::shared_ptr<hash_value_item> hash_value = best_block->get_item<hash_value_item>();
+                    assert(hash_value != nullptr); // verify_block would return none if it's not present
+                    std::stringstream val;
+                    for(uint8_t i : hash_value->hash_bytes) {
+                        val << hex_string(i, 2, false, true);
+                    }
+                    info_pair("hash value", val.str());
+                }
             }
             if (sig_verified != none) {
                 info_pair("signature", sig_verified == passed ? "verified" : "incorrect");
+                if (verbose_metadata) {
+                    std::shared_ptr<signature_item> signature = best_block->get_item<signature_item>();
+                    assert(signature != nullptr); // verify_block would return none if it's not present
+                    std::stringstream sig;
+                    for(uint8_t i : signature->signature_bytes) {
+                        sig << hex_string(i, 2, false, true);
+                    }
+                    info_pair("signature value", sig.str());
+                    std::stringstream pkey;
+                    for(uint8_t i : signature->public_key_bytes) {
+                        pkey << hex_string(i, 2, false, true);
+                    }
+                    info_pair("public key", pkey.str());
+                }
             }
         };
 
