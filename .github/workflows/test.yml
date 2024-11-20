@@ -39,7 +39,7 @@ jobs:
       - name: Install dependencies (macOS)
         if: runner.os == 'macOS'
         run: |
-          brew install cmake libusb pkg-config ninja
+          brew install libusb ninja
           brew install --cask gcc-arm-embedded
 
       - name: Install dependencies (Linux)
