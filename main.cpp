@@ -7299,19 +7299,20 @@ bool otp_white_label_command::execute(device_map &devices) {
         // Check for separate max_power and attributes
         uint16_t val = 0;
         int hex_val = 0;
-        if (wl_json["device"].contains("max_power")) {
+        if (wl_json["device"].contains("max_power") && wl_json["device"].contains("attributes")) {
             if (!get_json_int(wl_json["device"]["max_power"], hex_val)) {
                 fail(ERROR_FORMAT, "MaxPower must be an integer");
             }
             val |= (hex_val << 8);
-        }
-        if (wl_json["device"].contains("attributes")) {
+
             if (!get_json_int(wl_json["device"]["attributes"], hex_val)) {
                 fail(ERROR_FORMAT, "Device Attributes must be an integer");
             } else if (hex_val & 0b11111 || ~hex_val & 0x80) {
                 fail(ERROR_FORMAT, "Device Attributes must have bit 7 set (0x80), and bits 4-0 clear");
             }
             val |= hex_val;
+        } else if (wl_json["device"].contains("max_power") || wl_json["device"].contains("attributes")) {
+            fail(ERROR_INCOMPATIBLE, "Must specify both max_power and attributes in the JSON file");
         }
         if (val) {
             fos << "Setting attributes " << hex_string(val, 4) << "\n";

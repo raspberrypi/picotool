@@ -1,0 +1,124 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "White Labelling",
+    "description": "White Labelling Configuration, see section 5.7 in the RP2350 datasheet for more details",
+    "type": "object",
+    "properties": {
+        "$schema": {},
+        "device": {
+            "description": "Device Properties",
+            "type": "object",
+            "properties": {
+                "vid": {
+                    "description": "Vendor ID",
+                    "type": "string",
+                    "pattern": "^0x[0-9a-fA-F]{4}$"
+                },
+                "pid": {
+                    "description": "Product ID",
+                    "type": "string",
+                    "pattern": "^0x[0-9a-fA-F]{4}$"
+                },
+                "bcd": {
+                    "description": "Device Revision",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 99
+                },
+                "lang_id": {
+                    "description": "Language ID",
+                    "type": "string",
+                    "pattern": "^0x[0-9a-fA-F]{4}$"
+                },
+                "manufacturer": {
+                    "description": "Manufacturer Name (can contain unicode)",
+                    "type": "string",
+                    "maxLength": 30
+                },
+                "product": {
+                    "description": "Product Name (can contain unicode)",
+                    "type": "string",
+                    "maxLength": 30
+                },
+                "serial_number": {
+                    "description": "Serial Number (can contain unicode)",
+                    "type": "string",
+                    "maxLength": 30
+                },
+                "max_power": {
+                    "description": "Max power consumption, in 2mA units",
+                    "type": ["integer", "string"],
+                    "maximum": 255,
+                    "pattern": "^0x[0-9a-fA-F]{1,2}$"
+                },
+                "attributes": {
+                    "description": "Device attributes: bit 7 must be 1, bit 6 is self-powered, bit 5 is remote wakeup, bits 0-4 must be 0",
+                    "type": ["integer", "string"],
+                    "minimum": 128,
+                    "maximum": 224,
+                    "pattern": "^0x[8aceACE]{1}0$"
+                }
+            },
+            "dependentRequired": {
+                "max_power": ["attributes"],
+                "attributes": ["max_power"]
+            },
+            "additionalProperties": false
+        },
+        "scsi": {
+            "description": "SCSI Inquiry Values",
+            "type": "object",
+            "properties": {
+                "vendor": {
+                    "description": "SCSI Vendor",
+                    "type": "string",
+                    "maxLength": 8
+                },
+                "product": {
+                    "description": "SCSI Product",
+                    "type": "string",
+                    "maxLength": 16
+                },
+                "version": {
+                    "description": "SCSI Version",
+                    "type": "string",
+                    "maxLength": 4
+                }
+            },
+            "additionalProperties": false
+        },
+        "volume": {
+            "description": "MSD Volume Configuration",
+            "type": "object",
+            "properties": {
+                "label": {
+                    "description": "Volume Label",
+                    "type": "string",
+                    "maxLength": 11
+                },
+                "redirect_url": {
+                    "description": "INDEX.HTM Redirect URL",
+                    "type": "string",
+                    "maxLength": 127
+                },
+                "redirect_name": {
+                    "description": "INDEX.HTM Redirect Name",
+                    "type": "string",
+                    "maxLength": 127
+                },
+                "model": {
+                    "description": "INFO_UF2.TXT Model Name",
+                    "type": "string",
+                    "maxLength": 127
+                },
+                "board_id": {
+                    "description": "INFO_UF2.TXT Board ID",
+                    "type": "string",
+                    "maxLength": 127
+                }
+            },
+            "additionalProperties": false
+        }
+    },
+    "additionalProperties": false
+}

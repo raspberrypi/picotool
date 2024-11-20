@@ -1,0 +1,50 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "OTP Settings",
+    "description": "OTP Settings",
+    "type": "object",
+    "properties": {"$schema": {}},
+    "patternProperties": {
+        "^\\d{1,2}:\\d{1,2}$": {
+            "description": "Generic OTP Row",
+            "type": "object",
+            "properties": {
+                "ecc": {
+                    "description": "Protect with ECC",
+                    "type": "boolean"
+                },
+                "value": {
+                    "description": "Value to write",
+                    "type": ["array", "string", "integer"],
+                    "pattern": "^0x[0-9a-fA-F]{1,6}$",
+                    "items": {
+                        "description": "Data Byte",
+                        "type": ["string", "integer"],
+                        "pattern": "^0x[0-9a-fA-F]{1,2}$"
+                    }
+                }
+            },
+            "additionalProperties": false,
+            "required": ["ecc", "value"]
+        },
+        "^[\\d\\w_]+$": {
+            "description": "Defined OTP Row",
+            "type": ["object", "array", "string", "integer"],
+            "pattern": "^0x[0-9a-fA-F]{1,6}$",
+            "items": {
+                "description": "Data Byte",
+                "type": ["string", "integer"],
+                "pattern": "^0x[0-9a-fA-F]{1,2}$"
+            },
+            "patternProperties": {
+                "^[\\d\\w_]+$": {
+                    "description": "OTP Field",
+                    "type": ["string", "integer"],
+                    "pattern": "^0x[0-9a-fA-F]{1,6}$"
+                }
+            },
+            "additionalProperties": false
+        }
+    },
+    "additionalProperties": false
+}

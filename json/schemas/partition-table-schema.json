@@ -1,0 +1,158 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Partition Table",
+    "description": "Layout of the partition table",
+    "type": "object",
+    "properties": {
+        "$schema": {},
+        "version": {
+            "description": "Partition Table Version",
+            "type": "array",
+            "prefixItems": [
+                {
+                    "description": "Major Version",
+                    "type": "integer",
+                    "minimum": 0
+                },
+                {
+                    "description": "Minor Version",
+                    "type": "integer",
+                    "minimum": 0
+                }
+            ]
+        },
+        "unpartitioned": {
+            "description": "Unpartitioned space UF2 families and permissions",
+            "type": "object",
+            "properties": {
+                "families": {
+                    "description": "UF2 families accepted",
+                    "type": "array",
+                    "items": {
+                        "enum": [
+                            "data",
+                            "absolute",
+                            "rp2040",
+                            "rp2350-arm-s",
+                            "rp2350-arm-ns",
+                            "rp2350-riscv"
+                        ]
+                    }
+                },
+                "permissions": {"$ref": "#/$defs/permissions"}
+            },
+            "required": ["permissions", "families"],
+            "additionalProperties": false
+        },
+        "partitions": {
+            "description": "Partitions",
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "description": "Partition Name",
+                        "type": "string"
+                    },
+                    "id": {
+                        "description": "Partition ID",
+                        "type": ["integer", "string"],
+                        "minimum": 0,
+                        "exclusiveMaximum": 18446744073709551616,
+                        "pattern": "^0x[0-9a-fA-F]{1,16}$",
+                        "examples": [
+                            "0xDED3FFFF01234567",
+                            29,
+                            "0xdeadbeef"
+                        ]
+                    },
+                    "start": {
+                        "description": "Partition Start",
+                        "type": ["integer", "string"],
+                        "minimum": 0,
+                        "pattern": "^\\d+(k|K)$"
+                    },
+                    "size": {
+                        "description": "Partition Size",
+                        "type": ["integer", "string"],
+                        "minimum": 0,
+                        "pattern": "^\\d+(k|K)$"
+                    },
+                    "families": {
+                        "description": "UF2 families accepted",
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "pattern": "^data|absolute|rp2040|rp2350-arm-s|rp2350-arm-ns|rp2350-riscv|0x[0-9a-fA-F]{1,8}$",
+                            "examples": [
+                                "data",
+                                "absolute",
+                                "rp2040",
+                                "rp2350-arm-s",
+                                "rp2350-arm-ns",
+                                "rp2350-riscv"
+                            ]
+                        }
+                    },
+                    "permissions": {"$ref": "#/$defs/permissions"},
+                    "link": {
+                        "type": "array",
+                        "prefixItems": [
+                            {
+                                "description": "Link Type",
+                                "enum": ["a", "owner" , "none"]
+                            },
+                            {
+                                "description": "Link Value",
+                                "type": "integer"
+                            }
+                        ]
+                    },
+                    "no_reboot_on_uf2_download": {
+                        "description": "Don't reboot after UF2 is downloaded",
+                        "type": "boolean"
+                    },
+                    "ab_non_bootable_owner_affinity": {
+                        "description": "Pick the non-bootable owner instead",
+                        "type": "boolean"
+                    },
+                    "ignored_during_riscv_boot": {
+                        "description": "Ignore this partition during Risc-V boot",
+                        "type": "boolean"
+                    },
+                    "ignored_during_arm_boot": {
+                        "description": "Ignore this partition during Arm boot",
+                        "type": "boolean"
+                    }
+                },
+                "required": ["size", "permissions", "families"],
+                "additionalProperties": false
+            }
+        }
+    },
+    "required": ["unpartitioned", "partitions"],
+    "additionalProperties": false,
+    "$defs": {
+        "permissions": {
+            "description": "Permissions",
+            "type": "object",
+            "properties": {
+                "secure": {
+                    "description": "Secure Permissions",
+                    "type": "string",
+                    "pattern": "^(r|w){0,2}$"
+                },
+                "nonsecure": {
+                    "description": "Non-Secure Permissions",
+                    "type": "string",
+                    "pattern": "^(r|w){0,2}$"
+                },
+                "bootloader": {
+                    "description": "Bootloader Permissions",
+                    "type": "string",
+                    "pattern": "^(r|w){0,2}$"
+                }
+            }
+        }
+    }
+}

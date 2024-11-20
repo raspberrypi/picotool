@@ -1,0 +1,37 @@
+{
+    "$schema": "https://raw.githubusercontent.com/raspberrypi/picotool/develop/json/schemas/partition-table-schema.json",
+    "version": [1, 0],
+    "unpartitioned": {
+        "families": ["absolute"],
+        "permissions": {
+            "secure": "rw",
+            "nonsecure": "rw",
+            "bootloader": "rw"
+        }
+    },
+    "partitions": [
+        {
+            "name": "A",
+            "id": 0,
+            "size": "2044K",
+            "families": ["rp2350-arm-s", "rp2350-riscv"],
+            "permissions": {
+                "secure": "rw",
+                "nonsecure": "rw",
+                "bootloader": "rw"
+            }
+        },
+        {
+            "name": "B",
+            "id": 1,
+            "size": "2044K",
+            "families": ["rp2350-arm-s", "rp2350-riscv"],
+            "permissions": {
+                "secure": "rw",
+                "nonsecure": "rw",
+                "bootloader": "rw"
+            },
+            "link": ["a", 0]
+        }
+    ]
+}

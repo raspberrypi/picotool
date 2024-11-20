@@ -1,0 +1,77 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "OTP Contents",
+    "description": "Defined contents of the RP-series device OTP",
+    "type": "array",
+    "items": {
+        "description": "OTP Row",
+        "type": "object",
+        "properties": {
+            "crit": {
+                "description": "Critical Row (use three-of-eight vote encoding)",
+                "type": "boolean"
+            },
+            "description": {
+                "description": "Row Description",
+                "type": "string"
+            },
+            "ecc": {
+                "description": "ECC Row",
+                "type": "boolean"
+            },
+            "fields": {
+                "description": "Fields within row",
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "description": {
+                            "description": "Field Description",
+                            "type": "string"
+                        },
+                        "mask": {
+                            "description": "Field Bit Mask",
+                            "type": "integer"
+                        },
+                        "name": {
+                            "description": "Field Name",
+                            "type": "string"
+                        }
+                    },
+                    "required": ["description", "mask", "name"],
+                    "additionalProperties": false
+                }
+            },
+            "mask": {
+                "description": "Row Bit Mask",
+                "type": "integer"
+            },
+            "name": {
+                "description": "Row Name",
+                "type": "string"
+            },
+            "redundancy": {
+                "description": "Number of redundant rows",
+                "type": "integer"
+            },
+            "row": {
+                "description": "OTP Row",
+                "type": "integer"
+            },
+            "seq_index": {
+                "description": "Sequence Index",
+                "type": "integer"
+            },
+            "seq_length": {
+                "description": "Sequence Length",
+                "type": "integer"
+            },
+            "seq_prefix": {
+                "description": "Sequence Prefix",
+                "type": "string"
+            }
+        },
+        "required": ["crit", "description"],
+        "additionalProperties": false
+    }
+}

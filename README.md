@@ -763,7 +763,7 @@ Family ID 'rp2350-arm-s' can be downloaded in partition 0:
 ### create
 
 This command allows you to create partition tables, and additionally embed them into the block loop if ELF files (for example, for bootloaders).
-By default, all partition tables are hashed, and you can also sign them.
+By default, all partition tables are hashed, and you can also sign them. The schema for this JSON file is [here](json/schemas/partition-table-schema.json).
 
 ```text
 $ picotool help partition create
@@ -907,7 +907,7 @@ The `otp` commands are for interacting with the RP2350 OTP Memory. They are not 
 Note that the OTP Memory is One-Time-Programmable, which means that once a bit has been changed from 0 to 1, it cannot be changed back.
 Therefore, caution should be used when using these commands, as they risk bricking your RP2350 device. For example, if you set SECURE_BOOT_ENABLE but don't set a boot key, and disable the PICOBOOT interface, then your device will be unusable.
 
-For the `list`, `set`, `get` and `load` commands, you can define your own OTP layout in a JSON file and pass that in with the `-i` argument. These rows will be added to the default rows when parsing.
+For the `list`, `set`, `get` and `load` commands, you can define your own OTP layout in a JSON file and pass that in with the `-i` argument. These rows will be added to the default rows when parsing. The schema for this JSON file is [here](json/schemas/otp-contents-schema.json)
 
 ```text
 $ picotool help otp
@@ -940,7 +940,7 @@ These commands will set/get specific rows of OTP. By default, they will write/re
 
 ### load
 
-This command allows loading of a range of OTP rows onto the device. The source can be a binary file, or a JSON file such as the one output by `picotool sign`.
+This command allows loading of a range of OTP rows onto the device. The source can be a binary file, or a JSON file such as the one output by `picotool sign`. The schema for this JSON file is [here](json/schemas/otp-schema.json)
 For example, if you wish to sign a binary and then test secure boot with it, you can run the following set of commands:
 ```text
 $ picotool sign hello_world.elf hello_world.signed.elf private.pem otp.json
@@ -952,7 +952,7 @@ $ picotool reboot
 ### white-label
 
 This command allows for OTP white-labelling, which sets the USB configuration used by the device in BOOTSEL mode.
-This can be configured from a JSON file, an example of which is in [sample-wl.json](sample-wl.json).
+This can be configured from a JSON file, an example of which is in [sample-wl.json](json/sample-wl.json). The schema for this JSON file is [here](json/schemas/whitelabel-schema.json)
 
 ```text
 $ picotool help otp white-label
@@ -990,7 +990,7 @@ OPTIONS:
 ```
 
 ```text
-$ picotool otp white-label -s 0x100 ../sample-wl.json 
+$ picotool otp white-label -s 0x100 sample-wl.json 
 Setting attributes 20e0
 0x2e8b, 0x000e, 0x0215, 0x0c09, 0x1090, 0x200c, 0x2615, 0x20e0, 0x310b, 0x3706, 0x3a04, 0x3c04, 0x3e21, 0x4f15, 0x5a0a, 0x5f0a, 0x007a, 0x00df, 0x6c34, 0xd83c, 0xdf4c, 0x0020, 0x0054, 0x0065, 0x0073, 0x0074, 0x0027, 0x0073,
 0x0020, 0x0050, 0x0069, 0x0073, 0x6554, 0x7473, 0x5220, 0x3250, 0x3533, 0x3f30, 0x6f6e, 0x6e74, 0x6365, 0x7365, 0x6173, 0x6972, 0x796c, 0x6e61, 0x6d75, 0x6562, 0x0072, 0x6554, 0x7473, 0x6950, 0x4220, 0x6f6f, 0x0074, 0x6554,
@@ -1032,7 +1032,7 @@ Device Descriptor:
 This command will run a binary on your device in order to set the OTP permissions, as these are not directly accessible from `picotool` on due to the default permissions settings required to fix  errata XXX on RP2350. 
 Because it runs a binary, the binary needs to be sign it if secure boot is enabled. The binary will print what it is doing over uart, which
 can be configured using the UART Configuration arguments. You can define your OTP permissions in a json file, an example of which
-is in [sample-permissions.json](sample-permissions.json).
+is in [sample-permissions.json](json/sample-permissions.json). The schema for this JSON file is [here](json/schemas/permissions-schema.json)
 
 ```text
 $ picotool help otp permissions
@@ -1081,7 +1081,7 @@ OPTIONS:
 ```
 
 ```text
-$ picotool otp permissions --sign private.pem --tx 46 ../sample-permissions.json 
+$ picotool otp permissions --sign private.pem --tx 46 sample-permissions.json 
 Picking file ./xip_ram_perms.elf
 page10
 page10 = 0

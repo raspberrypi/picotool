@@ -1,4 +1,5 @@
 {
+    "$schema": "https://raw.githubusercontent.com/raspberrypi/picotool/develop/json/schemas/whitelabel-schema.json",
     "device": {
         "vid": "0x2e8b",
         "pid": "0x000e",
