@@ -4613,7 +4613,14 @@ void sign_guts_elf(elf_file* elf, private_t private_key, public_t public_key) {
         std::shared_ptr<entry_point_item> entry_point = new_block.get_item<entry_point_item>();
         if (entry_point == nullptr) {
             std::shared_ptr<vector_table_item> vtor = new_block.get_item<vector_table_item>();
-            uint32_t vtor_loc = elf->header().entry < SRAM_START ? 0x10000000 : 0x20000000;
+            uint32_t vtor_loc = 0x10000000;
+            if (elf->header().entry >= SRAM_START) {
+                vtor_loc = 0x20000000;
+            } else if (elf->header().entry >= XIP_SRAM_START_RP2350) {
+                vtor_loc = 0x13ffc000;
+            } else {
+                vtor_loc = 0x10000000;
+            }
             if (vtor != nullptr) {
                 vtor_loc = vtor->addr;
             } else {
