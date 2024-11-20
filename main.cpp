@@ -1072,7 +1072,7 @@ struct otp_set_command : public cmd {
                         (option('c', "--copies") & integer("copies").min(1).set(settings.otp.redundancy)) % "Read multiple redundant values" +
                         option('r', "--raw").set(settings.otp.raw) % "Set raw 24 bit values" +
                         option('e', "--ecc").set(settings.otp.ecc) % "Use error correction" +
-                        option('s', "--ignore-set").set(settings.otp.ignore_set) % "Ignore any already-set bits" +
+                        option('s', "--set-bits").set(settings.otp.ignore_set) % "Set bits only" +
                         (option('i', "--include") & value("filename").add_to(settings.otp.extra_files)).min(0).max(1) % "Include extra otp definition" // todo more than 1
                 ).min(0).doc_non_optional(true) % "Redundancy/Error Correction Overrides" +
                 (
