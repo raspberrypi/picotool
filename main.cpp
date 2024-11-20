@@ -2986,22 +2986,22 @@ void info_guts(memory_access &raw_access, void *con) {
                 infos[current_group].emplace_back(std::make_pair(name, value));
             }
         };
-        auto info_metadata = [&](std::vector<uint8_t> bin, block *best_block, bool verbose_metadata = false) {
+        auto info_metadata = [&](std::vector<uint8_t> bin, block *current_block, bool verbose_metadata = false) {
             verified_t hash_verified = none;
             verified_t sig_verified = none;
         #if HAS_MBEDTLS
-            verify_block(bin, raw_access.get_binary_start(), raw_access.get_binary_start(), best_block, hash_verified, sig_verified);
+            verify_block(bin, raw_access.get_binary_start(), raw_access.get_binary_start(), current_block, hash_verified, sig_verified);
         #endif
 
             // Addresses
             if (verbose_metadata) {
-                info_pair("address", hex_string(best_block->physical_addr));
-                info_pair("next block address", hex_string(best_block->next_block_rel + best_block->physical_addr));
-                if (best_block->get_item<ignored_item>() != nullptr) info_pair("block type", "ignored");
+                info_pair("address", hex_string(current_block->physical_addr));
+                info_pair("next block address", hex_string(current_block->next_block_rel + current_block->physical_addr));
+                if (current_block->get_item<ignored_item>() != nullptr) info_pair("block type", "ignored");
             }
 
             // Image Def
-            auto image_def = best_block->get_item<image_type_item>();
+            auto image_def = current_block->get_item<image_type_item>();
             if (image_def != nullptr) {
                 if (verbose_metadata) info_pair("block type", "image def");
                 if (image_def->image_type() == type_exe) {
@@ -3037,7 +3037,7 @@ void info_guts(memory_access &raw_access, void *con) {
             }
 
             // Partition Table
-            auto partition_table = best_block->get_item<partition_table_item>();
+            auto partition_table = current_block->get_item<partition_table_item>();
             if (partition_table != nullptr) {
                 if (verbose_metadata) info_pair("block type", "partition table");
                 info_pair("partition table", partition_table->singleton ? "singleton" : "non-singleton");
@@ -3093,7 +3093,7 @@ void info_guts(memory_access &raw_access, void *con) {
             }
 
             // Version
-            auto version = best_block->get_item<version_item>();
+            auto version = current_block->get_item<version_item>();
             if (version != nullptr) {
                 info_pair("version", std::to_string(version->major) + "." + std::to_string(version->minor));
                 if (version->otp_rows.size() > 0) {
@@ -3107,7 +3107,7 @@ void info_guts(memory_access &raw_access, void *con) {
             if (verbose_metadata) {
                 // Load Map
                 // todo what should this really report
-                auto load_map = best_block->get_item<load_map_item>();
+                auto load_map = current_block->get_item<load_map_item>();
                 if (load_map != nullptr) {
                     for (unsigned int i=0; i < load_map->entries.size(); i++) {
                         std::stringstream ss;
@@ -3132,19 +3132,19 @@ void info_guts(memory_access &raw_access, void *con) {
                 }
 
                 // Rolling Window Delta
-                auto rwd = best_block->get_item<rolling_window_delta_item>();
+                auto rwd = current_block->get_item<rolling_window_delta_item>();
                 if (rwd != nullptr) {
                     info_pair("rolling window delta", hex_string(rwd->addr));
                 }
 
                 // Vector Table
-                auto vtor = best_block->get_item<vector_table_item>();
+                auto vtor = current_block->get_item<vector_table_item>();
                 if (vtor != nullptr) {
                     info_pair("vector table", hex_string(vtor->addr));
                 }
 
                 // Entry Point
-                auto entry_point = best_block->get_item<entry_point_item>();
+                auto entry_point = current_block->get_item<entry_point_item>();
                 if (entry_point != nullptr) {
                     std::stringstream ss;
                     ss << "EP " << hex_string(entry_point->ep);
@@ -3158,7 +3158,7 @@ void info_guts(memory_access &raw_access, void *con) {
             if (hash_verified != none) {
                 info_pair("hash", hash_verified == passed ? "verified" : "incorrect");
                 if (verbose_metadata) {
-                    std::shared_ptr<hash_value_item> hash_value = best_block->get_item<hash_value_item>();
+                    std::shared_ptr<hash_value_item> hash_value = current_block->get_item<hash_value_item>();
                     assert(hash_value != nullptr); // verify_block would return none if it's not present
                     std::stringstream val;
                     for(uint8_t i : hash_value->hash_bytes) {
@@ -3170,7 +3170,7 @@ void info_guts(memory_access &raw_access, void *con) {
             if (sig_verified != none) {
                 info_pair("signature", sig_verified == passed ? "verified" : "incorrect");
                 if (verbose_metadata) {
-                    std::shared_ptr<signature_item> signature = best_block->get_item<signature_item>();
+                    std::shared_ptr<signature_item> signature = current_block->get_item<signature_item>();
                     assert(signature != nullptr); // verify_block would return none if it's not present
                     std::stringstream sig;
                     for(uint8_t i : signature->signature_bytes) {
@@ -3367,18 +3367,18 @@ void info_guts(memory_access &raw_access, void *con) {
                 uint32_t read_size = 0x1000;
                 DEBUG_LOG("Reading from %x size %x\n", raw_access.get_binary_start(), read_size);
                 bin = raw_access.read_vector<uint8_t>(raw_access.get_binary_start(), read_size, true);
-                std::unique_ptr<block> best_block = find_first_block(bin, raw_access.get_binary_start());
-                if (best_block) {
+                std::unique_ptr<block> first_block = find_first_block(bin, raw_access.get_binary_start());
+                if (first_block) {
                     // verify stuff
                     get_more_bin_cb more_cb = [&raw_access](std::vector<uint8_t> &bin, uint32_t new_size) {
                         DEBUG_LOG("Now reading from %x size %x\n", raw_access.get_binary_start(), new_size);
                         bin = raw_access.read_vector<uint8_t>(raw_access.get_binary_start(), new_size, true);
                     };
-                    auto all_blocks = get_all_blocks(bin, raw_access.get_binary_start(), best_block, more_cb);
+                    auto all_blocks = get_all_blocks(bin, raw_access.get_binary_start(), first_block, more_cb);
 
                     int block_i = 0;
                     select_group(metadata_info[block_i++], true);
-                    info_metadata(bin, best_block.get(), true);
+                    info_metadata(bin, first_block.get(), true);
                     for (auto &block : all_blocks) {
                         select_group(metadata_info[block_i++], true);
                         info_metadata(bin, block.get(), true);
