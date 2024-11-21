@@ -4614,19 +4614,19 @@ void sign_guts_elf(elf_file* elf, private_t private_key, public_t public_key) {
         if (entry_point == nullptr) {
             std::shared_ptr<vector_table_item> vtor = new_block.get_item<vector_table_item>();
             uint32_t vtor_loc = 0x10000000;
-            if (elf->header().entry >= SRAM_START) {
-                vtor_loc = 0x20000000;
-            } else if (elf->header().entry >= XIP_SRAM_START_RP2350) {
-                vtor_loc = 0x13ffc000;
-            } else {
-                vtor_loc = 0x10000000;
-            }
             if (vtor != nullptr) {
                 vtor_loc = vtor->addr;
             } else {
-                std::shared_ptr<rolling_window_delta_item> rwd = new_block.get_item<rolling_window_delta_item>();
-                if (rwd != nullptr) {
-                    vtor_loc += rwd->addr;
+                if (elf->header().entry >= SRAM_START) {
+                    vtor_loc = 0x20000000;
+                } else if (elf->header().entry >= XIP_SRAM_START_RP2350) {
+                    vtor_loc = 0x13ffc000;
+                } else {
+                    vtor_loc = 0x10000000;
+                    std::shared_ptr<rolling_window_delta_item> rwd = new_block.get_item<rolling_window_delta_item>();
+                    if (rwd != nullptr) {
+                        vtor_loc += rwd->addr;
+                    }
                 }
             }
             auto segment = elf->segment_from_physical_address(vtor_loc);
