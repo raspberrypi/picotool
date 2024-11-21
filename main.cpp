@@ -3206,11 +3206,11 @@ void info_guts(memory_access &raw_access, void *con) {
         auto device_info = group("Device Information", (settings.info.show_device || settings.info.all) & raw_access.is_device());
         // select them up front to impose order
         select_group(program_info);
+        select_group(pin_info);
+        select_group(build_info);
         for (auto mb : metadata_info) {
             select_group(mb);
         }
-        select_group(pin_info);
-        select_group(build_info);
         select_group(device_info);
         binary_info_header hdr;
         try {
