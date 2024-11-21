@@ -434,6 +434,7 @@ struct _settings {
     struct {
         bool show_basic = false;
         bool all = false;
+        bool show_metadata = false;
         bool show_pins = false;
         bool show_device = false;
         bool show_debug = false;
@@ -598,6 +599,7 @@ struct info_command : public cmd {
         return (
             (
                 option('b', "--basic").set(settings.info.show_basic) % "Include basic information. This is the default" +
+                option('m', "--metadata").set(settings.info.show_metadata) % "Include all metadata blocks" +
                 option('p', "--pins").set(settings.info.show_pins) % "Include pin information" +
                 option('d', "--device").set(settings.info.show_device) % "Include device information" +
                 option("--debug").set(settings.info.show_debug) % "Include device debug information" +
@@ -874,9 +876,6 @@ struct partition_info_command : public cmd {
     string get_doc() const override {
         return "Print the device's partition table.";
     }
-
-    void print_permissions(unsigned int p) const;
-    void insert_default_families(uint32_t flags_and_permissions, vector<std::string> &family_ids) const;
 };
 #endif
 
@@ -921,9 +920,6 @@ struct partition_create_command : public cmd {
     string get_doc() const override {
         return "Create a partition table from json";
     }
-
-    void print_permissions(unsigned int p) const;
-    void insert_default_families(uint32_t flags_and_permissions, vector<std::string> &family_ids) const;
 };
 
 
@@ -2921,6 +2917,39 @@ std::shared_ptr<memory_access> get_bi_access(memory_access &raw_access) {
     return std::make_shared<remapped_memory_access>(raw_access, rmap);
 }
 
+string str_permissions(unsigned int p) {
+    static_assert(PICOBIN_PARTITION_PERMISSION_S_R_BITS == (1u << 26), "");
+    static_assert(PICOBIN_PARTITION_PERMISSION_S_W_BITS == (1u << 27), "");
+    static_assert(PICOBIN_PARTITION_PERMISSION_NS_W_BITS == (1u << 29), "");
+    static_assert(PICOBIN_PARTITION_PERMISSION_NSBOOT_W_BITS == (1u << 31), "");
+
+    std::stringstream ss;
+    ss << " S(";
+    unsigned int r = (p >> 26) & 3;
+    if (r & 1) ss << "r";
+    if (r & 2) ss << "w"; else if (!r) ss << "-";
+    ss << ") NSBOOT(";
+    r = (p >> 30) & 3;
+    if (r & 1) ss << "r";
+    if (r & 2) ss << "w"; else if (!r) ss << "-";
+    ss << ") NS(";
+    r = (p >> 28) & 3;
+    if (r & 1) ss << "r";
+    if (r & 2) ss << "w"; else if (!r) ss << "-";
+    ss << ")";
+
+    return ss.str();
+}
+
+void insert_default_families(uint32_t flags_and_permissions, vector<std::string> &family_ids) {
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_ABSOLUTE_BITS) family_ids.emplace_back(absolute_family_name);
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2040_BITS) family_ids.emplace_back(rp2040_family_name);
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_S_BITS) family_ids.emplace_back(rp2350_arm_s_family_name);
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_NS_BITS) family_ids.emplace_back(rp2350_arm_ns_family_name);
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_RISCV_BITS) family_ids.emplace_back(rp2350_riscv_family_name);
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_DATA_BITS) family_ids.emplace_back(data_family_name);
+}
+
 #if HAS_LIBUSB
 void info_guts(memory_access &raw_access, picoboot::connection *con) {
 #else
@@ -2936,11 +2965,18 @@ void info_guts(memory_access &raw_access, void *con) {
         vector<group> groups;
         string current_group;
         map<string, vector<pair<string,string>>> infos;
-        auto select_group = [&](const group &g1, bool enabled = true) {
+        // Set enable to true to enable the selected group
+        auto select_group = [&](const group &g1, bool enable = false) {
             if (std::find_if(groups.begin(), groups.end(), [&](const group &g2) {
                 return g1.name == g2.name;
             }) == groups.end()) {
                 groups.push_back(g1);
+            }
+            auto enable_changed = std::find_if(groups.begin(), groups.end(), [&](const group &g2) {
+                return g1.name == g2.name && (enable && !g2.enabled);
+            });
+            if (enable_changed != groups.end()) {
+                enable_changed->enabled = true;
             }
             current_group = g1.name;
         };
@@ -2950,15 +2986,221 @@ void info_guts(memory_access &raw_access, void *con) {
                 infos[current_group].emplace_back(std::make_pair(name, value));
             }
         };
+        auto info_metadata = [&](std::vector<uint8_t> bin, block *current_block, bool verbose_metadata = false) {
+            verified_t hash_verified = none;
+            verified_t sig_verified = none;
+        #if HAS_MBEDTLS
+            verify_block(bin, raw_access.get_binary_start(), raw_access.get_binary_start(), current_block, hash_verified, sig_verified);
+        #endif
+
+            // Addresses
+            if (verbose_metadata) {
+                info_pair("address", hex_string(current_block->physical_addr));
+                info_pair("next block address", hex_string(current_block->next_block_rel + current_block->physical_addr));
+                if (current_block->get_item<ignored_item>() != nullptr) info_pair("block type", "ignored");
+            }
+
+            // Image Def
+            auto image_def = current_block->get_item<image_type_item>();
+            if (image_def != nullptr) {
+                if (verbose_metadata) info_pair("block type", "image def");
+                if (image_def->image_type() == type_exe) {
+                    switch (image_def->chip()) {
+                        case chip_rp2040:
+                            info_pair("target chip", "RP2040");
+                            break;
+                        case chip_rp2350:
+                            info_pair("target chip", "RP2350");
+                            switch (image_def->cpu()) {
+                                case cpu_riscv:
+                                    info_pair("image type", "RISC-V");
+                                    break;
+                                case cpu_varmulet:
+                                    info_pair("image type", "Varmulet");
+                                    break;
+                                case cpu_arm:
+                                    if (image_def->security() == sec_s) {
+                                        info_pair("image type", "ARM Secure");
+                                    } else if (image_def->security() == sec_ns) {
+                                        info_pair("image type", "ARM Non-Secure");
+                                    } else if (image_def->security() == sec_unspecified) {
+                                        info_pair("image type", "ARM");
+                                    }
+                            }
+                            break;
+                        default:
+                            break;
+                    }
+                } else if (image_def->image_type() == type_data) {
+                    info_pair("image type", "data");
+                }
+            }
+
+            // Partition Table
+            auto partition_table = current_block->get_item<partition_table_item>();
+            if (partition_table != nullptr) {
+                if (verbose_metadata) info_pair("block type", "partition table");
+                info_pair("partition table", partition_table->singleton ? "singleton" : "non-singleton");
+                std::stringstream unpartitioned;
+                unpartitioned << str_permissions(partition_table->unpartitioned_flags);
+                std::vector<std::string> family_ids;
+                insert_default_families(partition_table->unpartitioned_flags, family_ids);
+                unpartitioned << ", uf2 { " << cli::join(family_ids, ", ") << " }";
+                info_pair("un-partitioned space", unpartitioned.str());
+
+                for (int i=0; i < partition_table->partitions.size(); i++) {
+                    std::stringstream pstring;
+                    std::stringstream pname;
+                    auto partition = partition_table->partitions[i];
+                    uint32_t flags = partition.flags;
+                    uint64_t id = partition.id;
+                    pname << "partition " << i;
+                    if ((flags & PICOBIN_PARTITION_FLAGS_LINK_TYPE_BITS) ==
+                        PICOBIN_PARTITION_FLAGS_LINK_TYPE_AS_BITS(A_PARTITION)) {
+                        pname << " (B w/ " << ((flags & PICOBIN_PARTITION_FLAGS_LINK_VALUE_BITS)
+                                            >> PICOBIN_PARTITION_FLAGS_LINK_VALUE_LSB)
+                           << ")";
+                    } else if ((flags & PICOBIN_PARTITION_FLAGS_LINK_TYPE_BITS) ==
+                            PICOBIN_PARTITION_FLAGS_LINK_TYPE_AS_BITS(OWNER_PARTITION)) {
+                            pname << " (A ob/ " << ((flags & PICOBIN_PARTITION_FLAGS_LINK_VALUE_BITS)
+                                                 >> PICOBIN_PARTITION_FLAGS_LINK_VALUE_LSB)
+                               << ")";
+                    } else {
+                        pname << " (A)";
+                    }
+                    pstring << hex_string(partition.first_sector * 4096, 8, false) << "->" << hex_string((partition.last_sector + 1) * 4096, 8, false);
+                    unsigned int p = partition.permissions;
+                    pstring << str_permissions(p << PICOBIN_PARTITION_PERMISSIONS_LSB);
+                    if (flags & PICOBIN_PARTITION_FLAGS_HAS_ID_BITS) {
+                        pstring << ", id=" << hex_string(id, 16, false);
+                    }
+                    uint32_t num_extra_families = partition.extra_families.size();
+                    family_ids.clear();
+                    insert_default_families(flags, family_ids);
+                    for (auto family : partition.extra_families) {
+                        family_ids.emplace_back(hex_string(family));
+                    }
+                    if (flags & PICOBIN_PARTITION_FLAGS_HAS_NAME_BITS) {
+                        pstring << ", \"";
+                        pstring << partition.name;
+                        pstring << '"';
+                    }
+                    pstring << ", uf2 { " << cli::join(family_ids, ", ") << " }";
+                    pstring << ", arm_boot " << !(flags & PICOBIN_PARTITION_FLAGS_IGNORED_DURING_ARM_BOOT_BITS);
+                    pstring << ", riscv_boot " << !(flags & PICOBIN_PARTITION_FLAGS_IGNORED_DURING_RISCV_BOOT_BITS);
+                    info_pair(pname.str(), pstring.str());
+                }
+            }
+
+            // Version
+            auto version = current_block->get_item<version_item>();
+            if (version != nullptr) {
+                info_pair("version", std::to_string(version->major) + "." + std::to_string(version->minor));
+                if (version->otp_rows.size() > 0) {
+                    info_pair("rollback version", std::to_string(version->rollback));
+                    std::stringstream rows;
+                    for (const auto row : version->otp_rows) { rows << hex_string(row, 3) << " "; }
+                    info_pair("rollback rows", rows.str());
+                }
+            }
+
+            if (verbose_metadata) {
+                // Load Map
+                // todo what should this really report
+                auto load_map = current_block->get_item<load_map_item>();
+                if (load_map != nullptr) {
+                    for (unsigned int i=0; i < load_map->entries.size(); i++) {
+                        std::stringstream ss;
+                        auto e = load_map->entries[i];
+                        if (e.storage_address == 0) {
+                            ss << "Clear 0x" << std::hex << e.runtime_address;
+                            ss << "->0x" << std::hex << e.runtime_address + e.size;
+                        } else if (e.storage_address != e.runtime_address) {
+                            if (is_address_initialized(rp2350_address_ranges_flash, e.runtime_address)) {
+                                ss << "ERROR: COPY TO FLASH NOT PERMITTED ";
+                            }
+                            ss << "Copy 0x" << std::hex << e.storage_address;
+                            ss << "->0x" << std::hex << e.storage_address + e.size;
+                            ss << " to 0x" << std::hex << e.runtime_address;
+                            ss << "->0x" << std::hex << e.runtime_address + e.size;
+                        } else {
+                            ss << "Load 0x" << std::hex << e.storage_address;
+                            ss << "->0x" << std::hex << e.storage_address + e.size;
+                        }
+                        info_pair("load map entry " + std::to_string(i), ss.str());
+                    }
+                }
+
+                // Rolling Window Delta
+                auto rwd = current_block->get_item<rolling_window_delta_item>();
+                if (rwd != nullptr) {
+                    info_pair("rolling window delta", hex_string(rwd->addr));
+                }
+
+                // Vector Table
+                auto vtor = current_block->get_item<vector_table_item>();
+                if (vtor != nullptr) {
+                    info_pair("vector table", hex_string(vtor->addr));
+                }
+
+                // Entry Point
+                auto entry_point = current_block->get_item<entry_point_item>();
+                if (entry_point != nullptr) {
+                    std::stringstream ss;
+                    ss << "EP " << hex_string(entry_point->ep);
+                    ss << ", SP " << hex_string(entry_point->sp);
+                    if (entry_point->splim_set) ss << ", SPLIM " << hex_string(entry_point->splim);
+                    info_pair("entry point", ss.str());
+                }
+            }
+
+            // Hash and Sig
+            if (hash_verified != none) {
+                info_pair("hash", hash_verified == passed ? "verified" : "incorrect");
+                if (verbose_metadata) {
+                    std::shared_ptr<hash_value_item> hash_value = current_block->get_item<hash_value_item>();
+                    assert(hash_value != nullptr); // verify_block would return none if it's not present
+                    std::stringstream val;
+                    for(uint8_t i : hash_value->hash_bytes) {
+                        val << hex_string(i, 2, false, true);
+                    }
+                    info_pair("hash value", val.str());
+                }
+            }
+            if (sig_verified != none) {
+                info_pair("signature", sig_verified == passed ? "verified" : "incorrect");
+                if (verbose_metadata) {
+                    std::shared_ptr<signature_item> signature = current_block->get_item<signature_item>();
+                    assert(signature != nullptr); // verify_block would return none if it's not present
+                    std::stringstream sig;
+                    for(uint8_t i : signature->signature_bytes) {
+                        sig << hex_string(i, 2, false, true);
+                    }
+                    info_pair("signature value", sig.str());
+                    std::stringstream pkey;
+                    for(uint8_t i : signature->public_key_bytes) {
+                        pkey << hex_string(i, 2, false, true);
+                    }
+                    info_pair("public key", pkey.str());
+                }
+            }
+        };
 
         // establish core groups and their order
-        if (!settings.info.show_basic && !settings.info.all && !settings.info.show_pins && !settings.info.show_device && !settings.info.show_debug && !settings.info.show_build) {
+        if (!settings.info.show_basic && !settings.info.all && !settings.info.show_metadata && !settings.info.show_pins && !settings.info.show_device && !settings.info.show_debug && !settings.info.show_build) {
             settings.info.show_basic = true;
         }
         if (settings.info.show_debug && !settings.info.show_device) {
             settings.info.show_device = true;
         }
         auto program_info = group("Program Information", settings.info.show_basic || settings.info.all);
+        auto no_metadata_info = group("Metadata Blocks", false);
+        vector<group> metadata_info;
+        #define MAX_METADATA_BLOCKS 10
+        for (int i=1; i <= MAX_METADATA_BLOCKS; i++) {
+            // These groups are enabled later, depending on how many metadata blocks the binary has
+            metadata_info.push_back(group("Metadata Block " + std::to_string(i), false));
+        }
         auto pin_info = group("Fixed Pin Information", settings.info.show_pins || settings.info.all);
         auto build_info = group("Build Information", settings.info.show_build || settings.info.all);
         auto device_info = group("Device Information", (settings.info.show_device || settings.info.all) & raw_access.is_device());
@@ -2966,6 +3208,9 @@ void info_guts(memory_access &raw_access, void *con) {
         select_group(program_info);
         select_group(pin_info);
         select_group(build_info);
+        for (auto mb : metadata_info) {
+            select_group(mb);
+        }
         select_group(device_info);
         binary_info_header hdr;
         try {
@@ -3118,116 +3363,35 @@ void info_guts(memory_access &raw_access, void *con) {
                 }
             }
             vector<uint8_t> bin;
+            if (settings.info.show_metadata || settings.info.all) {
+                uint32_t read_size = 0x1000;
+                DEBUG_LOG("Reading from %x size %x\n", raw_access.get_binary_start(), read_size);
+                bin = raw_access.read_vector<uint8_t>(raw_access.get_binary_start(), read_size, true);
+                std::unique_ptr<block> first_block = find_first_block(bin, raw_access.get_binary_start());
+                if (first_block) {
+                    // verify stuff
+                    get_more_bin_cb more_cb = [&raw_access](std::vector<uint8_t> &bin, uint32_t new_size) {
+                        DEBUG_LOG("Now reading from %x size %x\n", raw_access.get_binary_start(), new_size);
+                        bin = raw_access.read_vector<uint8_t>(raw_access.get_binary_start(), new_size, true);
+                    };
+                    auto all_blocks = get_all_blocks(bin, raw_access.get_binary_start(), first_block, more_cb);
+
+                    int block_i = 0;
+                    select_group(metadata_info[block_i++], true);
+                    info_metadata(bin, first_block.get(), true);
+                    for (auto &block : all_blocks) {
+                        select_group(metadata_info[block_i++], true);
+                        info_metadata(bin, block.get(), true);
+                    }
+                } else {
+                    // This displays that there are no metadata blocks
+                    select_group(no_metadata_info, true);
+                }
+            }
             std::unique_ptr<block> best_block = find_best_block(raw_access, bin);
             if (best_block && (settings.info.show_basic || settings.info.all)) {
                 select_group(program_info);
-                verified_t hash_verified = none;
-                verified_t sig_verified = none;
-            #if HAS_MBEDTLS
-                verify_block(bin, raw_access.get_binary_start(), raw_access.get_binary_start(), best_block.get(), hash_verified, sig_verified);
-            #endif
-
-                // Image Def
-                auto image_def = best_block->get_item<image_type_item>();
-                if (image_def != nullptr) {
-                    if (image_def->image_type() == type_exe) {
-                        switch (image_def->chip()) {
-                            case chip_rp2040:
-                                info_pair("target chip", "RP2040");
-                                break;
-                            case chip_rp2350:
-                                info_pair("target chip", "RP2350");
-                                switch (image_def->cpu()) {
-                                    case cpu_riscv:
-                                        info_pair("image type", "RISC-V");
-                                        break;
-                                    case cpu_varmulet:
-                                        info_pair("image type", "Varmulet");
-                                        break;
-                                    case cpu_arm:
-                                        if (image_def->security() == sec_s) {
-                                            info_pair("image type", "ARM Secure");
-                                        } else if (image_def->security() == sec_ns) {
-                                            info_pair("image type", "ARM Non-Secure");
-                                        } else if (image_def->security() == sec_unspecified) {
-                                            info_pair("image type", "ARM");
-                                        }
-                                }
-                                break;
-                            default:
-                                break;
-                        }
-                    } else if (image_def->image_type() == type_data) {
-                        info_pair("image type", "data");
-                    }
-                }
-
-                // Version
-                auto version = best_block->get_item<version_item>();
-                if (version != nullptr) {
-                    info_pair("version", std::to_string(version->major) + "." + std::to_string(version->minor));
-                    if (version->otp_rows.size() > 0) {
-                        info_pair("rollback version", std::to_string(version->rollback));
-                        std::stringstream rows;
-                        for (const auto row : version->otp_rows) { rows << hex_string(row, 3) << " "; }
-                        info_pair("rollback rows", rows.str());
-                    }
-                }
-
-                // Load Map
-                // todo what should this really report
-                auto load_map = best_block->get_item<load_map_item>();
-                if (load_map != nullptr) {
-                    for (unsigned int i=0; i < load_map->entries.size(); i++) {
-                        std::stringstream ss;
-                        auto e = load_map->entries[i];
-                        if (e.storage_address == 0) {
-                            ss << "Clear 0x" << std::hex << e.runtime_address;
-                            ss << "+0x" << std::hex << e.size;
-                        } else if (e.storage_address != e.runtime_address) {
-                            if (is_address_initialized(rp2350_address_ranges_flash, e.runtime_address)) {
-                                ss << "ERROR: COPY TO FLASH NOT PERMITTED ";
-                            }
-                            ss << "Copy 0x" << std::hex << e.storage_address;
-                            ss << "+0x" << std::hex << e.size;
-                            ss << " to 0x" << std::hex << e.runtime_address;
-                        } else {
-                            ss << "Load 0x" << std::hex << e.storage_address;
-                            ss << "+0x" << std::hex << e.size;
-                        }
-                        info_pair("load map entry " + std::to_string(i), ss.str());
-                    }
-                }
-
-                // Rolling Window Delta
-                auto rwd = best_block->get_item<rolling_window_delta_item>();
-                if (rwd != nullptr) {
-                    info_pair("rolling window delta", hex_string(rwd->addr));
-                }
-
-                // Vector Table
-                auto vtor = best_block->get_item<vector_table_item>();
-                if (vtor != nullptr) {
-                    info_pair("vector table", hex_string(vtor->addr));
-                }
-
-                // Entry Point
-                auto entry_point = best_block->get_item<entry_point_item>();
-                if (entry_point != nullptr) {
-                    std::stringstream ss;
-                    ss << "EP " << hex_string(entry_point->ep);
-                    ss << ", SP " << hex_string(entry_point->sp);
-                    if (entry_point->splim_set) ss << ", SPLIM " << hex_string(entry_point->splim);
-                    info_pair("entry point", ss.str());
-                }
-
-                // Hash and Sig
-                if (hash_verified != none) {
-                    info_pair("hash value", hash_verified == passed ? "verified" : "incorrect");
-                }
-                if (sig_verified != none) {
-                    info_pair("signature", sig_verified == passed ? "verified" : "incorrect");
-                }
+                info_metadata(bin, best_block.get());
             } else if (!best_block && has_binary_info && get_model(raw_access) == rp2350) {
                 fos << "WARNING: Binary on RP2350 device does not contain a block loop - this binary will not boot\n";
             }
@@ -3409,6 +3573,19 @@ void info_guts(memory_access &raw_access, void *con) {
     #endif
         bool first = true;
         int fr_col = fos.first_column();
+        // Standardise indent for whole info printout
+        int tab = 0;
+        for(const auto& group : groups) {
+            if (group.enabled) {
+                const auto& info = infos[group.name];
+                if (!info.empty()) {
+                    tab = std::max(tab, group.min_tab);
+                    for(const auto& item : info) {
+                        tab = std::max(tab, 3 + (int)item.first.length()); // +3 for ":  "
+                    }
+                }
+            }
+        }
         for(const auto& group : groups) {
             if (group.enabled) {
                 const auto& info = infos[group.name];
@@ -3424,10 +3601,6 @@ void info_guts(memory_access &raw_access, void *con) {
                 if (info.empty()) {
                    fos << "none\n";
                 } else {
-                    int tab = group.min_tab;
-                    for(const auto& item : info) {
-                        tab = std::max(tab, 3 + (int)item.first.length()); // +3 for ":  "
-                    }
                     for(const auto& item : info) {
                         fos.first_column(fr_col + 1);
                         fos << (item.first + ":");
@@ -3856,6 +4029,11 @@ bool info_command::execute(device_map &devices) {
             auto partitions = get_partitions(connection);
             vector<uint32_t> starts;
             if (partitions) {
+                // Check if bootloader is present, based on presence of binary info
+                binary_info_header hdr;
+                auto bi_access = get_bi_access(access);
+                bool has_bootloader = find_binary_info(*bi_access, hdr);
+
                 // Don't show device, until all partitions done
                 bool device = settings.info.show_device || settings.info.all;
                 bool debug = settings.info.show_debug || settings.info.all;
@@ -3863,13 +4041,22 @@ bool info_command::execute(device_map &devices) {
                     settings.info.show_basic = true;
                     settings.info.show_pins = true;
                     settings.info.show_build = true;
+                    settings.info.show_metadata = true;
                     settings.info.all = false;
                 }
-                if ((settings.info.show_basic || settings.info.show_pins || settings.info.show_build) || !(settings.info.show_device || settings.info.show_debug)) {
+                if ((settings.info.show_basic || settings.info.show_pins || settings.info.show_build || settings.info.show_metadata) || !(settings.info.show_device || settings.info.show_debug)) {
                     settings.info.show_device = false;
                     settings.info.show_debug = false;
                     for (auto range : *partitions) {
                         starts.push_back(std::get<0>(range));
+                    }
+                    if (has_bootloader && std::none_of(starts.cbegin(), starts.cend(), [](int i) { return i == 0; })) {
+                        // Print bootloader info, only if bootloader is present and not in a partition
+                        fos.first_column(0); fos.hanging_indent(0);
+                        fos << "\nBootloader\n";
+                        fos.first_column(1);
+                        partition_memory_access part_access(access, 0);
+                        info_guts(part_access, &connection);
                     }
                     for (unsigned int i=0; i < starts.size(); i++) {
                         uint32_t start = starts[i];
@@ -3886,6 +4073,7 @@ bool info_command::execute(device_map &devices) {
                     settings.info.show_basic = false;
                     settings.info.show_pins = false;
                     settings.info.show_build = false;
+                    settings.info.show_metadata = false;
                     settings.info.show_device = device;
                     settings.info.show_debug = debug;
                     info_guts(access, &connection);
@@ -5613,7 +5801,7 @@ bool partition_info_command::execute(device_map &devices) {
         printf("the partition table is empty\n");
     }
     printf("un-partitioned_space : ");
-    print_permissions(unpartitioned.permissions_and_flags);
+    fos << str_permissions(unpartitioned.permissions_and_flags);
     std::vector<std::string> family_ids;
     insert_default_families(unpartitioned.permissions_and_flags, family_ids);
     printf(", uf2 { %s }\n", cli::join(family_ids, ", ").c_str());
@@ -5653,7 +5841,7 @@ bool partition_info_command::execute(device_map &devices) {
                 return -1;
             }
             unsigned int p = location_and_permissions & flags_and_permissions;
-            print_permissions(p);
+            fos << str_permissions(p);
             if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_HAS_ID_BITS) {
                 printf(", id=%016" PRIx64, id);
             }
@@ -6721,35 +6909,6 @@ bool coprodis_command::execute(device_map &devices) {
 
 
 #if HAS_LIBUSB
-void partition_info_command::insert_default_families(uint32_t flags_and_permissions, vector<std::string> &family_ids) const {
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_ABSOLUTE_BITS) family_ids.emplace_back(absolute_family_name);
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2040_BITS) family_ids.emplace_back(rp2040_family_name);
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_S_BITS) family_ids.emplace_back(rp2350_arm_s_family_name);
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_NS_BITS) family_ids.emplace_back(rp2350_arm_ns_family_name);
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_RISCV_BITS) family_ids.emplace_back(rp2350_riscv_family_name);
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_DATA_BITS) family_ids.emplace_back(data_family_name);
-}
-
-void partition_info_command::print_permissions(unsigned int p) const {
-    static_assert(PICOBIN_PARTITION_PERMISSION_S_R_BITS == (1u << 26), "");
-    static_assert(PICOBIN_PARTITION_PERMISSION_S_W_BITS == (1u << 27), "");
-    static_assert(PICOBIN_PARTITION_PERMISSION_NS_W_BITS == (1u << 29), "");
-    static_assert(PICOBIN_PARTITION_PERMISSION_NSBOOT_W_BITS == (1u << 31), "");
-    printf(" S(");
-    unsigned int r = (p >> 26) & 3;
-    if (r & 1) printf("r");
-    if (r & 2) printf("w"); else if (!r) printf("-");
-    printf(") NSBOOT(");
-    r = (p >> 30) & 3;
-    if (r & 1) printf("r");
-    if (r & 2) printf("w"); else if (!r) printf("-");
-    printf(") NS(");
-    r = (p >> 28) & 3;
-    if (r & 1) printf("r");
-    if (r & 2) printf("w"); else if (!r) printf("-");
-    printf(")");
-}
-
 static void check_otp_write_error(picoboot::command_failure &e, bool ecc) {
     if (e.get_code() == PICOBOOT_UNSUPPORTED_MODIFICATION) {
         if (ecc) fail(ERROR_NOT_POSSIBLE, "Attempted to modify OTP ECC row(s)\n");
