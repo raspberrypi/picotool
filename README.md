@@ -105,14 +105,14 @@ Note for additional documentation see https://rptl.io/pico-get-started
 ```
 $ picotool help
 PICOTOOL:
-Tool for interacting with RP2040/RP2350 device(s) in BOOTSEL mode, or with an RP2040/RP2350 binary
+    Tool for interacting with RP-series device(s) in BOOTSEL mode, or with an RP-series binary
 
 SYNOPSIS:
-    picotool info [-b] [-p] [-d] [--debug] [-l] [-a] [device-selection]
-    picotool info [-b] [-p] [-d] [--debug] [-l] [-a] <filename> [-t <type>]
+    picotool info [-b] [-m] [-p] [-d] [--debug] [-l] [-a] [device-selection]
+    picotool info [-b] [-m] [-p] [-d] [--debug] [-l] [-a] <filename> [-t <type>]
     picotool config [-s <key> <value>] [-g <group>] [device-selection]
     picotool config [-s <key> <value>] [-g <group>] <filename> [-t <type>]
-    picotool load [-p] [-n] [-N] [-u] [-v] [-x] <filename> [-t <type>] [-o <offset>] [device-selection]
+    picotool load [--ignore-partitions] [--family <family_id>] [-p <partition>] [-n] [-N] [-u] [-v] [-x] <filename> [-t <type>] [-o <offset>] [device-selection]
     picotool encrypt [--quiet] [--verbose] [--hash] [--sign] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] <aes_key> [-t <type>] [<signing_key>] [-t <type>]
     picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] [<key>] [-t <type>] [<otp>] [-t <type>] [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
     picotool link [--quiet] [--verbose] <outfile> [-t <type>] <infile1> [-t <type>] <infile2> [-t <type>] [<infile3>] [-t <type>] [-p] <pad>
@@ -120,7 +120,7 @@ SYNOPSIS:
     picotool save -a [-v] [--family <family_id>] [device-selection]
     picotool save -r <from> <to> [-v] [--family <family_id>] [device-selection]
     picotool erase [-a] [device-selection]
-    picotool erase [-p <partition>] [device-selection]
+    picotool erase -p <partition> [device-selection]
     picotool erase -r <from> <to> [device-selection]
     picotool verify [device-selection]
     picotool reboot [-a] [-u] [-g <partition>] [-c <cpu>] [device-selection]
@@ -133,7 +133,7 @@ SYNOPSIS:
 
 COMMANDS:
     info        Display information from the target device(s) or file.
-                Without any arguments, this will display basic information for all connected RP2040 devices in BOOTSEL mode
+                Without any arguments, this will display basic information for all connected RP-series devices in BOOTSEL mode
     config      Display or change program configuration settings from the target device(s) or file.
     load        Load the program / memory range stored in a file onto the device.
     encrypt     Encrypt the program.
@@ -147,7 +147,7 @@ COMMANDS:
     partition   Commands related to RP2350 Partition Tables
     uf2         Commands related to UF2 creation and status
     version     Display picotool version
-    coprodis    Post-process coprocessor instructions in dissassembly files.
+    coprodis    Post-process coprocessor instructions in disassembly files.
     help        Show general help or help for a specific command
 
 Use "picotool help <cmd>" for more info
@@ -167,16 +167,18 @@ a file. This file can be an ELF, a UF2 or a BIN file.
 $ picotool help info
 INFO:
     Display information from the target device(s) or file.
-    Without any arguments, this will display basic information for all connected RP2040 devices in BOOTSEL mode
+    Without any arguments, this will display basic information for all connected RP-series devices in BOOTSEL mode
 
 SYNOPSIS:
-    picotool info [-b] [-p] [-d] [--debug] [-l] [-a] [device-selection]
-    picotool info [-b] [-p] [-d] [--debug] [-l] [-a] <filename> [-t <type>]
+    picotool info [-b] [-m] [-p] [-d] [--debug] [-l] [-a] [device-selection]
+    picotool info [-b] [-m] [-p] [-d] [--debug] [-l] [-a] <filename> [-t <type>]
 
 OPTIONS:
     Information to display
         -b, --basic
             Include basic information. This is the default
+        -m, --metadata
+            Include all metadata blocks
         -p, --pins
             Include pin information
         -d, --device
@@ -189,7 +191,7 @@ OPTIONS:
             Include all information
 
 TARGET SELECTION:
-    To target one or more connected RP2040 device(s) in BOOTSEL mode (the default)
+    To target one or more connected RP-series device(s) in BOOTSEL mode (the default)
         --bus <bus>
             Filter devices by USB bus number
         --address <addr>
@@ -297,7 +299,7 @@ OPTIONS:
             Filter by feature group
 
 TARGET SELECTION:
-    To target one or more connected RP2040 device(s) in BOOTSEL mode (the default)
+    To target one or more connected RP-series device(s) in BOOTSEL mode (the default)
         --bus <bus>
             Filter devices by USB bus number
         --address <addr>
@@ -915,9 +917,9 @@ OTP:
     Commands related to the RP2350 OTP (One-Time-Programmable) Memory
 
 SYNOPSIS:
-    picotool otp list [-p] [-n] [-i <filename>] [<selector>..]
+    picotool otp list [-p] [-n] [-f] [-i <filename>] [<selector>..]
     picotool otp get [-c <copies>] [-r] [-e] [-n] [-i <filename>] [device-selection] [-z] [<selector>..]
-    picotool otp set [-c <copies>] [-r] [-e] [-i <filename>] [-z] <selector> <value> [device-selection]
+    picotool otp set [-c <copies>] [-r] [-e] [-s] [-i <filename>] [-z] <selector> <value> [device-selection]
     picotool otp load [-r] [-e] [-s <row>] [-i <filename>] <filename> [-t <type>] [device-selection]
     picotool otp dump [-r] [-e] [device-selection]
     picotool otp permissions <filename> [-t <type>] [--led <pin>] [--hash] [--sign] [<key>] [-t <type>] [device-selection]
