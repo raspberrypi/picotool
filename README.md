@@ -823,7 +823,7 @@ OPTIONS:
 
 ## uf2
 
-The `uf2` commands allow for creation of UF2s, and cam provide information when if a UF2 download has failed.
+The `uf2` commands allow for creation of UF2s, and can provide information if a UF2 download has failed.
 
 ### convert
 
