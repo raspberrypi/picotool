@@ -1,10 +1,10 @@
 module(
     name = "picotool",
-    version = "2.0.0",
+    version = "2.1.0",
 )
 
 bazel_dep(name = "rules_libusb", version = "0.1.0-rc1")
-bazel_dep(name = "pico-sdk", version = "2.0.0")
+bazel_dep(name = "pico-sdk", version = "2.1.0")
 bazel_dep(name = "rules_cc", version = "0.0.9")
 bazel_dep(name = "bazel_skylib", version = "1.6.1")
 bazel_dep(name = "rules_python", version = "0.22.1")
