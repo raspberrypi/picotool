@@ -1866,6 +1866,65 @@ struct picoboot_memory_access : public memory_access {
 
     void read(uint32_t address, uint8_t *buffer, unsigned int size, __unused bool zero_fill) override {
         if (flash == get_memory_type(address, model)) {
+            read_cached(address, buffer, size);
+        } else {
+            read_raw(address, buffer, size);
+        }
+    }
+
+    void read_cached(uint32_t address, uint8_t *buffer, unsigned int size) {
+        for (auto range: flash_cache) {
+            uint32_t cached_start = std::get<0>(range);
+            uint32_t cached_size = std::get<1>(range);
+            auto cached_data = std::get<2>(range);
+            if (address >= cached_start) {
+                if (address > cached_start + cached_size) {
+                    // No data already cached
+                    continue;
+                } else if (address + size <= cached_start + cached_size) {
+                    // All data already cached
+                    DEBUG_LOG("Flash Cache Hit %08x+%08x\n", address, size);
+                    std::copy(cached_data.cbegin() + (address - cached_start), cached_data.cbegin() + (address + size - cached_start), buffer);
+                    return;
+                } else {
+                    // Start of data already cached, but end needs reading
+                    uint32_t cached_used_size = cached_size - (address - cached_start);
+                    DEBUG_LOG("Flash Cache Hit Start %08x+%08x\n", address, cached_used_size);
+                    std::copy(cached_data.cbegin() + (address - cached_start), cached_data.cbegin() + cached_size, buffer);
+                    size -= cached_used_size;
+                    address += cached_used_size;
+                    buffer += cached_used_size;
+                }
+            } else {
+                if (address + size <= cached_start) {
+                    // No data already cached
+                    continue;
+                } else if (address + size <= cached_start + cached_size) {
+                    DEBUG_LOG("Flash Cache Hit End %08x+%08x\n", cached_start, (address + size - cached_start));
+                    // End of data already cached, but start needs reading
+                    std::copy(cached_data.cbegin(), cached_data.cbegin() + (address + size - cached_start), buffer + (cached_start - address));
+                    size = cached_start - address;
+                } else {
+                    // Middle of data already cached, start and end needs reading
+                    uint32_t split_size = cached_start - address; // split into address->cached_start and cached_start->(address + size)
+                    DEBUG_LOG("Flash Cache Hit Middle %08x+%08x\n", cached_start, cached_size);
+                    // Read data before
+                    read_cached(address, buffer, split_size);
+                    // Read rest
+                    read_cached(address + split_size, buffer + split_size, size - split_size);
+                    return;
+                }
+            }
+        }
+
+        DEBUG_LOG("Flash Caching %08x+%08x\n", address, size);
+        read_raw(address, buffer, size);
+        std::vector<uint8_t> cached_data(buffer, buffer + size);
+        flash_cache.push_back(std::make_tuple(address, size, cached_data));
+    }
+
+    void read_raw(uint32_t address, uint8_t *buffer, unsigned int size) {
+        if (flash == get_memory_type(address, model)) {
             connection.exit_xip();
         }
         if (model == rp2040 && rom == get_memory_type(address, model) && (address+size) >= 0x2000) {
@@ -1917,6 +1976,7 @@ struct picoboot_memory_access : public memory_access {
     void write(uint32_t address, uint8_t *buffer, unsigned int size) override {
         vector<uint8_t> write_data; // used when erasing flash
         if (flash == get_memory_type(address, model)) {
+            flash_cache.clear(); // clear entire flash cache on any write, to be safe
             connection.exit_xip();
             if (erase) {
                 // Do automatically erase flash, and make it aligned
@@ -1966,6 +2026,7 @@ struct picoboot_memory_access : public memory_access {
     bool erase = false;
 private:
     picoboot::connection& connection;
+    vector<std::tuple<uint32_t,uint32_t,vector<uint8_t>>> flash_cache;
 };
 #endif
 
