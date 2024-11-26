@@ -1872,13 +1872,17 @@ struct picoboot_memory_access : public memory_access {
         }
     }
 
+    void clear_cache() {
+        flash_cache.clear();
+    }
+
     void read_cached(uint32_t address, uint8_t *buffer, unsigned int size) {
         for (auto range: flash_cache) {
             uint32_t cached_start = std::get<0>(range);
             uint32_t cached_size = std::get<1>(range);
             auto cached_data = std::get<2>(range);
             if (address >= cached_start) {
-                if (address > cached_start + cached_size) {
+                if (address >= cached_start + cached_size) {
                     // No data already cached
                     continue;
                 } else if (address + size <= cached_start + cached_size) {
@@ -1976,7 +1980,7 @@ struct picoboot_memory_access : public memory_access {
     void write(uint32_t address, uint8_t *buffer, unsigned int size) override {
         vector<uint8_t> write_data; // used when erasing flash
         if (flash == get_memory_type(address, model)) {
-            flash_cache.clear(); // clear entire flash cache on any write, to be safe
+            clear_cache(); // clear entire flash cache on any write, to be safe
             connection.exit_xip();
             if (erase) {
                 // Do automatically erase flash, and make it aligned
@@ -4363,6 +4367,7 @@ bool save_command::execute(device_map &devices) {
     }
 
     if (settings.save.verify) {
+        raw_access.clear_cache();
         auto file_access = get_file_memory_access(0);
         model_t model = get_model(raw_access);
         auto ranges = get_coalesced_ranges(file_access, model);
