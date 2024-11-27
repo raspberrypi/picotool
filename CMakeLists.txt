@@ -267,7 +267,6 @@ target_link_libraries(picotool
         elf2uf2
         errors
         nlohmann_json
-        littlefs
         whereami)
 
 if (NOT TARGET mbedtls)
@@ -291,6 +290,7 @@ else()
     target_compile_definitions(picotool PRIVATE HAS_LIBUSB=1)
     target_link_libraries(picotool 
         picoboot_connection_cxx
+        littlefs
         ${LIBUSB_LIBRARIES})
 endif()
 
