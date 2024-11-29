@@ -19,7 +19,7 @@
 
 #define FLASH_SECTOR_ERASE_SIZE 4096u
 
-static bool verbose;
+static bool g_verbose;
 
 static void fail_read_error() {
     fail(ERROR_READ_FAILED, "Failed to read input file");
@@ -43,7 +43,7 @@ int check_address_range(const address_ranges& valid_ranges, uint32_t addr, uint3
                 fail(ERROR_INCOMPATIBLE, "ELF contains memory contents for uninitialized memory at %p", addr);
             }
             ar = range;
-            if (verbose) {
+            if (g_verbose) {
                 printf("%s segment %08x->%08x (%08x->%08x)\n", uninitialized ? "Uninitialized" : "Mapped", addr,
                    addr + size, vaddr, vaddr+size);
             }
@@ -65,7 +65,7 @@ int check_elf32_ph_entries(const std::vector<elf32_ph_entry>& entries, const add
                 if (rc) return rc;
                 // we don't download uninitialized, generally it is BSS and should be zero-ed by crt0.S, or it may be COPY areas which are undefined
                 if (ar.type != address_range::type::CONTENTS) {
-                    if (verbose) printf("  ignored\n");
+                    if (g_verbose) printf("  ignored\n");
                     continue;
                 }
                 unsigned int addr = entry.paddr;
@@ -180,7 +180,7 @@ int pages2uf2(std::map<uint32_t, std::vector<page_fragment>>& pages, std::shared
     for(auto& page_entry : pages) {
         block.target_addr = page_entry.first;
         block.block_no = page_num++;
-        if (verbose) {
+        if (g_verbose) {
             printf("Page %d / %d %08x%s\n", block.block_no, block.num_blocks, block.target_addr,
                    page_entry.second.empty() ? " (padding)": "");
         }
@@ -195,7 +195,8 @@ int pages2uf2(std::map<uint32_t, std::vector<page_fragment>>& pages, std::shared
     return 0;
 }
 
-int bin2uf2(std::shared_ptr<std::iostream> in, std::shared_ptr<std::iostream> out, uint32_t address, uint32_t family_id, uint32_t abs_block_loc) {
+int bin2uf2(std::shared_ptr<std::iostream> in, std::shared_ptr<std::iostream> out, uint32_t address, uint32_t family_id, uint32_t abs_block_loc, bool verbose) {
+    g_verbose = verbose;
     std::map<uint32_t, std::vector<page_fragment>> pages;
 
     in->seekg(0, in->end);
@@ -233,11 +234,13 @@ int bin2uf2(std::shared_ptr<std::iostream> in, std::shared_ptr<std::iostream> ou
     return pages2uf2(pages, in, out, family_id, abs_block_loc);
 }
 
-int elf2uf2(std::shared_ptr<std::iostream> in, std::shared_ptr<std::iostream> out, uint32_t family_id, uint32_t package_addr, uint32_t abs_block_loc) {
-    elf_file elf;
+int elf2uf2(std::shared_ptr<std::iostream> in, std::shared_ptr<std::iostream> out, uint32_t family_id, uint32_t package_addr, uint32_t abs_block_loc, bool verbose) {
+    elf_file source_file(verbose);
+    g_verbose = verbose;
+    elf_file *elf = &source_file;
     std::map<uint32_t, std::vector<page_fragment>> pages;
 
-    int rc = elf.read_file(in);
+    int rc = elf->read_file(in);
     bool ram_style = false;
     address_ranges valid_ranges = {};
     address_ranges flash_range; address_ranges ram_range;
@@ -249,9 +252,9 @@ int elf2uf2(std::shared_ptr<std::iostream> in, std::shared_ptr<std::iostream> ou
         ram_range = rp2350_address_ranges_ram;
     }
     if (!rc) {
-        rc = rp_determine_binary_type(elf.header(), elf.segments(), flash_range, ram_range, &ram_style);
+        rc = rp_determine_binary_type(elf->header(), elf->segments(), flash_range, ram_range, &ram_style);
         if (!rc) {
-            if (verbose) {
+            if (g_verbose) {
                 if (ram_style) {
                     printf("Detected RAM binary\n");
                 } else {
@@ -259,7 +262,7 @@ int elf2uf2(std::shared_ptr<std::iostream> in, std::shared_ptr<std::iostream> ou
                 }
             }
             valid_ranges = ram_style ? ram_range : flash_range;
-            rc = check_elf32_ph_entries(elf.segments(), valid_ranges, pages);
+            rc = check_elf32_ph_entries(elf->segments(), valid_ranges, pages);
         }
     }
     if (rc) return rc;
@@ -267,7 +270,7 @@ int elf2uf2(std::shared_ptr<std::iostream> in, std::shared_ptr<std::iostream> ou
         fail(ERROR_INCOMPATIBLE, "The input file has no memory pages");
     }
     // No Thumb bit on RISC-V
-    elf32_header eh = elf.header();
+    elf32_header eh = elf->header();
     uint32_t thumb_bit = eh.common.machine == EM_ARM ? 0x1u : 0x0u;
     if (ram_style) {
         uint32_t expected_ep_main_ram = UINT32_MAX;
@@ -331,7 +334,7 @@ int elf2uf2(std::shared_ptr<std::iostream> in, std::shared_ptr<std::iostream> ou
         // Package binary at address
         uint32_t base_addr = pages.begin()->first;
         int32_t package_delta = package_addr - base_addr;
-        if (verbose) printf("Base %x\n", base_addr);
+        if (g_verbose) printf("Base %x\n", base_addr);
 
         auto copy_pages = pages;
         pages.clear();
