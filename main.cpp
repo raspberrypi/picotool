@@ -6180,10 +6180,10 @@ bool uf2_convert_command::execute(device_map &devices) {
     #endif
     if (get_file_type() == filetype::elf) {
         uint32_t package_address = settings.offset_set ? settings.offset : 0;
-        elf2uf2(in, out, family_id, package_address, settings.uf2.abs_block_loc);
+        elf2uf2(in, out, family_id, package_address, settings.uf2.abs_block_loc, settings.verbose);
     } else if (get_file_type() == filetype::bin) {
         uint32_t address = settings.offset_set ? settings.offset : FLASH_START;
-        bin2uf2(in, out, address, family_id, settings.uf2.abs_block_loc);
+        bin2uf2(in, out, address, family_id, settings.uf2.abs_block_loc, settings.verbose);
     } else {
         fail(ERROR_ARGS, "Convert currently only from ELF/BIN to UF2\n");
     }
