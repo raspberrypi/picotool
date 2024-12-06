@@ -529,7 +529,7 @@ struct _settings {
 
     struct {
         bdev_fs_t fs = fs_littlefs;
-        string filename;
+        bool recursive = false;
     } bdev;
 };
 _settings settings;
@@ -582,6 +582,13 @@ auto device_selection =
     named_file_types_x(types, i)\
 )
 
+#define named_untyped_file_selection_x(name, i)\
+(\
+    value(name).with_exclusion_filter([](const string &value) {\
+            return value.find_first_of('-') == 0;\
+        }).set(settings.filenames[i]) % "The file name"\
+)
+
 #define optional_file_selection_x(name, i)\
 (\
     value(name).with_exclusion_filter([](const string &value) {\
@@ -596,6 +603,13 @@ auto device_selection =
             return value.find_first_of('-') == 0;\
         }).set(settings.filenames[i]).min(0) % "The file name" +\
     named_file_types_x(types, i)\
+).min(0).doc_non_optional(true)
+
+#define optional_untyped_file_selection_x(name, i)\
+(\
+    value(name).with_exclusion_filter([](const string &value) {\
+            return value.find_first_of('-') == 0;\
+        }).set(settings.filenames[i]).min(0) % "The file name"\
 ).min(0).doc_non_optional(true)
 
 #define option_file_selection_x(option, i)\
@@ -690,6 +704,8 @@ struct bdev_ls_command : public cmd {
 
     group get_cli() override {
         return (
+            optional_untyped_file_selection_x("dirname", 0) +
+            option('r', "--recursive").set(settings.bdev.recursive) % "List files in directories recursively" +
             (
                 (option("--filesystem") & bdev_fs("fs").set(settings.bdev.fs) % "Filesystem (default: littlefs)")
             ).min(0).doc_non_optional(true) % "Block device options" +
@@ -708,7 +724,7 @@ struct bdev_mkdir_command : public cmd {
 
     group get_cli() override {
         return (
-            value("dirname").set(settings.bdev.filename) % "Directory to create" +
+            named_untyped_file_selection_x("dirname", 0) +
             (
                 (option("--filesystem") & bdev_fs("fs").set(settings.bdev.fs) % "Filesystem (default: littlefs)")
             ).min(0).doc_non_optional(true) % "Block device options" +
@@ -721,16 +737,14 @@ struct bdev_mkdir_command : public cmd {
     }
 };
 
-struct bdev_put_command : public cmd {
-    bdev_put_command() : cmd("put") {}
+struct bdev_cp_command : public cmd {
+    bdev_cp_command() : cmd("cp") {}
     bool execute(device_map& devices) override;
 
     group get_cli() override {
         return (
-            value("src").with_exclusion_filter([](const string &value) {
-                return value.find_first_of('-') == 0;
-            }).set(settings.filenames[0]) % "The local file path to upload" +
-            value("dest").set(settings.bdev.filename) % "File path to create on device" +
+            named_untyped_file_selection_x("src", 0) +
+            named_untyped_file_selection_x("dest", 1) +
             (
                 (option("--filesystem") & bdev_fs("fs").set(settings.bdev.fs) % "Filesystem (default: littlefs)")
             ).min(0).doc_non_optional(true) % "Block device options" +
@@ -739,20 +753,17 @@ struct bdev_put_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Upload file to the block device";
+        return "Copy file to/from the block device - use :filename to indicate files on the device (eg `cp main.py :main.py` to upload to the device)";
     }
 };
 
-struct bdev_get_command : public cmd {
-    bdev_get_command() : cmd("get") {}
+struct bdev_rm_command : public cmd {
+    bdev_rm_command() : cmd("rm") {}
     bool execute(device_map& devices) override;
 
     group get_cli() override {
         return (
-            value("src").set(settings.bdev.filename) % "The file path on device to download" +
-            value("dest").with_exclusion_filter([](const string &value) {
-                return value.find_first_of('-') == 0;
-            }).set(settings.filenames[0]) % "File path to create locally" +
+            named_untyped_file_selection_x("filename", 0) +
             (
                 (option("--filesystem") & bdev_fs("fs").set(settings.bdev.fs) % "Filesystem (default: littlefs)")
             ).min(0).doc_non_optional(true) % "Block device options" +
@@ -761,15 +772,15 @@ struct bdev_get_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Download file from the block device";
+        return "Delete file (or empty directory) on the block device";
     }
 };
 
 vector<std::shared_ptr<cmd>> bdev_sub_commands {
     std::shared_ptr<cmd>(new bdev_ls_command()),
     std::shared_ptr<cmd>(new bdev_mkdir_command()),
-    std::shared_ptr<cmd>(new bdev_put_command()),
-    std::shared_ptr<cmd>(new bdev_get_command()),
+    std::shared_ptr<cmd>(new bdev_cp_command()),
+    std::shared_ptr<cmd>(new bdev_rm_command()),
 };
 struct bdev_command : public multi_cmd {
     bdev_command() : multi_cmd("bdev", bdev_sub_commands) {}
@@ -5501,7 +5512,7 @@ void do_lfs_op(device_map &devices, lfs_op_fn lfs_op) {
 
             int err = lfs_mount(&lfs, &cfg);
             if (err) {
-                fos << "LittleFS Error " << err << "\n";
+                fail(ERROR_CONNECTION, "LittleFS Mount Error %d", err);
             } else {
                 lfs_op(&lfs);
             }
@@ -5516,8 +5527,16 @@ void do_lfs_op(device_map &devices, lfs_op_fn lfs_op) {
 }
 
 bool bdev_ls_command::execute(device_map &devices) {
+    string dir = "";
+    if (settings.filenames[0].length() > 0) {
+        dir += settings.filenames[0];
+    }
+    if ((char)(dir.back()) == '/') {
+        dir.pop_back();
+    }
+
     lfs_op_fn lfs_op = [&](lfs_t *lfs) {
-        lfs_ls(lfs, "/", true);
+        lfs_ls(lfs, dir.c_str(), settings.bdev.recursive);
     };
     do_lfs_op(devices, lfs_op);
     return false;
@@ -5525,7 +5544,7 @@ bool bdev_ls_command::execute(device_map &devices) {
 
 bool bdev_mkdir_command::execute(device_map &devices) {
     lfs_op_fn lfs_op = [&](lfs_t *lfs) {
-        int err = lfs_mkdir(lfs, settings.bdev.filename.c_str());
+        int err = lfs_mkdir(lfs, settings.filenames[0].c_str());
         if (err == LFS_ERR_EXIST) {
             fos << "Directory already exists\n";
         } else if (err) {
@@ -5536,81 +5555,86 @@ bool bdev_mkdir_command::execute(device_map &devices) {
     return false;
 }
 
-bool bdev_put_command::execute(device_map &devices) {
+bool bdev_cp_command::execute(device_map &devices) {
     lfs_op_fn lfs_op = [&](lfs_t *lfs) {
-        if ((char)(settings.bdev.filename.back()) == '/') {
-            int filenamestart = settings.filenames[0].find_last_of("/") + 1;
+        if ((char)(settings.filenames[1].back()) == '/') {
+            int filenamestart = std::max(settings.filenames[0].find_last_of("/") + 1, settings.filenames[0].find_last_of(":") + 1);
             int filenamelen = settings.filenames[0].length() - filenamestart;
-            settings.bdev.filename += settings.filenames[0].substr(filenamestart, filenamelen);
+            settings.filenames[1] += settings.filenames[0].substr(filenamestart, filenamelen);
         }
 
-        fos << "Uploading " << settings.filenames[0] << " to device at " << settings.bdev.filename << "\n";
+        bool srcRemote = false;
+        bool destRemote = false;
+        if ((char)(settings.filenames[0].front()) == ':') {
+            srcRemote = true;
+            settings.filenames[0].erase(0, 1);
+        }
+        if ((char)(settings.filenames[1].front()) == ':') {
+            destRemote = true;
+            settings.filenames[1].erase(0, 1);
+        }
 
-        lfs_file_t file;
-        int err = lfs_file_open(lfs, &file, settings.bdev.filename.c_str(), LFS_O_WRONLY | LFS_O_CREAT);
-        if (err) {
-            fos << "LittleFS Open Error " << err << "\n";
-        } else {
-            auto infile = get_file(ios::in|ios::binary|ios::ate);
+        fos << "Copying " << (srcRemote ? "device " : "local ") << settings.filenames[0] << " to " << (destRemote ? "device " : "local ") << settings.filenames[1] << "\n";
+
+        std::vector<char> data_buf;
+
+        if (!srcRemote) {
+            auto infile = get_file_idx(ios::in|ios::binary|ios::ate, 0);
             auto size = infile->tellg();
             infile->seekg(0, std::ios::beg);
-
-            std::vector<char> write_buf(size);
-            if (infile->read(write_buf.data(), size))
-            {
-                err = lfs_file_write(lfs, &file, write_buf.data(), write_buf.size());
-                if (err < 0) {
-                    fos << "LittleFS Write Error " << err << "\n";
-                } else if (err != write_buf.size()) {
-                    fos << "LittleFS Write Too short " << err << " expected " << write_buf.size() << "\n";
-                }
-            }
+            data_buf.resize(size);
+            infile->read(data_buf.data(), size);
             infile->close();
-
-            err = lfs_file_close(lfs, &file);
+        } else {
+            lfs_file_t file;
+            int err = lfs_file_open(lfs, &file, settings.filenames[0].c_str(), LFS_O_RDONLY);
             if (err) {
-                fos << "LittleFS Close Error " << err << "\n";
+                fail(ERROR_READ_FAILED, "LittleFS Open Error %d", err);
             }
+            auto size = lfs_file_size(lfs, &file);
+            err = lfs_file_rewind(lfs, &file);
+            data_buf.resize(size);
+            err = lfs_file_read(lfs, &file, data_buf.data(), data_buf.size());
+            if (err < 0) {
+                fail(ERROR_READ_FAILED, "LittleFS Read Error %d", err);
+            } else if (err != data_buf.size()) {
+                fail(ERROR_READ_FAILED, "LittleFS Read too short - got %d bytes expected %d bytes", err, data_buf.size());
+            }
+            err = lfs_file_close(lfs, &file);
+        }
+
+        if (!destRemote) {
+            auto outfile = get_file_idx(ios::out|ios::binary, 1);
+            outfile->write(data_buf.data(), data_buf.size());
+            outfile->close();
+        } else {
+            lfs_file_t file;
+            int err = lfs_file_open(lfs, &file, settings.filenames[1].c_str(), LFS_O_WRONLY | LFS_O_CREAT);
+            if (err) {
+                fail(ERROR_WRITE_FAILED, "LittleFS Open Error %d", err);
+            }
+            err = lfs_file_write(lfs, &file, data_buf.data(), data_buf.size());
+            if (err < 0) {
+                fail(ERROR_WRITE_FAILED, "LittleFS Write Error %d", err);
+            } else if (err != data_buf.size()) {
+                fail(ERROR_WRITE_FAILED, "LittleFS Write too short - wrote %d bytes expected %d bytes", err, data_buf.size());
+            }
+            err = lfs_file_close(lfs, &file);
         }
     };
     do_lfs_op(devices, lfs_op);
     return false;
 }
 
-bool bdev_get_command::execute(device_map &devices) {
+bool bdev_rm_command::execute(device_map &devices) {
     lfs_op_fn lfs_op = [&](lfs_t *lfs) {
-        if ((char)(settings.filenames[0].back()) == '/') {
-            int filenamestart = settings.bdev.filename.find_last_of("/") + 1;
-            int filenamelen = settings.bdev.filename.length() - filenamestart;
-            settings.filenames[0] += settings.bdev.filename.substr(filenamestart, filenamelen);
-        }
-
-        fos << "Downloading " << settings.bdev.filename << " on device to " << settings.filenames[0] << "\n";
-
-        lfs_file_t file;
-        int err = lfs_file_open(lfs, &file, settings.bdev.filename.c_str(), LFS_O_RDONLY);
-        if (err) {
-            fos << "LittleFS Open Error " << err << "\n";
-        } else {
-            auto outfile = get_file(ios::out|ios::binary);
-            auto size = lfs_file_size(lfs, &file);
-            err = lfs_file_rewind(lfs, &file);
-
-            std::vector<char> read_buf(size);
-            err = lfs_file_read(lfs, &file, read_buf.data(), read_buf.size());
-            if (err < 0) {
-                fos << "LittleFS Read Error " << err << "\n";
-            } else if (err != read_buf.size()) {
-                fos << "LittleFS Read Too short " << err << " expected " << read_buf.size() << "\n";
-            } else {
-                outfile->write(read_buf.data(), read_buf.size());
-            }
-            outfile->close();
-
-            err = lfs_file_close(lfs, &file);
-            if (err) {
-                fos << "LittleFS Close Error " << err << "\n";
-            }
+        int err = lfs_remove(lfs, settings.filenames[0].c_str());
+        if (err == LFS_ERR_NOTEMPTY) {
+            fail(ERROR_NOT_POSSIBLE, "Directory to remove is not empty");
+        } else if (err == LFS_ERR_NOENT) {
+            fail(ERROR_NOT_POSSIBLE, "File to remove does not exist");
+        } else if (err) {
+            fail(ERROR_WRITE_FAILED, "LittleFS Error %d", err);
         }
     };
     do_lfs_op(devices, lfs_op);
