@@ -19,8 +19,8 @@ if (NOT EXISTS ${PICO_SDK_PATH})
 endif ()
 include(${PICO_SDK_PATH}/pico_sdk_version.cmake)
 
-if (PICO_SDK_VERSION_STRING VERSION_LESS "2.0.0")
-    message(FATAL_ERROR "Raspberry Pi Pico SDK version 2.0.0 (or later) required. Your version is ${PICO_SDK_VERSION_STRING}")
+if (PICO_SDK_VERSION_STRING VERSION_LESS "2.1.0")
+    message(FATAL_ERROR "Raspberry Pi Pico SDK version 2.1.0 (or later) required. Your version is ${PICO_SDK_VERSION_STRING}")
 endif()
 
 # Set PICOTOOL_CODE_OTP to compile OTP definitions in - otherwise, they are included from JSON
