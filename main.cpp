@@ -4088,7 +4088,8 @@ uint32_t get_family_id(uint8_t file_idx) {
 }
 
 #if HAS_LIBUSB
-std::shared_ptr<vector<tuple<uint32_t, uint32_t>>> get_partitions(picoboot::connection &con) {
+// Returns [(start, end, permissions)]
+std::shared_ptr<vector<tuple<uint32_t, uint32_t, uint32_t>>> get_partitions(picoboot::connection &con) {
     picoboot_memory_access raw_access(con);
     if (get_model(raw_access) != rp2350) {
         // Not an rp2350, so no partitions
@@ -4117,7 +4118,7 @@ std::shared_ptr<vector<tuple<uint32_t, uint32_t>>> get_partitions(picoboot::conn
     resident_partition_t unpartitioned = *(resident_partition_t *) &loc_flags_id_buf_32[lfi_pos];
     lfi_pos += 2;
 
-    vector<tuple<uint32_t, uint32_t>> ret;
+    vector<tuple<uint32_t, uint32_t, uint32_t>> ret;
 
     if (!has_pt || !partition_count) {
         // there is no partition table, or it is empty
@@ -4129,6 +4130,7 @@ std::shared_ptr<vector<tuple<uint32_t, uint32_t>>> get_partitions(picoboot::conn
         for (unsigned int i = 0; i < partition_count; i++) {
             uint32_t location_and_permissions = loc_flags_id_buf_32[lfi_pos++];
             uint32_t flags_and_permissions = loc_flags_id_buf_32[lfi_pos++];
+            uint32_t permissions = location_and_permissions & flags_and_permissions & PICOBIN_PARTITION_PERMISSIONS_BITS;
             uint64_t id;
             if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_HAS_ID_BITS) {
                 id = loc_flags_id_buf_32[lfi_pos] | ((uint64_t) loc_flags_id_buf_32[lfi_pos + 1] << 32u);
@@ -4136,7 +4138,8 @@ std::shared_ptr<vector<tuple<uint32_t, uint32_t>>> get_partitions(picoboot::conn
             }
             ret.push_back(std::make_tuple(
                 ((location_and_permissions >> PICOBIN_PARTITION_LOCATION_FIRST_SECTOR_LSB) & 0x1fffu) * 4096,
-                (((location_and_permissions >> PICOBIN_PARTITION_LOCATION_LAST_SECTOR_LSB) & 0x1fffu) + 1) * 4096
+                (((location_and_permissions >> PICOBIN_PARTITION_LOCATION_LAST_SECTOR_LSB) & 0x1fffu) + 1) * 4096,
+                permissions
             ));
             if ((location_and_permissions ^ flags_and_permissions) &
                 PICOBIN_PARTITION_PERMISSIONS_BITS) {
@@ -4146,7 +4149,7 @@ std::shared_ptr<vector<tuple<uint32_t, uint32_t>>> get_partitions(picoboot::conn
         }
     }
 
-    return std::make_shared<vector<tuple<uint32_t, uint32_t>>>(ret);
+    return std::make_shared<vector<tuple<uint32_t, uint32_t, uint32_t>>>(ret);
 }
 #endif
 
@@ -5408,6 +5411,8 @@ struct _lfs_setup {
     std::shared_ptr<memory_access> access;
     uint32_t base_addr;
     uint32_t size;
+    bool writeable = true;
+    bool formattable = true;
 };
 _lfs_setup lfs_setup;
 
@@ -5417,13 +5422,23 @@ int lfs_read(const struct lfs_config *c, lfs_block_t block, lfs_off_t off, void 
 }
 
 int lfs_prog(const struct lfs_config *c, lfs_block_t block, lfs_off_t off, const void *buffer, lfs_size_t size) {
-    lfs_setup.access->write(lfs_setup.base_addr + (block * c->block_size) + off, (uint8_t*)buffer, size);
-    return LFS_ERR_OK;
+    if (lfs_setup.writeable) {
+        lfs_setup.access->write(lfs_setup.base_addr + (block * c->block_size) + off, (uint8_t*)buffer, size);
+        return LFS_ERR_OK;
+    } else {
+        fail(ERROR_NOT_POSSIBLE, "This block device is not writeable");
+        return LFS_ERR_IO;
+    }
 };
 
 int lfs_erase(const struct lfs_config *c, lfs_block_t block) {
-    lfs_setup.con->flash_erase(lfs_setup.base_addr + (block * c->block_size), c->block_size);
-    return LFS_ERR_OK;
+    if (lfs_setup.writeable) {
+        lfs_setup.con->flash_erase(lfs_setup.base_addr + (block * c->block_size), c->block_size);
+        return LFS_ERR_OK;
+    } else {
+        fail(ERROR_NOT_POSSIBLE, "This block device is not writeable");
+        return LFS_ERR_IO;
+    }
 };
 
 int lfs_sync(const struct lfs_config *c) {
@@ -5495,6 +5510,7 @@ void do_lfs_op(device_map &devices, lfs_op_fn lfs_op) {
         }
         uint32_t start = std::get<0>((*partitions)[settings.bdev.partition]);
         uint32_t end = std::get<1>((*partitions)[settings.bdev.partition]);
+        lfs_setup.writeable = std::get<2>((*partitions)[settings.bdev.partition]) & PICOBIN_PARTITION_PERMISSION_NSBOOT_W_BITS;
         start += FLASH_START;
         end += FLASH_START;
         if (end <= start) {
@@ -5520,6 +5536,8 @@ void do_lfs_op(device_map &devices, lfs_op_fn lfs_op) {
                     if (bi_bdev.flags & BINARY_INFO_BLOCK_DEV_FLAG_READ) ss << "r";
                     if (bi_bdev.flags & BINARY_INFO_BLOCK_DEV_FLAG_WRITE) ss << "w";
                     if (bi_bdev.flags & BINARY_INFO_BLOCK_DEV_FLAG_REFORMAT) ss << "f";
+                    lfs_setup.writeable = bi_bdev.flags & BINARY_INFO_BLOCK_DEV_FLAG_WRITE;
+                    lfs_setup.formattable = bi_bdev.flags & BINARY_INFO_BLOCK_DEV_FLAG_REFORMAT;
                 }
                 string s = ss.str();
                 fos << "embedded drive: " << s << "\n";
@@ -5562,9 +5580,13 @@ void do_lfs_op(device_map &devices, lfs_op_fn lfs_op) {
     int err = lfs_mount(&lfs, &cfg);
     if (err == LFS_ERR_CORRUPT) {
         if (settings.bdev.format) {
-            fos << "Formatting LittleFS file system\n";
-            lfs_format(&lfs, &cfg);
-            lfs_mount(&lfs, &cfg);
+            if (lfs_setup.formattable) {
+                fos << "Formatting LittleFS file system\n";
+                lfs_format(&lfs, &cfg);
+                lfs_mount(&lfs, &cfg);
+            } else {
+                fail(ERROR_NOT_POSSIBLE, "This block device is not formattable");
+            }
         } else {
             fail(ERROR_CONNECTION, "LittleFS file system is corrupted - add -f flag to format it (this may result in data loss)");
         }
