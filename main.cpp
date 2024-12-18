@@ -709,7 +709,8 @@ struct config_command : public cmd {
 auto bdev_options = (
     (option('p', "--partition") % "Partition to use as block device" &
             integer("partition").set(settings.bdev.partition) % "partition number").force_expand_help(true) +
-    (option("--filesystem") & bdev_fs("fs").set(settings.bdev.fs) % "Filesystem (default: littlefs)").force_expand_help(true) +
+    (option("--filesystem") % "Specify filesystem to use" &
+            bdev_fs("fs").set(settings.bdev.fs) % "littlefs|fatfs").force_expand_help(true) +
     (option('f', "--format").set(settings.bdev.format) % "Format the drive if necessary (may result in data loss)")
 ).min(0).doc_non_optional(true) % "Block device options";
 
@@ -5508,7 +5509,7 @@ void setup_bdevfs(picoboot::connection con) {
         }
 
         // No FS Found
-        fail(ERROR_CONNECTION, "No file system detected - to format the drive use -f --filesystem <littlefs|fatfs>");
+        fail(ERROR_CONNECTION, "No file system detected - to format the drive use `-f --filesystem <littlefs|fatfs>`");
     }
 }
 
@@ -5823,15 +5824,36 @@ bool bdev_mkdir_command::execute(device_map &devices) {
     auto con = get_single_bootsel_device_connection(devices);
     setup_bdevfs(con);
 
-    lfs_op_fn lfs_op = [&](lfs_t *lfs) {
-        int err = lfs_mkdir(lfs, settings.filenames[0].c_str());
-        if (err == LFS_ERR_EXIST) {
-            fos << "Directory already exists\n";
-        } else if (err) {
-            fos << "LittleFS Error " << err << "\n";
+    switch (settings.bdev.fs) {
+        case fs_littlefs: {
+            lfs_op_fn lfs_op = [&](lfs_t *lfs) {
+                int err = lfs_mkdir(lfs, settings.filenames[0].c_str());
+                if (err == LFS_ERR_EXIST) {
+                    fos << "Directory already exists\n";
+                } else if (err) {
+                    fos << "LittleFS Error " << err << "\n";
+                }
+            };
+            do_lfs_op(lfs_op);
+            break;
         }
-    };
-    do_lfs_op(lfs_op);
+
+        case fs_fatfs: {
+            fatfs_op_fn fatfs_op = [&](FATFS *fatfs) {
+                int err = f_mkdir(fatfs, settings.filenames[0].c_str());
+                if (err == FR_EXIST) {
+                    fos << "Directory already exists\n";
+                } else if (err) {
+                    fos << "FatFS Error " << err << "\n";
+                }
+            };
+            do_fatfs_op(fatfs_op);
+            break;
+        }
+
+        default:
+            fail(ERROR_ARGS, "Unknown filesystem specified");
+    }
     return false;
 }
 
@@ -5968,17 +5990,40 @@ bool bdev_rm_command::execute(device_map &devices) {
     auto con = get_single_bootsel_device_connection(devices);
     setup_bdevfs(con);
 
-    lfs_op_fn lfs_op = [&](lfs_t *lfs) {
-        int err = lfs_remove(lfs, settings.filenames[0].c_str());
-        if (err == LFS_ERR_NOTEMPTY) {
-            fail(ERROR_NOT_POSSIBLE, "Directory to remove is not empty");
-        } else if (err == LFS_ERR_NOENT) {
-            fail(ERROR_NOT_POSSIBLE, "File to remove does not exist");
-        } else if (err) {
-            fail(ERROR_WRITE_FAILED, "LittleFS Error %d", err);
+    switch (settings.bdev.fs) {
+        case fs_littlefs: {
+            lfs_op_fn lfs_op = [&](lfs_t *lfs) {
+                int err = lfs_remove(lfs, settings.filenames[0].c_str());
+                if (err == LFS_ERR_NOTEMPTY) {
+                    fail(ERROR_NOT_POSSIBLE, "Directory to remove is not empty");
+                } else if (err == LFS_ERR_NOENT) {
+                    fail(ERROR_NOT_POSSIBLE, "File to remove does not exist");
+                } else if (err) {
+                    fail(ERROR_WRITE_FAILED, "LittleFS Error %d", err);
+                }
+            };
+            do_lfs_op(lfs_op);
+            break;
         }
-    };
-    do_lfs_op(lfs_op);
+
+        case fs_fatfs: {
+            fatfs_op_fn fatfs_op = [&](FATFS *fatfs) {
+                int err = f_unlink(fatfs, settings.filenames[0].c_str());
+                if (err == FR_DENIED) {
+                    fail(ERROR_NOT_POSSIBLE, "Directory to remove is not empty");
+                } else if (err == FR_NO_FILE) {
+                    fail(ERROR_NOT_POSSIBLE, "File to remove does not exist");
+                } else if (err) {
+                    fail(ERROR_WRITE_FAILED, "FatFS Error %d", err);
+                }
+            };
+            do_fatfs_op(fatfs_op);
+            break;
+        }
+
+        default:
+            fail(ERROR_ARGS, "Unknown filesystem specified");
+    }
     return false;
 }
 
@@ -5989,27 +6034,61 @@ bool bdev_cat_command::execute(device_map &devices) {
     auto con = get_single_bootsel_device_connection(devices);
     setup_bdevfs(con);
 
-    lfs_op_fn lfs_op = [&](lfs_t *lfs) {
-        lfs_file_t file;
-        int err = lfs_file_open(lfs, &file, settings.filenames[0].c_str(), LFS_O_RDONLY);
-        if (err) {
-            fail(ERROR_READ_FAILED, "LittleFS Open Error %d", err);
-        }
-        auto size = lfs_file_size(lfs, &file);
-        err = lfs_file_rewind(lfs, &file);
-        std::vector<char> data_buf(size);
-        err = lfs_file_read(lfs, &file, data_buf.data(), data_buf.size());
-        if (err < 0) {
-            fail(ERROR_READ_FAILED, "LittleFS Read Error %d", err);
-        } else if (err != data_buf.size()) {
-            fail(ERROR_READ_FAILED, "LittleFS Read too short - got %d bytes expected %d bytes", err, data_buf.size());
-        }
-        err = lfs_file_close(lfs, &file);
+    switch (settings.bdev.fs) {
+        case fs_littlefs: {
+            lfs_op_fn lfs_op = [&](lfs_t *lfs) {
+                lfs_file_t file;
+                int err = lfs_file_open(lfs, &file, settings.filenames[0].c_str(), LFS_O_RDONLY);
+                if (err) {
+                    fail(ERROR_READ_FAILED, "LittleFS Open Error %d", err);
+                }
+                auto size = lfs_file_size(lfs, &file);
+                err = lfs_file_rewind(lfs, &file);
+                std::vector<char> data_buf(size);
+                err = lfs_file_read(lfs, &file, data_buf.data(), data_buf.size());
+                if (err < 0) {
+                    fail(ERROR_READ_FAILED, "LittleFS Read Error %d", err);
+                } else if (err != data_buf.size()) {
+                    fail(ERROR_READ_FAILED, "LittleFS Read too short - got %d bytes expected %d bytes", err, data_buf.size());
+                }
+                err = lfs_file_close(lfs, &file);
 
-        string out(data_buf.begin(), data_buf.end());
-        printf("%s", out.c_str());
-    };
-    do_lfs_op(lfs_op);
+                string out(data_buf.begin(), data_buf.end());
+                printf("%s", out.c_str());
+            };
+            do_lfs_op(lfs_op);
+            break;
+        }
+
+        case fs_fatfs: {
+            fatfs_op_fn fatfs_op = [&](FATFS *fatfs) {
+                FIL file;
+                int err = f_open(fatfs, &file, settings.filenames[0].c_str(), FA_READ);
+                if (err) {
+                    fail(ERROR_READ_FAILED, "FatFS Open Error %d", err);
+                }
+                auto size = f_size(&file);
+                err = f_rewind(&file);
+                std::vector<char> data_buf(size);
+                UINT bytes_read;
+                err = f_read(&file, data_buf.data(), data_buf.size(), &bytes_read);
+                if (err) {
+                    fail(ERROR_READ_FAILED, "FatFS Read Error %d", err);
+                } else if (bytes_read != data_buf.size()) {
+                    fail(ERROR_READ_FAILED, "FatFS Read too short - got %d bytes expected %d bytes", bytes_read, data_buf.size());
+                }
+                err = f_close(&file);
+
+                string out(data_buf.begin(), data_buf.end());
+                printf("%s", out.c_str());
+            };
+            do_fatfs_op(fatfs_op);
+            break;
+        }
+
+        default:
+            fail(ERROR_ARGS, "Unknown filesystem specified");
+    }
     return false;
 }
 
