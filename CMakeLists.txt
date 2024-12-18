@@ -290,6 +290,7 @@ else()
     target_compile_definitions(picotool PRIVATE HAS_LIBUSB=1)
     target_link_libraries(picotool 
         picoboot_connection_cxx
+        fatfs
         littlefs
         ${LIBUSB_LIBRARIES})
 endif()
