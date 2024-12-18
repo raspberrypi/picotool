@@ -38,6 +38,8 @@
     #include "rp2350.rom.h"
     #include "xip_ram_perms.h"
     #include "lfs.h"
+    #include "ff.h"
+    #include "diskio.h"
 #else
     #include "picoboot_connection.h"
 #endif
@@ -360,7 +362,8 @@ string family_name(unsigned int family_id) {
 }
 
 typedef enum {
-    fs_littlefs
+    fs_littlefs,
+    fs_fatfs
 } bdev_fs_t;
 
 struct bdev_fs : public cli::value_base<bdev_fs> {
@@ -375,8 +378,10 @@ struct bdev_fs : public cli::value_base<bdev_fs> {
                 [](unsigned char c){ return std::tolower(c); });
             if (value == "littlefs") {
                 t = fs_littlefs;
+            } else if (value == "fatfs") {
+                t = fs_fatfs;
             } else {
-                return value + " is not a supported file system for block devices - only littlefs is supported";
+                return value + " is not a supported file system for block devices - only LittleFS and FatFS are supported";
             }
             return string("");
         });
@@ -773,7 +778,7 @@ struct bdev_rm_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Delete file (or empty directory) on the block device";
+        return "Delete a file or an empty directory on the block device";
     }
 };
 
@@ -2153,12 +2158,12 @@ struct picoboot_memory_access : public memory_access {
 
                 // save data before the changing data
                 write_data.resize(pre_len);
-                read(aligned_range.from, write_data.data(), write_data.size(), false);
+                if (pre_len) read(aligned_range.from, write_data.data(), write_data.size(), false);
                 // now add the data that is changing
                 write_data.insert(write_data.end(), buffer, buffer + size);
                 // save data after the changing data
                 write_data.resize(aligned_range.len());
-                read(address + size, write_data.data() + pre_len + size, post_len, false);
+                if (post_len) read(address + size, write_data.data() + pre_len + size, post_len, false);
 
                 // Do the erase
                 connection.flash_erase(aligned_range.from, aligned_range.len());
@@ -5406,7 +5411,7 @@ bool link_command::execute(device_map &devices) {
 }
 
 #if HAS_LIBUSB
-struct _lfs_setup {
+struct _bdevfs_setup {
     picoboot::connection *con;
     std::shared_ptr<memory_access> access;
     uint32_t base_addr;
@@ -5414,16 +5419,227 @@ struct _lfs_setup {
     bool writeable = true;
     bool formattable = true;
 };
-_lfs_setup lfs_setup;
+_bdevfs_setup bdevfs_setup;
 
+// FatFS Functions
+DWORD get_fattime (void) {
+    std::time_t t = std::time(0);
+    std::tm* now = std::localtime(&t);
+    // now gives year since 1900 and 0-11 month
+    // fattime wants year since 1980 and 1-12 month
+    DWORD fattime = ((now->tm_year - 80) << 25)
+                    | ((now->tm_mon + 1) << 21)
+                    | ((now->tm_mday) << 16)
+                    | ((now->tm_hour) << 11)
+                    | ((now->tm_min) << 5)
+                    | (now->tm_sec);
+    return fattime;
+}
+
+
+DRESULT disk_read (void *drv, BYTE* buff, DWORD sector, UINT count) {
+    bdevfs_setup.access->read(bdevfs_setup.base_addr + (sector * FF_MAX_SS), (uint8_t*)buff, count * FF_MAX_SS);
+    return RES_OK;
+}
+
+DRESULT disk_write (void *drv, const BYTE* buff, DWORD sector, UINT count) {
+    if (bdevfs_setup.writeable) {
+        bdevfs_setup.access->write(bdevfs_setup.base_addr + (sector * FF_MAX_SS), (uint8_t*)buff, count * FF_MAX_SS);
+        return RES_OK;
+    } else {
+        fail(ERROR_NOT_POSSIBLE, "This block device is not writeable");
+        return RES_WRPRT;
+    }
+}
+
+DRESULT disk_ioctl (void *drv, BYTE cmd, void* buff) {
+    switch (cmd) {
+        case CTRL_SYNC:
+            return RES_OK;
+
+        case GET_SECTOR_COUNT:
+            *(DWORD*)buff = bdevfs_setup.size / FF_MAX_SS;
+            return RES_OK;
+
+        case GET_BLOCK_SIZE:
+            *(DWORD*)buff = FLASH_SECTOR_ERASE_SIZE / FF_MAX_SS;
+            return RES_OK;
+
+        case IOCTL_INIT:
+        case IOCTL_STATUS: {
+            DSTATUS stat = 0;
+            *((DSTATUS *)buff) = stat;
+            return RES_OK;
+        }
+
+        default:
+            fail(ERROR_NOT_POSSIBLE, "Unknown ioctl %d", cmd);
+            return RES_PARERR;
+    }
+}
+
+void fatfs_ls(FATFS *fatfs, const char *path, bool recursive=false) {
+    int err;
+    FF_DIR dir;
+    err = f_opendir(fatfs, &dir, path);
+    if (err) {
+        fos << "FatFS Error " << err << "\n";
+    }
+
+    FILINFO info;
+    while (true) {
+        int res = f_readdir(&dir, &info);
+        if (res != 0) {
+            fos << "FatFS Res " << res << "\n";
+            break;
+        }
+
+        if (info.fname[0] == 0) {
+            break;
+        }
+
+        if (strcmp(info.fname, ".") == 0 || strcmp(info.fname, "..") == 0) {
+            continue;
+        }
+
+        fos << info.fname;
+
+        if (info.fattrib & AM_DIR) {
+            fos << "/\n";
+            if (recursive) {
+                int fr_col = fos.first_column();
+                fos.first_column(fr_col + 4);
+                std::stringstream ss;
+                ss << path << "/" << info.fname;
+                fatfs_ls(fatfs, ss.str().c_str(), recursive);
+                fos.first_column(fr_col);
+            }
+        } else {
+            std::stringstream ss;
+            int year = (info.fdate >> 9) & 0x7f;
+            int mon = (info.fdate >> 5) & 0xf;
+            int day = info.fdate & 0x1f;
+            int hour = (info.ftime >> 11) & 0x1f;
+            int min = (info.ftime >> 5) & 0x3f;
+            int sec = info.ftime & 0x1f;
+            ss << " " << day << "-" << mon << "-" << year + 1980;
+            ss << " " << std::setfill('0') << std::setw(2) << hour;
+            ss << ":" << std::setfill('0') << std::setw(2) << min;
+            ss << ":" << std::setfill('0') << std::setw(2) << sec;
+            ss << " " << info.fsize << "B\n";
+            fos << ss.str();
+        }
+    }
+
+    err = f_closedir(&dir);
+    if (err) {
+        fos << "FatFS Error " << err << "\n";
+    }
+}
+
+typedef std::function<void(FATFS* fatfs)> fatfs_op_fn;
+
+void do_fatfs_op(device_map &devices, fatfs_op_fn fatfs_op) {
+    auto con = get_single_bootsel_device_connection(devices);
+    picoboot_memory_access raw_access(con);
+    raw_access.erase = true;
+
+    if (settings.bdev.partition >= 0) {
+        auto partitions = get_partitions(con);
+        if (!partitions) {
+            fail(ERROR_NOT_POSSIBLE, "There is no partition table on the device");
+        }
+        if (settings.bdev.partition >= partitions->size()) {
+            fail(ERROR_NOT_POSSIBLE, "There are only %d partitions on the device", partitions->size());
+        }
+        uint32_t start = std::get<0>((*partitions)[settings.bdev.partition]);
+        uint32_t end = std::get<1>((*partitions)[settings.bdev.partition]);
+        bdevfs_setup.writeable = std::get<2>((*partitions)[settings.bdev.partition]) & PICOBIN_PARTITION_PERMISSION_NSBOOT_W_BITS;
+        start += FLASH_START;
+        end += FLASH_START;
+        if (end <= start) {
+            fail(ERROR_ARGS, "Partition range is invalid/empty");
+        }
+        bdevfs_setup.base_addr = start;
+        bdevfs_setup.size = end - start;
+    } else {
+        binary_info_header hdr;
+        auto bi_access = get_bi_access(raw_access);
+        bool has_binary_info = find_binary_info(*bi_access, hdr);
+        if (has_binary_info) {
+            auto access = remapped_memory_access(*bi_access, hdr.reverse_copy_mapping);
+            auto visitor = bi_visitor{};
+            bool block_device_found = false;
+            visitor.block_device([&](memory_access &access, binary_info_block_device_t &bi_bdev) {
+                block_device_found = true;
+                std::stringstream ss;
+                ss << hex_string(bi_bdev.address) << "-" << hex_string(bi_bdev.address + bi_bdev.size) <<
+                    " (" << ((bi_bdev.size + 1023) / 1024) << "K): " << read_string(access, bi_bdev.name);
+                if (bi_bdev.flags) {
+                    ss << " flags " << hex_string(bi_bdev.flags, 4) << " ";
+                    if (bi_bdev.flags & BINARY_INFO_BLOCK_DEV_FLAG_READ) ss << "r";
+                    if (bi_bdev.flags & BINARY_INFO_BLOCK_DEV_FLAG_WRITE) ss << "w";
+                    if (bi_bdev.flags & BINARY_INFO_BLOCK_DEV_FLAG_REFORMAT) ss << "f";
+                    bdevfs_setup.writeable = bi_bdev.flags & BINARY_INFO_BLOCK_DEV_FLAG_WRITE;
+                    bdevfs_setup.formattable = bi_bdev.flags & BINARY_INFO_BLOCK_DEV_FLAG_REFORMAT;
+                }
+                string s = ss.str();
+                fos << "embedded drive: " << s << "\n";
+
+                bdevfs_setup.base_addr = bi_bdev.address;
+                bdevfs_setup.size = bi_bdev.size;
+            });
+            visitor.visit(access, hdr);
+            if (!block_device_found) {
+                fail(ERROR_NOT_POSSIBLE, "No block device found on device");
+            }
+        } else {
+            fail(ERROR_NOT_POSSIBLE, "No binary info found on device");
+        }
+    }
+
+    range_map<uint32_t> rmap;
+    bdevfs_setup.con = &con;
+    bdevfs_setup.access = std::make_shared<remapped_memory_access>(raw_access, rmap);
+    
+    FATFS fatfs;
+
+    int err = f_mount(&fatfs);
+    if (err == FR_NO_FILESYSTEM) {
+        if (settings.bdev.format) {
+            if (bdevfs_setup.formattable) {
+                fos << "Formatting FatFS file system\n";
+                uint8_t work_buf[FF_MAX_SS];
+                err = f_mkfs(&fatfs, FM_ANY | FM_SFD, 0, work_buf, sizeof(work_buf));
+                if (err) {
+                    fail(ERROR_CONNECTION, "FatFS Format Error %d", err);
+                }
+                err = f_mount(&fatfs);
+                if (err) {
+                    fail(ERROR_CONNECTION, "FatFS Format Failed with %d", err);
+                }
+            } else {
+                fail(ERROR_NOT_POSSIBLE, "This block device is not formattable");
+            }
+        } else {
+            fail(ERROR_CONNECTION, "FatFS file system is corrupted - add -f flag to format it (this may result in data loss)");
+        }
+    } else if (err) {
+        fail(ERROR_CONNECTION, "FatFS Mount Error %d", err);
+    }
+
+    fatfs_op(&fatfs);
+}
+
+// LittleFS Functions
 int lfs_read(const struct lfs_config *c, lfs_block_t block, lfs_off_t off, void *buffer, lfs_size_t size) {
-    lfs_setup.access->read(lfs_setup.base_addr + (block * c->block_size) + off, (uint8_t*)buffer, size);
+    bdevfs_setup.access->read(bdevfs_setup.base_addr + (block * c->block_size) + off, (uint8_t*)buffer, size);
     return LFS_ERR_OK;
 }
 
 int lfs_prog(const struct lfs_config *c, lfs_block_t block, lfs_off_t off, const void *buffer, lfs_size_t size) {
-    if (lfs_setup.writeable) {
-        lfs_setup.access->write(lfs_setup.base_addr + (block * c->block_size) + off, (uint8_t*)buffer, size);
+    if (bdevfs_setup.writeable) {
+        bdevfs_setup.access->write(bdevfs_setup.base_addr + (block * c->block_size) + off, (uint8_t*)buffer, size);
         return LFS_ERR_OK;
     } else {
         fail(ERROR_NOT_POSSIBLE, "This block device is not writeable");
@@ -5432,8 +5648,8 @@ int lfs_prog(const struct lfs_config *c, lfs_block_t block, lfs_off_t off, const
 };
 
 int lfs_erase(const struct lfs_config *c, lfs_block_t block) {
-    if (lfs_setup.writeable) {
-        lfs_setup.con->flash_erase(lfs_setup.base_addr + (block * c->block_size), c->block_size);
+    if (bdevfs_setup.writeable) {
+        bdevfs_setup.con->flash_erase(bdevfs_setup.base_addr + (block * c->block_size), c->block_size);
         return LFS_ERR_OK;
     } else {
         fail(ERROR_NOT_POSSIBLE, "This block device is not writeable");
@@ -5510,14 +5726,14 @@ void do_lfs_op(device_map &devices, lfs_op_fn lfs_op) {
         }
         uint32_t start = std::get<0>((*partitions)[settings.bdev.partition]);
         uint32_t end = std::get<1>((*partitions)[settings.bdev.partition]);
-        lfs_setup.writeable = std::get<2>((*partitions)[settings.bdev.partition]) & PICOBIN_PARTITION_PERMISSION_NSBOOT_W_BITS;
+        bdevfs_setup.writeable = std::get<2>((*partitions)[settings.bdev.partition]) & PICOBIN_PARTITION_PERMISSION_NSBOOT_W_BITS;
         start += FLASH_START;
         end += FLASH_START;
         if (end <= start) {
             fail(ERROR_ARGS, "Partition range is invalid/empty");
         }
-        lfs_setup.base_addr = start;
-        lfs_setup.size = end - start;
+        bdevfs_setup.base_addr = start;
+        bdevfs_setup.size = end - start;
     } else {
         binary_info_header hdr;
         auto bi_access = get_bi_access(raw_access);
@@ -5536,14 +5752,14 @@ void do_lfs_op(device_map &devices, lfs_op_fn lfs_op) {
                     if (bi_bdev.flags & BINARY_INFO_BLOCK_DEV_FLAG_READ) ss << "r";
                     if (bi_bdev.flags & BINARY_INFO_BLOCK_DEV_FLAG_WRITE) ss << "w";
                     if (bi_bdev.flags & BINARY_INFO_BLOCK_DEV_FLAG_REFORMAT) ss << "f";
-                    lfs_setup.writeable = bi_bdev.flags & BINARY_INFO_BLOCK_DEV_FLAG_WRITE;
-                    lfs_setup.formattable = bi_bdev.flags & BINARY_INFO_BLOCK_DEV_FLAG_REFORMAT;
+                    bdevfs_setup.writeable = bi_bdev.flags & BINARY_INFO_BLOCK_DEV_FLAG_WRITE;
+                    bdevfs_setup.formattable = bi_bdev.flags & BINARY_INFO_BLOCK_DEV_FLAG_REFORMAT;
                 }
                 string s = ss.str();
                 fos << "embedded drive: " << s << "\n";
 
-                lfs_setup.base_addr = bi_bdev.address;
-                lfs_setup.size = bi_bdev.size;
+                bdevfs_setup.base_addr = bi_bdev.address;
+                bdevfs_setup.size = bi_bdev.size;
             });
             visitor.visit(access, hdr);
             if (!block_device_found) {
@@ -5557,8 +5773,8 @@ void do_lfs_op(device_map &devices, lfs_op_fn lfs_op) {
     lfs_t lfs;
 
     range_map<uint32_t> rmap;
-    lfs_setup.con = &con;
-    lfs_setup.access = std::make_shared<remapped_memory_access>(raw_access, rmap);
+    bdevfs_setup.con = &con;
+    bdevfs_setup.access = std::make_shared<remapped_memory_access>(raw_access, rmap);
 
     const struct lfs_config cfg = {
         // block device operations
@@ -5571,7 +5787,7 @@ void do_lfs_op(device_map &devices, lfs_op_fn lfs_op) {
         .read_size = 16,
         .prog_size = PAGE_SIZE,
         .block_size = FLASH_SECTOR_ERASE_SIZE,
-        .block_count = lfs_setup.size / FLASH_SECTOR_ERASE_SIZE, // 0x160 (352) on micropython
+        .block_count = bdevfs_setup.size / FLASH_SECTOR_ERASE_SIZE, // 0x160 (352) on micropython
         .block_cycles = -1,
         .cache_size = PAGE_SIZE,
         .lookahead_size = 16,
@@ -5580,7 +5796,7 @@ void do_lfs_op(device_map &devices, lfs_op_fn lfs_op) {
     int err = lfs_mount(&lfs, &cfg);
     if (err == LFS_ERR_CORRUPT) {
         if (settings.bdev.format) {
-            if (lfs_setup.formattable) {
+            if (bdevfs_setup.formattable) {
                 fos << "Formatting LittleFS file system\n";
                 lfs_format(&lfs, &cfg);
                 lfs_mount(&lfs, &cfg);
@@ -5606,10 +5822,26 @@ bool bdev_ls_command::execute(device_map &devices) {
         dir.pop_back();
     }
 
-    lfs_op_fn lfs_op = [&](lfs_t *lfs) {
-        lfs_ls(lfs, dir.c_str(), settings.bdev.recursive);
-    };
-    do_lfs_op(devices, lfs_op);
+    switch (settings.bdev.fs) {
+        case fs_littlefs: {
+            lfs_op_fn lfs_op = [&](lfs_t *lfs) {
+                lfs_ls(lfs, dir.c_str(), settings.bdev.recursive);
+            };
+            do_lfs_op(devices, lfs_op);
+            break;
+        }
+
+        case fs_fatfs: {
+            fatfs_op_fn fatfs_op = [&](FATFS *fatfs) {
+                fatfs_ls(fatfs, dir.c_str(), settings.bdev.recursive);
+            };
+            do_fatfs_op(devices, fatfs_op);
+            break;
+        }
+
+        default:
+            fail(ERROR_ARGS, "Unknown filesystem specified");
+    }
     return false;
 }
 
@@ -5627,73 +5859,128 @@ bool bdev_mkdir_command::execute(device_map &devices) {
 }
 
 bool bdev_cp_command::execute(device_map &devices) {
-    lfs_op_fn lfs_op = [&](lfs_t *lfs) {
-        if ((char)(settings.filenames[1].back()) == '/') {
-            int filenamestart = std::max(settings.filenames[0].find_last_of("/") + 1, settings.filenames[0].find_last_of(":") + 1);
-            int filenamelen = settings.filenames[0].length() - filenamestart;
-            settings.filenames[1] += settings.filenames[0].substr(filenamestart, filenamelen);
-        }
+    if ((char)(settings.filenames[1].back()) == '/') {
+        int filenamestart = std::max(settings.filenames[0].find_last_of("/") + 1, settings.filenames[0].find_last_of(":") + 1);
+        int filenamelen = settings.filenames[0].length() - filenamestart;
+        settings.filenames[1] += settings.filenames[0].substr(filenamestart, filenamelen);
+    }
 
-        bool srcRemote = false;
-        bool destRemote = false;
-        if ((char)(settings.filenames[0].front()) == ':') {
-            srcRemote = true;
-            settings.filenames[0].erase(0, 1);
-        }
-        if ((char)(settings.filenames[1].front()) == ':') {
-            destRemote = true;
-            settings.filenames[1].erase(0, 1);
-        }
+    bool srcRemote = false;
+    bool destRemote = false;
+    if ((char)(settings.filenames[0].front()) == ':') {
+        srcRemote = true;
+        settings.filenames[0].erase(0, 1);
+    }
+    if ((char)(settings.filenames[1].front()) == ':') {
+        destRemote = true;
+        settings.filenames[1].erase(0, 1);
+    }
 
-        fos << "Copying " << (srcRemote ? "device " : "local ") << settings.filenames[0] << " to " << (destRemote ? "device " : "local ") << settings.filenames[1] << "\n";
+    fos << "Copying " << (srcRemote ? "device " : "local ") << settings.filenames[0] << " to " << (destRemote ? "device " : "local ") << settings.filenames[1] << "\n";
 
-        std::vector<char> data_buf;
+    std::vector<char> data_buf;
 
-        if (!srcRemote) {
-            auto infile = get_file_idx(ios::in|ios::binary|ios::ate, 0);
-            auto size = infile->tellg();
-            infile->seekg(0, std::ios::beg);
-            data_buf.resize(size);
-            infile->read(data_buf.data(), size);
-            infile->close();
-        } else {
-            lfs_file_t file;
-            int err = lfs_file_open(lfs, &file, settings.filenames[0].c_str(), LFS_O_RDONLY);
-            if (err) {
-                fail(ERROR_READ_FAILED, "LittleFS Open Error %d", err);
-            }
-            auto size = lfs_file_size(lfs, &file);
-            err = lfs_file_rewind(lfs, &file);
-            data_buf.resize(size);
-            err = lfs_file_read(lfs, &file, data_buf.data(), data_buf.size());
-            if (err < 0) {
-                fail(ERROR_READ_FAILED, "LittleFS Read Error %d", err);
-            } else if (err != data_buf.size()) {
-                fail(ERROR_READ_FAILED, "LittleFS Read too short - got %d bytes expected %d bytes", err, data_buf.size());
-            }
-            err = lfs_file_close(lfs, &file);
-        }
+    // Read local file
+    if (!srcRemote) {
+        auto infile = get_file_idx(ios::in|ios::binary|ios::ate, 0);
+        auto size = infile->tellg();
+        infile->seekg(0, std::ios::beg);
+        data_buf.resize(size);
+        infile->read(data_buf.data(), size);
+        infile->close();
+    }
 
-        if (!destRemote) {
-            auto outfile = get_file_idx(ios::out|ios::binary, 1);
-            outfile->write(data_buf.data(), data_buf.size());
-            outfile->close();
-        } else {
-            lfs_file_t file;
-            int err = lfs_file_open(lfs, &file, settings.filenames[1].c_str(), LFS_O_WRONLY | LFS_O_CREAT);
-            if (err) {
-                fail(ERROR_WRITE_FAILED, "LittleFS Open Error %d", err);
-            }
-            err = lfs_file_write(lfs, &file, data_buf.data(), data_buf.size());
-            if (err < 0) {
-                fail(ERROR_WRITE_FAILED, "LittleFS Write Error %d", err);
-            } else if (err != data_buf.size()) {
-                fail(ERROR_WRITE_FAILED, "LittleFS Write too short - wrote %d bytes expected %d bytes", err, data_buf.size());
-            }
-            err = lfs_file_close(lfs, &file);
-        }
-    };
-    do_lfs_op(devices, lfs_op);
+    switch (settings.bdev.fs) {
+        case fs_littlefs: {
+            lfs_op_fn lfs_op = [&](lfs_t *lfs) {
+                if (srcRemote) {
+                    lfs_file_t file;
+                    int err = lfs_file_open(lfs, &file, settings.filenames[0].c_str(), LFS_O_RDONLY);
+                    if (err) {
+                        fail(ERROR_READ_FAILED, "LittleFS Open Error %d", err);
+                    }
+                    auto size = lfs_file_size(lfs, &file);
+                    err = lfs_file_rewind(lfs, &file);
+                    data_buf.resize(size);
+                    err = lfs_file_read(lfs, &file, data_buf.data(), data_buf.size());
+                    if (err < 0) {
+                        fail(ERROR_READ_FAILED, "LittleFS Read Error %d", err);
+                    } else if (err != data_buf.size()) {
+                        fail(ERROR_READ_FAILED, "LittleFS Read too short - got %d bytes expected %d bytes", err, data_buf.size());
+                    }
+                    err = lfs_file_close(lfs, &file);
+                }
+
+                if (destRemote) {
+                    lfs_file_t file;
+                    int err = lfs_file_open(lfs, &file, settings.filenames[1].c_str(), LFS_O_WRONLY | LFS_O_CREAT);
+                    if (err) {
+                        fail(ERROR_WRITE_FAILED, "LittleFS Open Error %d", err);
+                    }
+                    err = lfs_file_write(lfs, &file, data_buf.data(), data_buf.size());
+                    if (err < 0) {
+                        fail(ERROR_WRITE_FAILED, "LittleFS Write Error %d", err);
+                    } else if (err != data_buf.size()) {
+                        fail(ERROR_WRITE_FAILED, "LittleFS Write too short - wrote %d bytes expected %d bytes", err, data_buf.size());
+                    }
+                    err = lfs_file_close(lfs, &file);
+                }
+            };
+            do_lfs_op(devices, lfs_op);
+            break;
+        };
+
+        case fs_fatfs: {
+            fatfs_op_fn fatfs_op = [&](FATFS* fatfs) {
+                if (srcRemote) {
+                    FIL file;
+                    FRESULT err = f_open(fatfs, &file, settings.filenames[0].c_str(), FA_READ);
+                    if (err) {
+                        fail(ERROR_READ_FAILED, "FatFS Open Error %d", err);
+                    }
+                    auto size = f_size(&file);
+                    data_buf.resize(size);
+                    UINT bytes_read;
+                    err = f_read(&file, data_buf.data(), data_buf.size(), &bytes_read);
+                    if (err) {
+                        fail(ERROR_READ_FAILED, "FatFS Read Error %d", err);
+                    } else if (bytes_read != data_buf.size()) {
+                        fail(ERROR_READ_FAILED, "FatFS Read too short - got %d bytes expected %d bytes", bytes_read, data_buf.size());
+                    }
+                    err = f_close(&file);
+                }
+
+                if (destRemote) {
+                    FIL file;
+                    FRESULT err = f_open(fatfs, &file, settings.filenames[1].c_str(), FA_WRITE | FA_OPEN_ALWAYS);
+                    if (err) {
+                        fail(ERROR_WRITE_FAILED, "FatFS Open Error %d", err);
+                    }
+                    UINT bytes_written;
+                    err = f_write(&file, data_buf.data(), data_buf.size(), &bytes_written);
+                    if (err) {
+                        fail(ERROR_WRITE_FAILED, "FatFS Write Error %d", err);
+                    } else if (bytes_written != data_buf.size()) {
+                        fail(ERROR_WRITE_FAILED, "FatFS Write too short - wrote %d bytes expected %d bytes", bytes_written, data_buf.size());
+                    }
+                    err = f_close(&file);
+                }
+            };
+            do_fatfs_op(devices, fatfs_op);
+            break;
+        };
+
+        default:
+            fail(ERROR_ARGS, "Unknown filesystem specified");
+    }
+
+    // Write local file
+    if (!destRemote) {
+        auto outfile = get_file_idx(ios::out|ios::binary, 1);
+        outfile->write(data_buf.data(), data_buf.size());
+        outfile->close();
+    }
+
     return false;
 }
 
