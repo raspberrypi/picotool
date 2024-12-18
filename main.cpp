@@ -362,6 +362,7 @@ string family_name(unsigned int family_id) {
 }
 
 typedef enum {
+    fs_detect,
     fs_littlefs,
     fs_fatfs
 } bdev_fs_t;
@@ -533,7 +534,7 @@ struct _settings {
     } uf2;
 
     struct {
-        bdev_fs_t fs = fs_littlefs;
+        bdev_fs_t fs = fs_detect;
         bool recursive = false;
         int partition = -1;
         bool format = false;
@@ -5413,13 +5414,103 @@ bool link_command::execute(device_map &devices) {
 #if HAS_LIBUSB
 struct _bdevfs_setup {
     picoboot::connection *con;
-    std::shared_ptr<memory_access> access;
+    std::shared_ptr<picoboot_memory_access> access;
     uint32_t base_addr;
     uint32_t size;
     bool writeable = true;
     bool formattable = true;
 };
 _bdevfs_setup bdevfs_setup;
+
+void setup_bdevfs(picoboot::connection con) {
+    auto raw_access_ptr = std::make_shared<picoboot_memory_access>(con);
+    auto raw_access = *raw_access_ptr;
+    bdevfs_setup.con = &con;
+    bdevfs_setup.access = raw_access_ptr;
+
+    if (settings.bdev.partition >= 0) {
+        auto partitions = get_partitions(con);
+        if (!partitions) {
+            fail(ERROR_NOT_POSSIBLE, "There is no partition table on the device");
+        }
+        if (settings.bdev.partition >= partitions->size()) {
+            fail(ERROR_NOT_POSSIBLE, "There are only %d partitions on the device", partitions->size());
+        }
+        uint32_t start = std::get<0>((*partitions)[settings.bdev.partition]);
+        uint32_t end = std::get<1>((*partitions)[settings.bdev.partition]);
+        bdevfs_setup.writeable = std::get<2>((*partitions)[settings.bdev.partition]) & PICOBIN_PARTITION_PERMISSION_NSBOOT_W_BITS;
+        start += FLASH_START;
+        end += FLASH_START;
+        if (end <= start) {
+            fail(ERROR_ARGS, "Partition range is invalid/empty");
+        }
+        bdevfs_setup.base_addr = start;
+        bdevfs_setup.size = end - start;
+    } else {
+        binary_info_header hdr;
+        auto bi_access = get_bi_access(raw_access);
+        bool has_binary_info = find_binary_info(*bi_access, hdr);
+        if (has_binary_info) {
+            auto access = remapped_memory_access(*bi_access, hdr.reverse_copy_mapping);
+            auto visitor = bi_visitor{};
+            bool block_device_found = false;
+            visitor.block_device([&](memory_access &access, binary_info_block_device_t &bi_bdev) {
+                block_device_found = true;
+                std::stringstream ss;
+                ss << hex_string(bi_bdev.address) << "-" << hex_string(bi_bdev.address + bi_bdev.size) <<
+                    " (" << ((bi_bdev.size + 1023) / 1024) << "K): " << read_string(access, bi_bdev.name);
+                if (bi_bdev.flags) {
+                    ss << " flags " << hex_string(bi_bdev.flags, 4) << " ";
+                    if (bi_bdev.flags & BINARY_INFO_BLOCK_DEV_FLAG_READ) ss << "r";
+                    if (bi_bdev.flags & BINARY_INFO_BLOCK_DEV_FLAG_WRITE) ss << "w";
+                    if (bi_bdev.flags & BINARY_INFO_BLOCK_DEV_FLAG_REFORMAT) ss << "f";
+                    bdevfs_setup.writeable = bi_bdev.flags & BINARY_INFO_BLOCK_DEV_FLAG_WRITE;
+                    bdevfs_setup.formattable = bi_bdev.flags & BINARY_INFO_BLOCK_DEV_FLAG_REFORMAT;
+                }
+                string s = ss.str();
+                fos << "embedded drive: " << s << "\n";
+
+                bdevfs_setup.base_addr = bi_bdev.address;
+                bdevfs_setup.size = bi_bdev.size;
+            });
+            visitor.visit(access, hdr);
+            if (!block_device_found) {
+                fail(ERROR_NOT_POSSIBLE, "No block device found on device");
+            }
+        } else {
+            fail(ERROR_NOT_POSSIBLE, "No binary info found on device");
+        }
+    }
+
+    if (settings.bdev.fs == fs_detect) {
+        // Auto-detect filesystem
+
+        // FatFS
+        FATFS fatfs;
+        int res = f_mount(&fatfs);
+        if (res == FR_OK) {
+            // FatFS Found
+            fos << "FatFS Filesystem Detected\n";
+            settings.bdev.fs = fs_fatfs;
+            return;
+        }
+
+        // LittleFS
+        char littlefs_str[] = "littlefs";
+        memset(littlefs_str, 0, sizeof(littlefs_str));
+        raw_access.read(bdevfs_setup.base_addr + 8, (uint8_t*)littlefs_str, sizeof(littlefs_str)-1, false);
+        res = strcmp(littlefs_str, "littlefs");
+        if (res == 0) {
+            // LittleFS Found
+            fos << "LittleFS Filesystem Detected\n";
+            settings.bdev.fs = fs_littlefs;
+            return;
+        }
+
+        // No FS Found
+        fail(ERROR_CONNECTION, "No file system detected - to format the drive use -f --filesystem <littlefs|fatfs>");
+    }
+}
 
 // FatFS Functions
 DWORD get_fattime (void) {
@@ -5438,7 +5529,7 @@ DWORD get_fattime (void) {
 
 
 DRESULT disk_read (void *drv, BYTE* buff, DWORD sector, UINT count) {
-    bdevfs_setup.access->read(bdevfs_setup.base_addr + (sector * FF_MAX_SS), (uint8_t*)buff, count * FF_MAX_SS);
+    bdevfs_setup.access->read(bdevfs_setup.base_addr + (sector * FF_MAX_SS), (uint8_t*)buff, count * FF_MAX_SS, false);
     return RES_OK;
 }
 
@@ -5539,70 +5630,11 @@ void fatfs_ls(FATFS *fatfs, const char *path, bool recursive=false) {
 
 typedef std::function<void(FATFS* fatfs)> fatfs_op_fn;
 
-void do_fatfs_op(device_map &devices, fatfs_op_fn fatfs_op) {
-    auto con = get_single_bootsel_device_connection(devices);
-    picoboot_memory_access raw_access(con);
-    raw_access.erase = true;
-
-    if (settings.bdev.partition >= 0) {
-        auto partitions = get_partitions(con);
-        if (!partitions) {
-            fail(ERROR_NOT_POSSIBLE, "There is no partition table on the device");
-        }
-        if (settings.bdev.partition >= partitions->size()) {
-            fail(ERROR_NOT_POSSIBLE, "There are only %d partitions on the device", partitions->size());
-        }
-        uint32_t start = std::get<0>((*partitions)[settings.bdev.partition]);
-        uint32_t end = std::get<1>((*partitions)[settings.bdev.partition]);
-        bdevfs_setup.writeable = std::get<2>((*partitions)[settings.bdev.partition]) & PICOBIN_PARTITION_PERMISSION_NSBOOT_W_BITS;
-        start += FLASH_START;
-        end += FLASH_START;
-        if (end <= start) {
-            fail(ERROR_ARGS, "Partition range is invalid/empty");
-        }
-        bdevfs_setup.base_addr = start;
-        bdevfs_setup.size = end - start;
-    } else {
-        binary_info_header hdr;
-        auto bi_access = get_bi_access(raw_access);
-        bool has_binary_info = find_binary_info(*bi_access, hdr);
-        if (has_binary_info) {
-            auto access = remapped_memory_access(*bi_access, hdr.reverse_copy_mapping);
-            auto visitor = bi_visitor{};
-            bool block_device_found = false;
-            visitor.block_device([&](memory_access &access, binary_info_block_device_t &bi_bdev) {
-                block_device_found = true;
-                std::stringstream ss;
-                ss << hex_string(bi_bdev.address) << "-" << hex_string(bi_bdev.address + bi_bdev.size) <<
-                    " (" << ((bi_bdev.size + 1023) / 1024) << "K): " << read_string(access, bi_bdev.name);
-                if (bi_bdev.flags) {
-                    ss << " flags " << hex_string(bi_bdev.flags, 4) << " ";
-                    if (bi_bdev.flags & BINARY_INFO_BLOCK_DEV_FLAG_READ) ss << "r";
-                    if (bi_bdev.flags & BINARY_INFO_BLOCK_DEV_FLAG_WRITE) ss << "w";
-                    if (bi_bdev.flags & BINARY_INFO_BLOCK_DEV_FLAG_REFORMAT) ss << "f";
-                    bdevfs_setup.writeable = bi_bdev.flags & BINARY_INFO_BLOCK_DEV_FLAG_WRITE;
-                    bdevfs_setup.formattable = bi_bdev.flags & BINARY_INFO_BLOCK_DEV_FLAG_REFORMAT;
-                }
-                string s = ss.str();
-                fos << "embedded drive: " << s << "\n";
-
-                bdevfs_setup.base_addr = bi_bdev.address;
-                bdevfs_setup.size = bi_bdev.size;
-            });
-            visitor.visit(access, hdr);
-            if (!block_device_found) {
-                fail(ERROR_NOT_POSSIBLE, "No block device found on device");
-            }
-        } else {
-            fail(ERROR_NOT_POSSIBLE, "No binary info found on device");
-        }
-    }
-
-    range_map<uint32_t> rmap;
-    bdevfs_setup.con = &con;
-    bdevfs_setup.access = std::make_shared<remapped_memory_access>(raw_access, rmap);
-    
+void do_fatfs_op(fatfs_op_fn fatfs_op) {
     FATFS fatfs;
+
+    // Enable auto-erase, as FatFS has no Flash Translation Layer
+    bdevfs_setup.access->erase = true;
 
     int err = f_mount(&fatfs);
     if (err == FR_NO_FILESYSTEM) {
@@ -5633,7 +5665,7 @@ void do_fatfs_op(device_map &devices, fatfs_op_fn fatfs_op) {
 
 // LittleFS Functions
 int lfs_read(const struct lfs_config *c, lfs_block_t block, lfs_off_t off, void *buffer, lfs_size_t size) {
-    bdevfs_setup.access->read(bdevfs_setup.base_addr + (block * c->block_size) + off, (uint8_t*)buffer, size);
+    bdevfs_setup.access->read(bdevfs_setup.base_addr + (block * c->block_size) + off, (uint8_t*)buffer, size, false);
     return LFS_ERR_OK;
 }
 
@@ -5712,69 +5744,8 @@ void lfs_ls(lfs_t *lfs, const char *path, bool recursive=false) {
 
 typedef std::function<void(lfs_t *lfs)> lfs_op_fn;
 
-void do_lfs_op(device_map &devices, lfs_op_fn lfs_op) {
-    auto con = get_single_bootsel_device_connection(devices);
-    picoboot_memory_access raw_access(con);
-
-    if (settings.bdev.partition >= 0) {
-        auto partitions = get_partitions(con);
-        if (!partitions) {
-            fail(ERROR_NOT_POSSIBLE, "There is no partition table on the device");
-        }
-        if (settings.bdev.partition >= partitions->size()) {
-            fail(ERROR_NOT_POSSIBLE, "There are only %d partitions on the device", partitions->size());
-        }
-        uint32_t start = std::get<0>((*partitions)[settings.bdev.partition]);
-        uint32_t end = std::get<1>((*partitions)[settings.bdev.partition]);
-        bdevfs_setup.writeable = std::get<2>((*partitions)[settings.bdev.partition]) & PICOBIN_PARTITION_PERMISSION_NSBOOT_W_BITS;
-        start += FLASH_START;
-        end += FLASH_START;
-        if (end <= start) {
-            fail(ERROR_ARGS, "Partition range is invalid/empty");
-        }
-        bdevfs_setup.base_addr = start;
-        bdevfs_setup.size = end - start;
-    } else {
-        binary_info_header hdr;
-        auto bi_access = get_bi_access(raw_access);
-        bool has_binary_info = find_binary_info(*bi_access, hdr);
-        if (has_binary_info) {
-            auto access = remapped_memory_access(*bi_access, hdr.reverse_copy_mapping);
-            auto visitor = bi_visitor{};
-            bool block_device_found = false;
-            visitor.block_device([&](memory_access &access, binary_info_block_device_t &bi_bdev) {
-                block_device_found = true;
-                std::stringstream ss;
-                ss << hex_string(bi_bdev.address) << "-" << hex_string(bi_bdev.address + bi_bdev.size) <<
-                    " (" << ((bi_bdev.size + 1023) / 1024) << "K): " << read_string(access, bi_bdev.name);
-                if (bi_bdev.flags) {
-                    ss << " flags " << hex_string(bi_bdev.flags, 4) << " ";
-                    if (bi_bdev.flags & BINARY_INFO_BLOCK_DEV_FLAG_READ) ss << "r";
-                    if (bi_bdev.flags & BINARY_INFO_BLOCK_DEV_FLAG_WRITE) ss << "w";
-                    if (bi_bdev.flags & BINARY_INFO_BLOCK_DEV_FLAG_REFORMAT) ss << "f";
-                    bdevfs_setup.writeable = bi_bdev.flags & BINARY_INFO_BLOCK_DEV_FLAG_WRITE;
-                    bdevfs_setup.formattable = bi_bdev.flags & BINARY_INFO_BLOCK_DEV_FLAG_REFORMAT;
-                }
-                string s = ss.str();
-                fos << "embedded drive: " << s << "\n";
-
-                bdevfs_setup.base_addr = bi_bdev.address;
-                bdevfs_setup.size = bi_bdev.size;
-            });
-            visitor.visit(access, hdr);
-            if (!block_device_found) {
-                fail(ERROR_NOT_POSSIBLE, "No block device found on device");
-            }
-        } else {
-            fail(ERROR_NOT_POSSIBLE, "No binary info found on device");
-        }
-    }
-
+void do_lfs_op(lfs_op_fn lfs_op) {
     lfs_t lfs;
-
-    range_map<uint32_t> rmap;
-    bdevfs_setup.con = &con;
-    bdevfs_setup.access = std::make_shared<remapped_memory_access>(raw_access, rmap);
 
     const struct lfs_config cfg = {
         // block device operations
@@ -5814,6 +5785,9 @@ void do_lfs_op(device_map &devices, lfs_op_fn lfs_op) {
 }
 
 bool bdev_ls_command::execute(device_map &devices) {
+    auto con = get_single_bootsel_device_connection(devices);
+    setup_bdevfs(con);
+
     string dir = "";
     if (settings.filenames[0].length() > 0) {
         dir += settings.filenames[0];
@@ -5827,7 +5801,7 @@ bool bdev_ls_command::execute(device_map &devices) {
             lfs_op_fn lfs_op = [&](lfs_t *lfs) {
                 lfs_ls(lfs, dir.c_str(), settings.bdev.recursive);
             };
-            do_lfs_op(devices, lfs_op);
+            do_lfs_op(lfs_op);
             break;
         }
 
@@ -5835,7 +5809,7 @@ bool bdev_ls_command::execute(device_map &devices) {
             fatfs_op_fn fatfs_op = [&](FATFS *fatfs) {
                 fatfs_ls(fatfs, dir.c_str(), settings.bdev.recursive);
             };
-            do_fatfs_op(devices, fatfs_op);
+            do_fatfs_op(fatfs_op);
             break;
         }
 
@@ -5846,6 +5820,9 @@ bool bdev_ls_command::execute(device_map &devices) {
 }
 
 bool bdev_mkdir_command::execute(device_map &devices) {
+    auto con = get_single_bootsel_device_connection(devices);
+    setup_bdevfs(con);
+
     lfs_op_fn lfs_op = [&](lfs_t *lfs) {
         int err = lfs_mkdir(lfs, settings.filenames[0].c_str());
         if (err == LFS_ERR_EXIST) {
@@ -5854,11 +5831,14 @@ bool bdev_mkdir_command::execute(device_map &devices) {
             fos << "LittleFS Error " << err << "\n";
         }
     };
-    do_lfs_op(devices, lfs_op);
+    do_lfs_op(lfs_op);
     return false;
 }
 
 bool bdev_cp_command::execute(device_map &devices) {
+    auto con = get_single_bootsel_device_connection(devices);
+    setup_bdevfs(con);
+
     if ((char)(settings.filenames[1].back()) == '/') {
         int filenamestart = std::max(settings.filenames[0].find_last_of("/") + 1, settings.filenames[0].find_last_of(":") + 1);
         int filenamelen = settings.filenames[0].length() - filenamestart;
@@ -5926,7 +5906,7 @@ bool bdev_cp_command::execute(device_map &devices) {
                     err = lfs_file_close(lfs, &file);
                 }
             };
-            do_lfs_op(devices, lfs_op);
+            do_lfs_op(lfs_op);
             break;
         };
 
@@ -5966,7 +5946,7 @@ bool bdev_cp_command::execute(device_map &devices) {
                     err = f_close(&file);
                 }
             };
-            do_fatfs_op(devices, fatfs_op);
+            do_fatfs_op(fatfs_op);
             break;
         };
 
@@ -5985,6 +5965,9 @@ bool bdev_cp_command::execute(device_map &devices) {
 }
 
 bool bdev_rm_command::execute(device_map &devices) {
+    auto con = get_single_bootsel_device_connection(devices);
+    setup_bdevfs(con);
+
     lfs_op_fn lfs_op = [&](lfs_t *lfs) {
         int err = lfs_remove(lfs, settings.filenames[0].c_str());
         if (err == LFS_ERR_NOTEMPTY) {
@@ -5995,13 +5978,16 @@ bool bdev_rm_command::execute(device_map &devices) {
             fail(ERROR_WRITE_FAILED, "LittleFS Error %d", err);
         }
     };
-    do_lfs_op(devices, lfs_op);
+    do_lfs_op(lfs_op);
     return false;
 }
 
 bool bdev_cat_command::execute(device_map &devices) {
     // Quieten all output, so you can use `cat > file.txt`
     fos_ptr = fos_null_ptr;
+
+    auto con = get_single_bootsel_device_connection(devices);
+    setup_bdevfs(con);
 
     lfs_op_fn lfs_op = [&](lfs_t *lfs) {
         lfs_file_t file;
@@ -6023,7 +6009,7 @@ bool bdev_cat_command::execute(device_map &devices) {
         string out(data_buf.begin(), data_buf.end());
         printf("%s", out.c_str());
     };
-    do_lfs_op(devices, lfs_op);
+    do_lfs_op(lfs_op);
     return false;
 }
 
