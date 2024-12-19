@@ -18,6 +18,9 @@ endif()
 set(JSON_BuildTests OFF CACHE INTERNAL "")
 add_subdirectory(nlohmann_json EXCLUDE_FROM_ALL)
 
+add_subdirectory(oofatfs EXCLUDE_FROM_ALL)
+add_subdirectory(littlefs EXCLUDE_FROM_ALL)
+
 add_subdirectory(whereami EXCLUDE_FROM_ALL)
 
 if(EXISTS "${PICO_SDK_PATH}/lib/mbedtls/CMakeLists.txt")
