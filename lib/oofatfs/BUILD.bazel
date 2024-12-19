@@ -4,6 +4,7 @@ cc_library(
     name = "fatfs",
     srcs = [
         "src/ff.c",
+        "src/ffunicode.c",
     ],
     hdrs = [
         "src/ff.h",

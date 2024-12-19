@@ -2146,34 +2146,45 @@ struct picoboot_memory_access : public memory_access {
         vector<uint8_t> write_data; // used when erasing flash
         if (flash == get_memory_type(address, model)) {
             connection.exit_xip();
-            if (erase) {
-                // Do automatically erase flash, and make it aligned
-                // we have to erase in whole pages
-                range aligned_range(address & ~(FLASH_SECTOR_ERASE_SIZE - 1),
-                                    ((address + size) & ~(FLASH_SECTOR_ERASE_SIZE - 1)) + FLASH_SECTOR_ERASE_SIZE);
-                assert(aligned_range.contains(address));
-                assert(aligned_range.contains(address + size));
+            // Flash Translation Layer - auto-erase, and only write changed data
+            if (enable_ftl) {
+                // Check what's there already
+                write_data.resize(size);
+                read(address, write_data.data(), size, false);
+                // Check if we even need to write
+                if (std::equal(write_data.cbegin(), write_data.cend(), buffer)) {
+                    return;
+                }
+                // Check if we need to erase (ie check for non 0xff)
+                if (!std::all_of(write_data.cbegin(), write_data.cend(), [](uint8_t v) { return v == 0xff; })) {
+                    // Do automatically erase flash, and make it aligned
+                    // we have to erase in whole pages
+                    range aligned_range(address & ~(FLASH_SECTOR_ERASE_SIZE - 1),
+                                        ((address + size) & ~(FLASH_SECTOR_ERASE_SIZE - 1)) + FLASH_SECTOR_ERASE_SIZE);
+                    assert(aligned_range.contains(address));
+                    assert(aligned_range.contains(address + size));
 
-                uint32_t pre_len = address - aligned_range.from;
-                uint32_t post_len = aligned_range.to - (address + size);
-                assert(pre_len + size + post_len == aligned_range.len());
+                    uint32_t pre_len = address - aligned_range.from;
+                    uint32_t post_len = aligned_range.to - (address + size);
+                    assert(pre_len + size + post_len == aligned_range.len());
 
-                // save data before the changing data
-                write_data.resize(pre_len);
-                if (pre_len) read(aligned_range.from, write_data.data(), write_data.size(), false);
-                // now add the data that is changing
-                write_data.insert(write_data.end(), buffer, buffer + size);
-                // save data after the changing data
-                write_data.resize(aligned_range.len());
-                if (post_len) read(address + size, write_data.data() + pre_len + size, post_len, false);
+                    // save data before the changing data
+                    write_data.resize(pre_len);
+                    if (pre_len) read(aligned_range.from, write_data.data(), write_data.size(), false);
+                    // now add the data that is changing
+                    write_data.insert(write_data.end(), buffer, buffer + size);
+                    // save data after the changing data
+                    write_data.resize(aligned_range.len());
+                    if (post_len) read(address + size, write_data.data() + pre_len + size, post_len, false);
 
-                // Do the erase
-                connection.flash_erase(aligned_range.from, aligned_range.len());
+                    // Do the erase
+                    connection.flash_erase(aligned_range.from, aligned_range.len());
 
-                // Update what will now be written
-                address = aligned_range.from;
-                buffer = write_data.data();
-                size = aligned_range.len();
+                    // Update what will now be written
+                    address = aligned_range.from;
+                    buffer = write_data.data();
+                    size = aligned_range.len();
+                }
             }
         }
         if (is_transfer_aligned(address, model) && is_transfer_aligned(address + size, model)) {
@@ -2192,7 +2203,8 @@ struct picoboot_memory_access : public memory_access {
         write(addr, (uint8_t *)v.data(), v.size() * sizeof(typename raw_type_mapping<T>::access_type));
     }
 
-    bool erase = false;
+    // Enable Flash Translation Layer, which performs automatic erase, and only writes changed data
+    bool enable_ftl = false;
 private:
     picoboot::connection& connection;
     vector<std::tuple<uint32_t,uint32_t,vector<uint8_t>>> flash_cache;
@@ -4187,7 +4199,7 @@ bool config_command::execute(device_map &devices) {
             picoboot::connection connection(std::get<2>(handles), std::get<0>(handles));
             picoboot_memory_access access(connection);
             // Enable auto-erase
-            access.erase = true;
+            access.enable_ftl = true;
             auto partitions = get_partitions(connection);
             vector<uint32_t> starts;
             if (partitions) {
@@ -5471,7 +5483,12 @@ void setup_bdevfs(picoboot::connection con) {
                 string s = ss.str();
                 fos << "embedded drive: " << s << "\n";
 
-                bdevfs_setup.base_addr = bi_bdev.address;
+                if (bi_bdev.address < FLASH_START) {
+                    // Some devices have the block device address relative to the start of flash
+                    bdevfs_setup.base_addr = bi_bdev.address + FLASH_START;
+                } else {
+                    bdevfs_setup.base_addr = bi_bdev.address;
+                }
                 bdevfs_setup.size = bi_bdev.size;
             });
             visitor.visit(access, hdr);
@@ -5528,15 +5545,17 @@ DWORD get_fattime (void) {
     return fattime;
 }
 
+static_assert(FF_MAX_SS == FF_MIN_SS, "FF_MAX_SS must be equal to FF_MIN_SS");
+#define SECTOR_SIZE FF_MAX_SS
 
 DRESULT disk_read (void *drv, BYTE* buff, DWORD sector, UINT count) {
-    bdevfs_setup.access->read(bdevfs_setup.base_addr + (sector * FF_MAX_SS), (uint8_t*)buff, count * FF_MAX_SS, false);
+    bdevfs_setup.access->read(bdevfs_setup.base_addr + (sector * SECTOR_SIZE), (uint8_t*)buff, count * SECTOR_SIZE, false);
     return RES_OK;
 }
 
 DRESULT disk_write (void *drv, const BYTE* buff, DWORD sector, UINT count) {
     if (bdevfs_setup.writeable) {
-        bdevfs_setup.access->write(bdevfs_setup.base_addr + (sector * FF_MAX_SS), (uint8_t*)buff, count * FF_MAX_SS);
+        bdevfs_setup.access->write(bdevfs_setup.base_addr + (sector * SECTOR_SIZE), (uint8_t*)buff, count * SECTOR_SIZE);
         return RES_OK;
     } else {
         fail(ERROR_NOT_POSSIBLE, "This block device is not writeable");
@@ -5550,11 +5569,15 @@ DRESULT disk_ioctl (void *drv, BYTE cmd, void* buff) {
             return RES_OK;
 
         case GET_SECTOR_COUNT:
-            *(DWORD*)buff = bdevfs_setup.size / FF_MAX_SS;
+            *(DWORD*)buff = bdevfs_setup.size / SECTOR_SIZE;
+            return RES_OK;
+
+        case GET_SECTOR_SIZE:
+            *(DWORD*)buff = SECTOR_SIZE;
             return RES_OK;
 
         case GET_BLOCK_SIZE:
-            *(DWORD*)buff = FLASH_SECTOR_ERASE_SIZE / FF_MAX_SS;
+            *(DWORD*)buff = FLASH_SECTOR_ERASE_SIZE / SECTOR_SIZE;
             return RES_OK;
 
         case IOCTL_INIT:
@@ -5562,6 +5585,24 @@ DRESULT disk_ioctl (void *drv, BYTE cmd, void* buff) {
             DSTATUS stat = 0;
             *((DSTATUS *)buff) = stat;
             return RES_OK;
+        }
+
+        case CTRL_TRIM: {
+            if (bdevfs_setup.writeable) {
+                DWORD* p = (DWORD*)buff;
+                uint32_t start = (*p * SECTOR_SIZE) + bdevfs_setup.base_addr;
+                uint32_t end = (*(p + 1) * SECTOR_SIZE) + bdevfs_setup.base_addr;
+                // Only trim complete flash sectors
+                if (start % FLASH_SECTOR_ERASE_SIZE) start += FLASH_SECTOR_ERASE_SIZE - (start % FLASH_SECTOR_ERASE_SIZE);
+                end -= end % FLASH_SECTOR_ERASE_SIZE;
+                for (uint32_t addr = start; addr < end; addr += FLASH_SECTOR_ERASE_SIZE) {
+                    bdevfs_setup.con->flash_erase(addr, FLASH_SECTOR_ERASE_SIZE);
+                }
+                return RES_OK;
+            } else {
+                fail(ERROR_NOT_POSSIBLE, "This block device is not writeable");
+                return RES_WRPRT;
+            }
         }
 
         default:
@@ -5635,14 +5676,14 @@ void do_fatfs_op(fatfs_op_fn fatfs_op) {
     FATFS fatfs;
 
     // Enable auto-erase, as FatFS has no Flash Translation Layer
-    bdevfs_setup.access->erase = true;
+    bdevfs_setup.access->enable_ftl = true;
 
     int err = f_mount(&fatfs);
     if (err == FR_NO_FILESYSTEM) {
         if (settings.bdev.format) {
             if (bdevfs_setup.formattable) {
                 fos << "Formatting FatFS file system\n";
-                uint8_t work_buf[FF_MAX_SS];
+                uint8_t work_buf[SECTOR_SIZE];
                 err = f_mkfs(&fatfs, FM_ANY | FM_SFD, 0, work_buf, sizeof(work_buf));
                 if (err) {
                     fail(ERROR_CONNECTION, "FatFS Format Error %d", err);
