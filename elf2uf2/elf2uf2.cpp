@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cstring>
 #include <memory>
+#include <cinttypes>
 
 #include "elf2uf2.h"
 #include "errors.h"
@@ -40,7 +41,7 @@ int check_address_range(const address_ranges& valid_ranges, uint32_t addr, uint3
     for(const auto& range : valid_ranges) {
         if (range.from <= addr && range.to >= addr + size) {
             if (range.type == address_range::type::NO_CONTENTS && !uninitialized) {
-                fail(ERROR_INCOMPATIBLE, "ELF contains memory contents for uninitialized memory at %p", addr);
+                fail(ERROR_INCOMPATIBLE, "ELF contains memory contents for uninitialized memory at 0x%08" PRIx32, addr);
             }
             ar = range;
             if (verbose) {

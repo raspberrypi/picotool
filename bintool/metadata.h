@@ -238,7 +238,7 @@ struct partition_table_item : public single_byte_size_item {
         for (unsigned int i=2; i < size; i++) {
             data.push_back(*it++);
         }
-        int i=0;
+        size_t i=0;
         while (i < data.size()) {
             partition new_p;
             uint32_t permissions_locations = data[i++];
@@ -255,7 +255,8 @@ struct partition_table_item : public single_byte_size_item {
             new_p.flags = permissions_flags & (~PICOBIN_PARTITION_PERMISSIONS_BITS);
 
             if (new_p.flags & PICOBIN_PARTITION_FLAGS_HAS_ID_BITS) {
-                new_p.id = (uint64_t)data[i++] | ((uint64_t)data[i++] << 32);
+                new_p.id = (uint64_t)data[i] | ((uint64_t)data[i+1] << 32);
+                i += 2;
             }
 
             uint8_t num_extra_families = (new_p.flags & PICOBIN_PARTITION_FLAGS_ACCEPTS_NUM_EXTRA_FAMILIES_BITS) >> PICOBIN_PARTITION_FLAGS_ACCEPTS_NUM_EXTRA_FAMILIES_LSB;

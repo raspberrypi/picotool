@@ -3050,7 +3050,7 @@ void info_guts(memory_access &raw_access, void *con) {
                 unpartitioned << ", uf2 { " << cli::join(family_ids, ", ") << " }";
                 info_pair("un-partitioned space", unpartitioned.str());
 
-                for (int i=0; i < partition_table->partitions.size(); i++) {
+                for (size_t i=0; i < partition_table->partitions.size(); i++) {
                     std::stringstream pstring;
                     std::stringstream pname;
                     auto partition = partition_table->partitions[i];
@@ -4363,8 +4363,18 @@ bool erase_command::execute(device_map &devices) {
         if (settings.load.partition >= partitions->size()) {
             fail(ERROR_NOT_POSSIBLE, "There are only %d partitions on the device", partitions->size());
         }
-        start = std::get<0>((*partitions)[settings.load.partition]);
-        end = std::get<1>((*partitions)[settings.load.partition]);
+        size_t tmp;
+        tmp = std::get<0>((*partitions)[settings.load.partition]);
+        if (tmp > UINT32_MAX) {
+            fail(ERROR_NOT_POSSIBLE, "Partition start address is too large");
+        }
+        start = tmp;
+        tmp = std::get<1>((*partitions)[settings.load.partition]);
+        if (tmp > UINT32_MAX) {
+            fail(ERROR_NOT_POSSIBLE, "Partition end address is too large");
+        }
+        end = tmp;
+
         printf("Erasing partition %d:\n", settings.load.partition);
         printf("  %08x->%08x\n", start, end);
         start += FLASH_START;
@@ -5415,7 +5425,7 @@ bool get_mask(const std::string& sel, uint32_t &mask, int max_bit) {
         bool ok = get_int(sel.substr(0, dash), from) &&
                   get_int(sel.substr(dash+1), to);
         if (!ok || to < from || from < 0 || to >= max_bit) {
-            fail(ERROR_ARGS, "Invalid bit-range in selector: %s; expect 'm-n' where m >= 0, n >= m and n <= %d", max_bit-1);
+            fail(ERROR_ARGS, "Invalid bit-range in selector: %s; expect 'm-n' where m >= 0, n >= m and n <= %d", sel.c_str(), max_bit-1);
         }
         mask = (2u << to) - (1u << from);
         return true;
@@ -5991,7 +6001,7 @@ bool partition_create_command::execute(device_map &devices) {
         cur_pos = start + size;
     #if SUPPORT_A2
         if (start <= (settings.uf2.abs_block_loc - FLASH_START)/0x1000 && start + size > (settings.uf2.abs_block_loc - FLASH_START)/0x1000) {
-            fail(ERROR_INCOMPATIBLE, "The address %lx cannot be in a partition for the RP2350-E10 fix to work", settings.uf2.abs_block_loc);
+            fail(ERROR_INCOMPATIBLE, "The address %" PRIx32 " cannot be in a partition for the RP2350-E10 fix to work", settings.uf2.abs_block_loc);
         }
     #endif
         new_p.first_sector = start;

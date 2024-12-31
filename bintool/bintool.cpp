@@ -4,7 +4,7 @@
 #include <fstream>
 #include <algorithm>
 #include <random>
-
+#include <cinttypes>
 #include <tuple>
 
 #include "boot/picobin.h"
@@ -646,7 +646,7 @@ std::vector<uint8_t> get_lm_hash_data(elf_file *elf, block *new_block, bool clea
             const auto data = elf->content(*seg);
             // std::cout << "virt = " << std::hex << seg->virtual_address() << " + " << std::hex << seg->virtual_size() << ", phys = " << std::hex << seg->physical_address() << " + " << std::hex << seg->physical_size() << std::endl;
             if (data.size() != seg->physical_size()) {
-                fail(ERROR_INCOMPATIBLE, "Elf segment physical size (%x) does not match data size in file (%x)", seg->physical_size(), data.size());
+                fail(ERROR_INCOMPATIBLE, "Elf segment physical size (%" PRIx32 ") does not match data size in file (%zx)", seg->physical_size(), data.size());
             }
             if (seg->physical_size() && seg->physical_address() < new_block->physical_addr) {
                 std::copy(data.begin(), data.end(), std::back_inserter(to_hash));
@@ -899,7 +899,7 @@ int encrypt(elf_file *elf, block *new_block, const private_t aes_key, const publ
         std::vector<uint8_t> data(enc_data.begin() + i, enc_data.begin() + i + seg->physical_size());
         // std::cout << "virt = " << std::hex << seg->virtual_address() << " + " << std::hex << seg->virtual_size() << ", phys = " << std::hex << seg->physical_address() << " + " << std::hex << seg->physical_size() << std::endl;
         if (data.size() != seg->physical_size()) {
-            fail(ERROR_INCOMPATIBLE, "Elf segment physical size (%x) does not match data size in file (%x)", seg->physical_size(), data.size());
+            fail(ERROR_INCOMPATIBLE, "Elf segment physical size (%" PRIx32  ") does not match data size in file (%zx)", seg->physical_size(), data.size());
         }
         if (seg->physical_size() && seg->physical_address() < new_block->physical_addr) {
             DEBUG_LOG("ENCRYPTED %08x + %08x\n", (int)seg->physical_address(), (int)seg->physical_size());

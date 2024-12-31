@@ -190,7 +190,7 @@ int rp_determine_binary_type(const elf32_header &eh, const std::vector<elf32_ph_
 
 void elf_file::read_bytes(unsigned offset, unsigned length, void *dest) {
     if (offset + length > elf_bytes.size()) {
-        fail(ERROR_FORMAT, "ELF File Read from 0x%x with size 0x%x exceeds the file size 0x%x", offset, length, elf_bytes.size());
+        fail(ERROR_FORMAT, "ELF File Read from 0x%x with size 0x%x exceeds the file size 0x%zx", offset, length, elf_bytes.size());
     }
     memcpy(dest, &elf_bytes[offset], length);
 }
