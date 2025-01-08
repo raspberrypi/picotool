@@ -21,8 +21,8 @@
 
 
 bool check_abs_block(uf2_block block);
-int bin2uf2(std::shared_ptr<std::iostream> in, std::shared_ptr<std::iostream> out, uint32_t address, uint32_t family_id, uint32_t abs_block_loc=0);
-int elf2uf2(std::shared_ptr<std::iostream> in, std::shared_ptr<std::iostream> out, uint32_t family_id, uint32_t package_addr=0, uint32_t abs_block_loc=0);
+int bin2uf2(std::shared_ptr<std::iostream> in, std::shared_ptr<std::iostream> out, uint32_t address, uint32_t family_id, uint32_t abs_block_loc=0, bool verbose=false);
+int elf2uf2(std::shared_ptr<std::iostream> in, std::shared_ptr<std::iostream> out, uint32_t family_id, uint32_t package_addr=0, uint32_t abs_block_loc=0, bool verbose=false);
 
 
 #endif
