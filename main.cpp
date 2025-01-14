@@ -786,7 +786,7 @@ struct encrypt_command : public cmd {
                      hex("offset").set(settings.offset) % "Load offset (memory address; default 0x10000000)"
             ).force_expand_help(true) % "BIN file options" +
             named_file_selection_x("outfile", 1) % "File to save to" +
-            named_typed_file_selection_x("aes_key", 2, "bin") % "AES Key" +
+            named_typed_file_selection_x("aes_key", 2, "bin") % "AES Key Share" +
             optional_typed_file_selection_x("signing_key", 3, "pem") % "Signing Key file"
         );
     }
@@ -4777,7 +4777,7 @@ bool encrypt_command::execute(device_map &devices) {
     }
 
     if (get_file_type_idx(2) != filetype::bin) {
-        fail(ERROR_ARGS, "Can only read AES key from BIN file");
+        fail(ERROR_ARGS, "Can only read AES key share from BIN file");
     }
 
     if (settings.seal.sign && settings.filenames[3].empty()) {
@@ -4790,10 +4790,16 @@ bool encrypt_command::execute(device_map &devices) {
 
 
     auto aes_file = get_file_idx(ios::in|ios::binary, 2);
-    
-    private_t aes_key;
-    aes_file->read((char*)aes_key.bytes, sizeof(aes_key.bytes));
+    aes_file->exceptions(std::iostream::failbit | std::iostream::badbit);
 
+    // Key is stored as a 4-way share, ie X = A ^ B ^ C ^ D
+    aes_key_share_t aes_key_share;
+    aes_file->read((char*)aes_key_share.bytes, sizeof(aes_key_share.bytes));
+
+    aes_key_t aes_key;
+    for (int i=0; i < sizeof(aes_key); i++) {
+        aes_key.bytes[i] = aes_key_share.bytes_a[i] ^ aes_key_share.bytes_b[i] ^ aes_key_share.bytes_c[i] ^ aes_key_share.bytes_d[i];
+    }
 
     private_t private_key = {};
     public_t public_key = {};
