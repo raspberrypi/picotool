@@ -40,7 +40,7 @@ void mb_sha256_buffer(const uint8_t *data, size_t len, message_digest_t *digest_
     mbedtls_sha256(data, len, digest_out->bytes, 0);
 }
 
-void mb_aes256_buffer(const uint8_t *data, size_t len, uint8_t *data_out, const private_t *key, iv_t *iv) {
+void mb_aes256_buffer(const uint8_t *data, size_t len, uint8_t *data_out, const aes_key_t *key, iv_t *iv) {
     mbedtls_aes_context aes;
 
     assert(len % 16 == 0);

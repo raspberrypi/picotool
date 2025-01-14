@@ -869,7 +869,7 @@ void verify_block(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runt
 }
 
 
-int encrypt(elf_file *elf, block *new_block, const private_t aes_key, const public_t public_key, const private_t private_key, bool hash_value, bool sign) {
+int encrypt(elf_file *elf, block *new_block, const aes_key_t aes_key, const public_t public_key, const private_t private_key, bool hash_value, bool sign) {
 
     std::vector<uint8_t> to_enc = get_lm_hash_data(elf, new_block);
 
@@ -975,7 +975,7 @@ int encrypt(elf_file *elf, block *new_block, const private_t aes_key, const publ
 }
 
 
-std::vector<uint8_t> encrypt(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *new_block, const private_t aes_key, const public_t public_key, const private_t private_key, bool hash_value, bool sign) {
+std::vector<uint8_t> encrypt(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *new_block, const aes_key_t aes_key, const public_t public_key, const private_t private_key, bool hash_value, bool sign) {
     std::random_device rand{};
     assert(rand.max() - rand.min() >= 256);
 

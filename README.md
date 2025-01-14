@@ -678,7 +678,8 @@ The encrypted binary will have the following structure:
 - Padding to ensure the encrypted length is a multiple of 4 words
 - Signature metadata block
 
-The AES key must be provided as a .bin file of the 256 bit AES key to be used for encryption.
+The AES key must be provided as a .bin file containing a 4-way share of the 256 bit AES key to be used for encryption.
+Eg if the 256 bit key is X, the bin file should contain the 256 bit numbers A B C D where X = A ^ B ^ C ^ D.
 
 ```text
 $ picotool help encrypt
