@@ -648,7 +648,7 @@ std::vector<uint8_t> get_lm_hash_data(elf_file *elf, block *new_block, bool clea
             if (data.size() != seg->physical_size()) {
                 fail(ERROR_INCOMPATIBLE, "Elf segment physical size (%" PRIx32 ") does not match data size in file (%zx)", seg->physical_size(), data.size());
             }
-            if (seg->physical_size() && seg->physical_address() < new_block->physical_addr) {
+            if (seg->physical_size()) {
                 std::copy(data.begin(), data.end(), std::back_inserter(to_hash));
                 DEBUG_LOG("HASH %08x + %08x\n", (int)seg->physical_address(), (int)seg->physical_size());
                 entries.push_back(
