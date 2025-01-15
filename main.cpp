@@ -245,6 +245,10 @@ template <typename T> struct range_map {
         }
     }
 
+    void empty() {
+        m.clear();
+    }
+
     pair<mapping, T> get(uint32_t p) {
         auto f = m.upper_bound(p);
         if (f == m.end()) {
@@ -2775,7 +2779,13 @@ void build_rmap_load_map(std::shared_ptr<load_map_item>load_map, range_map<uint3
     for (unsigned int i=0; i < load_map->entries.size(); i++) {
         auto e = load_map->entries[i];
         if (e.storage_address != 0) {
-            rmap.insert(range(e.runtime_address, e.runtime_address + e.size), e.storage_address);
+            try {
+                rmap.insert(range(e.runtime_address, e.runtime_address + e.size), e.storage_address);
+            } catch (command_failure&) {
+                // Overlapping memory ranges are permitted in a load_map, so empty the range map and then add the entry
+                rmap.empty();
+                rmap.insert(range(e.runtime_address, e.runtime_address + e.size), e.storage_address);
+            }
         }
     }
 }
