@@ -764,7 +764,7 @@ Family ID 'rp2350-arm-s' can be downloaded in partition 0:
 
 ### create
 
-This command allows you to create partition tables, and additionally embed them into the block loop if ELF files (for example, for bootloaders).
+This command allows you to create partition tables, and additionally embed them into the block loop of ELF files (for example, for bootloaders).
 By default, all partition tables are hashed, and you can also sign them. The schema for this JSON file is [here](json/schemas/partition-table-schema.json).
 
 ```text
