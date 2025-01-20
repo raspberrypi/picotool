@@ -3,16 +3,19 @@
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
+
+#ifdef DEBUG_PRINT
 #include <stdio.h>
+#endif
 #include <string.h>
 #include "pico/stdlib.h"
 #include "boot/picobin.h"
-#include "hardware/uart.h"
 #include "pico/bootrom.h"
 #include "pico/rand.h"
 #include "hardware/structs/otp.h"
-#include "hardware/structs/qmi.h"
-#include "hardware/structs/xip_ctrl.h"
+#if USE_USB_DPRAM
+#include "hardware/structs/usb_dpram.h"
+#endif
 
 #include "pico/binary_info.h"
 
@@ -63,14 +66,20 @@ static void init_aes() {
     init_lut_map();
 }
 
+#if USE_USB_DPRAM
+uint8_t* workarea = (uint8_t*)USBCTRL_DPRAM_BASE;
+#else
 static __attribute__((aligned(4))) uint8_t workarea[4 * 1024];
+#endif
 
 int main() {
+#ifdef DEBUG_PRINT
     stdio_init_all();
 
     printf("Decrypting the image\n");
     printf("OTP Valid Keys %x\n", otp_hw->key_valid);
     printf("Unlocking\n");
+#endif
     for (int i=0; i<4; i++) {
         uint32_t key_i = ((i*2+1) << 24) | ((i*2+1) << 16) |
                          (i*2 << 8) | i*2;
@@ -93,9 +102,11 @@ int main() {
     memcpy(iv + 8, (void*)&iv2, sizeof(iv2));
     memcpy(iv + 12, (void*)&iv3, sizeof(iv3));
 
+#ifdef DEBUG_PRINT
     printf("Pre decryption image begins with\n");
     for (int i=0; i < 4; i++)
         printf("%08x\n", *(uint32_t*)(data_start_addr + i*4));
+#endif
 
     init_aes();
     // Read key directly from OTP - guarded reads will throw a bus fault if there are any errors
@@ -105,6 +116,7 @@ int main() {
     otp_hw->sw_lock[otp_key_page] = 0xf;
     ctr_crypt_s(iv, (void*)data_start_addr, data_size/16);
 
+#ifdef DEBUG_PRINT
     printf("Post decryption image begins with\n");
     for (int i=0; i < 4; i++)
         printf("%08x\n", *(uint32_t*)(data_start_addr + i*4));
@@ -112,16 +124,19 @@ int main() {
     printf("Chaining into %x, size %x\n", data_start_addr, data_size);
 
     stdio_deinit_all();
+#endif
 
     int rc = rom_chain_image(
         workarea,
-        sizeof(workarea),
+        4 * 1024,
         data_start_addr,
         data_size
     );
 
+#ifdef DEBUG_PRINT
     stdio_init_all();
     printf("Shouldn't return from ROM call %d\n", rc);
+#endif
 
     reset_usb_boot(0, 0);
 }
