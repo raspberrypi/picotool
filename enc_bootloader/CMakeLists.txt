@@ -1,0 +1,55 @@
+cmake_minimum_required(VERSION 3.12)
+
+if (NOT USE_PRECOMPILED)
+    set(PICO_PLATFORM rp2350-arm-s)
+    
+    set(PICO_NO_PICOTOOL 1)
+
+    # If the user set these environment variables to influence the picotool
+    # build, unset them here so that they do not influence the pico-sdk
+    # build. This is especially required for flags that are not supported
+    # by arm-none-eabi compilers.
+    unset(ENV{CFLAGS})
+    unset(ENV{CXXFLAGS})
+    unset(ENV{LDFLAGS})
+
+    # Pull in SDK (must be before project)
+    include(${PICO_SDK_PATH}/external/pico_sdk_import.cmake)
+
+    project(enc_bootloader C CXX ASM)
+    set(CMAKE_C_STANDARD 11)
+    set(CMAKE_CXX_STANDARD 17)
+
+    if (PICO_SDK_VERSION_STRING VERSION_LESS "2.0.0")
+        message(FATAL_ERROR "Raspberry Pi Pico SDK version 2.0.0 (or later) required. Your version is ${PICO_SDK_VERSION_STRING}")
+    endif()
+
+    # Initialize the SDK
+    pico_sdk_init()
+
+    # Encrypted Bootloader
+    add_executable(enc_bootloader
+        enc_bootloader.c
+        aes.S
+    )
+
+    target_link_libraries(enc_bootloader
+        pico_stdlib
+        pico_rand
+    )
+
+    pico_set_binary_type(enc_bootloader no_flash)
+    # create linker script to run from 0x20070000
+    file(READ ${PICO_LINKER_SCRIPT_PATH}/memmap_no_flash.ld LINKER_SCRIPT)
+    string(REPLACE "RAM(rwx) : ORIGIN =  0x20000000, LENGTH = 512k" "RAM(rwx) : ORIGIN =  0x20078000, LENGTH = 32k" LINKER_SCRIPT "${LINKER_SCRIPT}")
+    file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/memmap_enc_bootloader.ld "${LINKER_SCRIPT}")
+    pico_set_linker_script(enc_bootloader ${CMAKE_CURRENT_BINARY_DIR}/memmap_enc_bootloader.ld)
+else()
+    project(enc_bootloader C CXX ASM)
+    message("Using precompiled enc_bootloader.elf")
+    configure_file(${CMAKE_CURRENT_LIST_DIR}/enc_bootloader.elf ${CMAKE_CURRENT_BINARY_DIR}/enc_bootloader.elf COPYONLY)
+    # Use manually specified variables
+    set(NULL ${CMAKE_MAKE_PROGRAM})
+    set(NULL ${PICO_SDK_PATH})
+    set(NULL ${PICO_DEBUG_INFO_IN_RELEASE})
+endif()
