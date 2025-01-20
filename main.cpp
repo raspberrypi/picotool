@@ -5018,7 +5018,6 @@ bool encrypt_command::execute(device_map &devices) {
             // Bootloader size
             auto bootloader_txt = enc_elf->get_section(".text");
             uint32_t bootloader_size = 0x20082000 - bootloader_txt->virtual_address();
-            printf("Bootloader size %08x start %08x\n", bootloader_size, bootloader_txt->virtual_address());
 
             // Move bootloader down in physical space to start of SRAM (which will be start of flash once packaged)
             enc_elf->move_all(data_start_address - bootloader_txt->virtual_address());
