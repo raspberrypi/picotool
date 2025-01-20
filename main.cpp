@@ -4802,13 +4802,16 @@ bool encrypt_command::execute(device_map &devices) {
     auto aes_file = get_file_idx(ios::in|ios::binary, 2);
     aes_file->exceptions(std::iostream::failbit | std::iostream::badbit);
 
-    // Key is stored as a 4-way share, ie X = A ^ B ^ C ^ D
     aes_key_share_t aes_key_share;
     aes_file->read((char*)aes_key_share.bytes, sizeof(aes_key_share.bytes));
 
     aes_key_t aes_key;
-    for (int i=0; i < sizeof(aes_key); i++) {
-        aes_key.bytes[i] = aes_key_share.bytes_a[i] ^ aes_key_share.bytes_b[i] ^ aes_key_share.bytes_c[i] ^ aes_key_share.bytes_d[i];
+    // Key is stored as a 4-way share of each word, ie X[0] = A[0] ^ B[0] ^ C[0] ^ D[0], stored as A[0], B[0], C[0], D[0]
+    for (int i=0; i < count_of(aes_key.words); i++) {
+        aes_key.words[i] = aes_key_share.words[i*4]
+                         ^ aes_key_share.words[i*4 + 1]
+                         ^ aes_key_share.words[i*4 + 2]
+                         ^ aes_key_share.words[i*4 + 3];
     }
 
     private_t private_key = {};
