@@ -38,22 +38,24 @@ typedef struct iv {
     uint8_t bytes[16];
 } iv_t; /**< Convenience typedef */
 
-typedef struct aes_key_share {
+typedef struct aes_key {
+    /** An array 32 bytes key data. */
     union {
-        struct {
-            /** A 4-way share of the 256-bit value. */
-            uint8_t bytes_a[32];
-            uint8_t bytes_b[32];
-            uint8_t bytes_c[32];
-            uint8_t bytes_d[32];
-        };
+        uint8_t bytes[32];
+        uint32_t words[8];
+    };
+} aes_key_t; /**< Convenience typedef */
+
+typedef struct aes_key_share {
+    /** An array 128 bytes key data, 1 word from each share at a time. */
+    union {
         uint8_t bytes[128];
+        uint32_t words[32];
     };
 } aes_key_share_t; /**< Convenience typedef */
 
 typedef signature_t public_t;
 typedef message_digest_t private_t;
-typedef message_digest_t aes_key_t;
 
 void mb_sha256_buffer(const uint8_t *data, size_t len, message_digest_t *digest_out);
 void mb_aes256_buffer(const uint8_t *data, size_t len, uint8_t *data_out, const aes_key_t *key, iv_t *iv);
