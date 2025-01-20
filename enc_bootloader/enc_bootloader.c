@@ -21,8 +21,6 @@
 
 #include "config.h"
 
-volatile uint32_t systick_data[18]; // count, R0-R15,RETPSR
-
 extern void remap();
 extern uint32_t gen_rand_sha();
 extern void init_key(uint8_t *key);
@@ -36,7 +34,7 @@ extern uint32_t lut_a_map[1];
 extern uint32_t lut_b_map[1];
 extern uint32_t rstate_sha[4],rstate_lfsr[2];
 
-void resetrng() {
+void __scratch_x("aes") resetrng() {
     uint32_t f0,f1;
     do f0=get_rand_32(); while(f0==0);   // make sure we don't initialise the LFSR to zero
     f1=get_rand_32();
@@ -52,7 +50,7 @@ void resetrng() {
 #endif
 }
 
-static void init_lut_map() {
+static void __scratch_x("aes") init_lut_map() {
     int i;
     for(i=0;i<256;i++) lut_b[i]=gen_rand_sha()&0xff, lut_a[i]^=lut_b[i];
     lut_a_map[0]=0;
@@ -60,7 +58,7 @@ static void init_lut_map() {
     remap();
 }
 
-static void init_aes() {
+static void __scratch_x("aes") init_aes() {
     resetrng();
     gen_lut_sbox();
     init_lut_map();
@@ -69,7 +67,8 @@ static void init_aes() {
 #if USE_USB_DPRAM
 uint8_t* workarea = (uint8_t*)USBCTRL_DPRAM_BASE;
 #else
-static __attribute__((aligned(4))) uint8_t workarea[4 * 1024];
+// static __attribute__((aligned(4))) uint8_t workarea[4 * 1024];
+uint8_t* workarea = (uint8_t*)SRAM_SCRATCH_Y_BASE;
 #endif
 
 int main() {
@@ -128,7 +127,7 @@ int main() {
 
     int rc = rom_chain_image(
         workarea,
-        4 * 1024,
+        4 * 1024 - PICO_STACK_SIZE, // Don't use stack in workarea
         data_start_addr,
         data_size
     );
@@ -137,6 +136,4 @@ int main() {
     stdio_init_all();
     printf("Shouldn't return from ROM call %d\n", rc);
 #endif
-
-    reset_usb_boot(0, 0);
 }
