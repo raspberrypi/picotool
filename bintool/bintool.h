@@ -25,6 +25,7 @@ std::unique_ptr<block> find_first_block(elf_file *elf);
 block place_new_block(elf_file *elf, std::unique_ptr<block> &first_block);
 #if HAS_MBEDTLS
     int hash_andor_sign(elf_file *elf, block *new_block, const public_t public_key, const private_t private_key, bool hash_value, bool sign, bool clear_sram = false);
+    void encrypt_guts(elf_file *elf, block *new_block, const aes_key_t aes_key, std::vector<uint8_t> &iv_data, std::vector<uint8_t> &enc_data);
     int encrypt(elf_file *elf, block *new_block, const aes_key_t aes_key, const public_t public_key, const private_t private_key, bool hash_value, bool sign);
 #endif
 

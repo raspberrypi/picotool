@@ -33,6 +33,7 @@
 
 #include "boot/uf2.h"
 #include "boot/picobin.h"
+#include "enc_bootloader.h"
 #if HAS_LIBUSB
     #include "picoboot_connection_cxx.h"
     #include "rp2350.rom.h"
@@ -473,6 +474,10 @@ struct _settings {
     } seal;
 
     struct {
+        bool embed = false;
+    } encrypt;
+
+    struct {
         uint32_t align = 0x1000;
     } link;
 
@@ -780,6 +785,7 @@ struct encrypt_command : public cmd {
         return (
             option("--quiet").set(settings.quiet) % "Don't print any output" +
             option("--verbose").set(settings.verbose) % "Print verbose output" +
+            option("--embed").set(settings.encrypt.embed) % "Embed bootloader in output file" +
             (
                 option("--hash").set(settings.seal.hash) % "Hash the encrypted file" +
                 option("--sign").set(settings.seal.sign) % "Sign the encrypted file"
@@ -4771,102 +4777,6 @@ bool load_command::execute(device_map &devices) {
 #endif
 
 #if HAS_MBEDTLS
-bool encrypt_command::execute(device_map &devices) {
-    bool isElf = false;
-    bool isBin = false;
-    if (get_file_type() == filetype::elf) {
-        isElf = true;
-    } else if (get_file_type() == filetype::bin) {
-        isBin = true;
-    } else {
-        fail(ERROR_ARGS, "Can only sign ELFs or BINs");
-    }
-
-    if (get_file_type_idx(1) != get_file_type()) {
-        fail(ERROR_ARGS, "Can only sign to same file type");
-    }
-
-    if (get_file_type_idx(2) != filetype::bin) {
-        fail(ERROR_ARGS, "Can only read AES key share from BIN file");
-    }
-
-    if (settings.seal.sign && settings.filenames[3].empty()) {
-        fail(ERROR_ARGS, "missing key file for signing after encryption");
-    }
-
-    if (!settings.filenames[3].empty() && get_file_type_idx(3) != filetype::pem) {
-        fail(ERROR_ARGS, "Can only read pem keys");
-    }
-
-
-    auto aes_file = get_file_idx(ios::in|ios::binary, 2);
-    aes_file->exceptions(std::iostream::failbit | std::iostream::badbit);
-
-    aes_key_share_t aes_key_share;
-    aes_file->read((char*)aes_key_share.bytes, sizeof(aes_key_share.bytes));
-
-    aes_key_t aes_key;
-    // Key is stored as a 4-way share of each word, ie X[0] = A[0] ^ B[0] ^ C[0] ^ D[0], stored as A[0], B[0], C[0], D[0]
-    for (int i=0; i < count_of(aes_key.words); i++) {
-        aes_key.words[i] = aes_key_share.words[i*4]
-                         ^ aes_key_share.words[i*4 + 1]
-                         ^ aes_key_share.words[i*4 + 2]
-                         ^ aes_key_share.words[i*4 + 3];
-    }
-
-    private_t private_key = {};
-    public_t public_key = {};
-
-    if (settings.seal.sign) read_keys(settings.filenames[3], &public_key, &private_key);
-
-    if (isElf) {
-        elf_file source_file(settings.verbose);
-        elf_file *elf = &source_file;
-        elf->read_file(get_file(ios::in|ios::binary));
-
-        std::unique_ptr<block> first_block = find_first_block(elf);
-        if (!first_block) {
-            fail(ERROR_FORMAT, "No first block found");
-        }
-        elf->editable = false;
-        block new_block = place_new_block(elf, first_block);
-        elf->editable = true;
-
-        encrypt(elf, &new_block, aes_key, public_key, private_key, settings.seal.hash, settings.seal.sign);
-
-        auto out = get_file_idx(ios::out|ios::binary, 1);
-        elf->write(out);
-        out->close();
-    } else if (isBin) {
-        auto binfile = get_file_memory_access(0);
-        auto rmap = binfile.get_rmap();
-        auto ranges = rmap.ranges();
-        assert(ranges.size() == 1);
-        auto bin_start = ranges[0].from;
-        auto bin_size = ranges[0].len();
-
-        vector<uint8_t> bin = binfile.read_vector<uint8_t>(bin_start, bin_size, false);
-
-        std::unique_ptr<block> first_block = find_first_block(bin, bin_start);
-        if (!first_block) {
-            fail(ERROR_FORMAT, "No first block found");
-        }
-        auto bin_cp = bin;
-        block new_block = place_new_block(bin_cp, bin_start, first_block);
-
-        auto enc_data = encrypt(bin, bin_start, bin_start, &new_block, aes_key, public_key, private_key, settings.seal.hash, settings.seal.sign);
-
-        auto out = get_file_idx(ios::out|ios::binary, 1);
-        out->write((const char *)enc_data.data(), enc_data.size());
-        out->close();
-    } else {
-        fail(ERROR_ARGS, "Must be ELF or BIN");
-    }
-
-    return false;
-}
-
-#if HAS_MBEDTLS
 void sign_guts_elf(elf_file* elf, private_t private_key, public_t public_key) {
     std::unique_ptr<block> first_block = find_first_block(elf);
     if (!first_block) {
@@ -4916,9 +4826,12 @@ void sign_guts_elf(elf_file* elf, private_t private_key, public_t public_key) {
                     }
                 }
             }
-            auto segment = elf->segment_from_physical_address(vtor_loc);
+            auto segment = elf->segment_from_virtual_address(vtor_loc);
+            if (segment == nullptr) {
+                fail(ERROR_NOT_POSSIBLE, "The ELF file does not contain the vector table location %x", vtor_loc);
+            }
             auto content = elf->content(*segment);
-            auto offset = vtor_loc - segment->physical_address();
+            auto offset = vtor_loc - segment->virtual_address();
             uint32_t ep;
             memcpy(&ep, content.data() + offset + 4, sizeof(ep));
             uint32_t sp;
@@ -4995,7 +4908,177 @@ vector<uint8_t> sign_guts_bin(iostream_memory_access in, private_t private_key, 
 
     return sig_data;
 }
-#endif
+
+bool encrypt_command::execute(device_map &devices) {
+    bool isElf = false;
+    bool isBin = false;
+    if (get_file_type() == filetype::elf) {
+        isElf = true;
+    } else if (get_file_type() == filetype::bin) {
+        isBin = true;
+    } else {
+        fail(ERROR_ARGS, "Can only sign ELFs or BINs");
+    }
+
+    if (get_file_type_idx(1) != get_file_type()) {
+        fail(ERROR_ARGS, "Can only sign to same file type");
+    }
+
+    if (get_file_type_idx(2) != filetype::bin) {
+        fail(ERROR_ARGS, "Can only read AES key share from BIN file");
+    }
+
+    if (settings.seal.sign && settings.filenames[3].empty()) {
+        fail(ERROR_ARGS, "missing key file for signing after encryption");
+    }
+
+    if (!settings.filenames[3].empty() && get_file_type_idx(3) != filetype::pem) {
+        fail(ERROR_ARGS, "Can only read pem keys");
+    }
+
+
+    auto aes_file = get_file_idx(ios::in|ios::binary, 2);
+    aes_file->exceptions(std::iostream::failbit | std::iostream::badbit);
+
+    aes_key_share_t aes_key_share;
+    aes_file->read((char*)aes_key_share.bytes, sizeof(aes_key_share.bytes));
+
+    aes_key_t aes_key;
+    // Key is stored as a 4-way share of each word, ie X[0] = A[0] ^ B[0] ^ C[0] ^ D[0], stored as A[0], B[0], C[0], D[0]
+    for (int i=0; i < count_of(aes_key.words); i++) {
+        aes_key.words[i] = aes_key_share.words[i*4]
+                         ^ aes_key_share.words[i*4 + 1]
+                         ^ aes_key_share.words[i*4 + 2]
+                         ^ aes_key_share.words[i*4 + 3];
+    }
+
+    private_t private_key = {};
+    public_t public_key = {};
+
+    if (settings.seal.sign) read_keys(settings.filenames[3], &public_key, &private_key);
+
+    if (isElf) {
+        elf_file source_file(settings.verbose);
+        elf_file *elf = &source_file;
+        elf->read_file(get_file(ios::in|ios::binary));
+
+        std::unique_ptr<block> first_block = find_first_block(elf);
+        if (!first_block) {
+            fail(ERROR_FORMAT, "No first block found");
+        }
+        elf->editable = false;
+        block new_block = place_new_block(elf, first_block);
+        elf->editable = true;
+
+        if (settings.encrypt.embed) {
+            if (!isElf) {
+                fail(ERROR_ARGS, "Can only embed decrypting bootloader into elfs");
+            }
+
+            std::vector<uint8_t> iv_data;
+            std::vector<uint8_t> enc_data;
+            uint32_t data_start_address = SRAM_START;
+            encrypt_guts(elf, &new_block, aes_key, iv_data, enc_data);
+
+            auto tmp = std::make_shared<std::stringstream>();
+            auto file = get_enc_bootloader();
+            *tmp << file->rdbuf();
+
+            auto program = get_iostream_memory_access<iostream_memory_access>(tmp, filetype::elf, true);
+            program.set_model(rp2350);
+
+            settings.config.group = "encryption_config";
+            // data_start_addr
+            settings.config.key = "data_start_addr";
+            settings.config.value = hex_string(data_start_address);
+            config_guts(program);
+            // data_size
+            settings.config.key = "data_size";
+            settings.config.value = hex_string(enc_data.size());
+            config_guts(program);
+            // iv
+            for (int i=0; i < 4; i++) {
+                std::stringstream ss;
+                ss << "iv" << i;
+                settings.config.key = ss.str();
+                settings.config.value = hex_string(*(uint32_t*)(iv_data.data() + i*sizeof(uint32_t)));
+                config_guts(program);
+            }
+            // otp_key_page
+            if (false) {
+                settings.config.key = "otp_key_page";
+                settings.config.value = hex_string(30);
+                config_guts(program);
+            }
+
+            elf_file source_file(settings.verbose);
+            elf_file *enc_elf = &source_file;
+            enc_elf->read_file(tmp);
+
+            // Bootloader size
+            auto bootloader_txt = enc_elf->get_section(".text");
+            uint32_t bootloader_size = 0x20082000 - bootloader_txt->virtual_address();
+            printf("Bootloader size %08x start %08x\n", bootloader_size, bootloader_txt->virtual_address());
+
+            // Move bootloader down in physical space to start of SRAM (which will be start of flash once packaged)
+            enc_elf->move_all(data_start_address - bootloader_txt->virtual_address());
+
+            // Add encrypted blob
+            enc_elf->append_segment(data_start_address, data_start_address + bootloader_size, enc_data.size(), ".enc_data");
+            auto data_section = enc_elf->get_section(".enc_data");
+            assert(data_section);
+            assert(data_section->virtual_address() == data_start_address);
+
+            if (data_section->size < enc_data.size()) {
+                fail(ERROR_UNKNOWN, "Block is too big for elf section\n");
+            }
+
+            DEBUG_LOG("Adding enc_data len %d\n", (int)enc_data.size());
+            for (auto x : enc_data) DEBUG_LOG("%02x", x);
+            DEBUG_LOG("\n");
+
+            enc_elf->content(*data_section, enc_data);
+
+            // Sign the final thing
+            sign_guts_elf(enc_elf, private_key, public_key);
+            
+            auto out = get_file_idx(ios::out|ios::binary, 1);
+            enc_elf->write(out);
+            out->close();
+        } else {
+            encrypt(elf, &new_block, aes_key, public_key, private_key, settings.seal.hash, settings.seal.sign);
+            auto out = get_file_idx(ios::out|ios::binary, 1);
+            elf->write(out);
+            out->close();
+        }
+    } else if (isBin) {
+        auto binfile = get_file_memory_access(0);
+        auto rmap = binfile.get_rmap();
+        auto ranges = rmap.ranges();
+        assert(ranges.size() == 1);
+        auto bin_start = ranges[0].from;
+        auto bin_size = ranges[0].len();
+
+        vector<uint8_t> bin = binfile.read_vector<uint8_t>(bin_start, bin_size, false);
+
+        std::unique_ptr<block> first_block = find_first_block(bin, bin_start);
+        if (!first_block) {
+            fail(ERROR_FORMAT, "No first block found");
+        }
+        auto bin_cp = bin;
+        block new_block = place_new_block(bin_cp, bin_start, first_block);
+
+        auto enc_data = encrypt(bin, bin_start, bin_start, &new_block, aes_key, public_key, private_key, settings.seal.hash, settings.seal.sign);
+
+        auto out = get_file_idx(ios::out|ios::binary, 1);
+        out->write((const char *)enc_data.data(), enc_data.size());
+        out->close();
+    } else {
+        fail(ERROR_ARGS, "Must be ELF or BIN");
+    }
+
+    return false;
+}
 
 bool seal_command::execute(device_map &devices) {
     bool isElf = false;
