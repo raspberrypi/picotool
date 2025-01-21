@@ -40,13 +40,18 @@ if (NOT USE_PRECOMPILED)
     # use stack guards, as AES variables are written near the stack
     target_compile_definitions(enc_bootloader PRIVATE
         PICO_USE_STACK_GUARDS=1
-        PICO_STACK_SIZE=0x200
+        PICO_STACK_SIZE=0x100
         PICO_NO_PROGRAM_INFO=1
         # No heap is used
         PICO_HEAP_SIZE=0
         # These inits are not required
         PICO_RUNTIME_SKIP_INIT_PER_CORE_IRQ_PRIORITIES=1
-        PICO_RUNTIME_SKIP_INIT_BOOTROM_LOCKING_ENABLE=1)
+        PICO_RUNTIME_SKIP_INIT_BOOTROM_LOCKING_ENABLE=1
+        # Don't need any vtor irqs
+        PICO_VECTOR_TABLE_NUM_IRQS=0)
+
+    # print memory usage
+    target_link_options(enc_bootloader PUBLIC -Wl,--print-memory-usage)
 
     pico_minimize_runtime(enc_bootloader)
 
