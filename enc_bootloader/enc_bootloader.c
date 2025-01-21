@@ -11,7 +11,6 @@
 #include "pico/stdlib.h"
 #include "boot/picobin.h"
 #include "pico/bootrom.h"
-#include "pico/rand.h"
 #include "hardware/structs/otp.h"
 #if USE_USB_DPRAM
 #include "hardware/structs/usb_dpram.h"
@@ -34,10 +33,12 @@ extern uint32_t lut_a_map[1];
 extern uint32_t lut_b_map[1];
 extern uint32_t rstate_sha[4],rstate_lfsr[2];
 
-void __scratch_x("aes") resetrng() {
+void resetrng() {
     uint32_t f0,f1;
-    do f0=get_rand_32(); while(f0==0);   // make sure we don't initialise the LFSR to zero
-    f1=get_rand_32();
+    uint32_t boot_random[4];
+    rom_get_boot_random(boot_random);
+    do f0=boot_random[0]; while(f0==0);   // make sure we don't initialise the LFSR to zero
+    f1=boot_random[1];
     rstate_sha[0]=f0&0xffffff00;         // bottom byte must be zero (or 4) for SHA, representing "out of data"
     rstate_sha[1]=f1;
     rstate_sha[2]=0x41414141;
@@ -50,7 +51,7 @@ void __scratch_x("aes") resetrng() {
 #endif
 }
 
-static void __scratch_x("aes") init_lut_map() {
+static void init_lut_map() {
     int i;
     for(i=0;i<256;i++) lut_b[i]=gen_rand_sha()&0xff, lut_a[i]^=lut_b[i];
     lut_a_map[0]=0;
@@ -58,7 +59,7 @@ static void __scratch_x("aes") init_lut_map() {
     remap();
 }
 
-static void __scratch_x("aes") init_aes() {
+static void init_aes() {
     resetrng();
     gen_lut_sbox();
     init_lut_map();
@@ -67,8 +68,7 @@ static void __scratch_x("aes") init_aes() {
 #if USE_USB_DPRAM
 uint8_t* workarea = (uint8_t*)USBCTRL_DPRAM_BASE;
 #else
-// static __attribute__((aligned(4))) uint8_t workarea[4 * 1024];
-uint8_t* workarea = (uint8_t*)SRAM_SCRATCH_Y_BASE;
+uint8_t* workarea = (uint8_t*)0x20080200; // AES Code & workspace from 0x20080180 -> 0x20081600
 #endif
 
 int main() {
@@ -127,7 +127,7 @@ int main() {
 
     int rc = rom_chain_image(
         workarea,
-        4 * 1024 - PICO_STACK_SIZE, // Don't use stack in workarea
+        4 * 1024,
         data_start_addr,
         data_size
     );

@@ -35,13 +35,13 @@ if (NOT USE_PRECOMPILED)
 
     target_link_libraries(enc_bootloader
         pico_stdlib
-        pico_rand
     )
 
     # use stack guards, as AES variables are written near the stack
     target_compile_definitions(enc_bootloader PRIVATE
         PICO_USE_STACK_GUARDS=1
         PICO_STACK_SIZE=0x200
+        PICO_NO_PROGRAM_INFO=1
         # No heap is used
         PICO_HEAP_SIZE=0
         # These inits are not required
@@ -51,17 +51,8 @@ if (NOT USE_PRECOMPILED)
     pico_minimize_runtime(enc_bootloader)
 
     pico_set_binary_type(enc_bootloader no_flash)
-    set(USE_USB_DPRAM FALSE)
-    # create linker script to run from 0x20070000
-    file(READ ${PICO_LINKER_SCRIPT_PATH}/memmap_no_flash.ld LINKER_SCRIPT)
-    if (USE_USB_DPRAM)
-        string(REPLACE "RAM(rwx) : ORIGIN =  0x20000000, LENGTH = 512k" "RAM(rwx) : ORIGIN =  0x2007F000, LENGTH = 4k" LINKER_SCRIPT "${LINKER_SCRIPT}")
-        target_compile_definitions(enc_bootloader PRIVATE USE_USB_DPRAM=1)
-    else()
-        string(REPLACE "RAM(rwx) : ORIGIN =  0x20000000, LENGTH = 512k" "RAM(rwx) : ORIGIN =  0x2007F000, LENGTH = 4k" LINKER_SCRIPT "${LINKER_SCRIPT}")
-    endif()
-    file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/memmap_enc_bootloader.ld "${LINKER_SCRIPT}")
-    pico_set_linker_script(enc_bootloader ${CMAKE_CURRENT_BINARY_DIR}/memmap_enc_bootloader.ld)
+    set(USE_USB_DPRAM TRUE)
+    pico_set_linker_script(enc_bootloader ${CMAKE_CURRENT_LIST_DIR}/memmap_enc_bootloader.ld)
     pico_add_dis_output(enc_bootloader)
 else()
     project(enc_bootloader C CXX ASM)
