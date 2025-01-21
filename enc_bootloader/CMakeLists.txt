@@ -51,7 +51,6 @@ if (NOT USE_PRECOMPILED)
     pico_minimize_runtime(enc_bootloader)
 
     pico_set_binary_type(enc_bootloader no_flash)
-    set(USE_USB_DPRAM TRUE)
     pico_set_linker_script(enc_bootloader ${CMAKE_CURRENT_LIST_DIR}/memmap_enc_bootloader.ld)
     pico_add_dis_output(enc_bootloader)
 else()
