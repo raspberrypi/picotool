@@ -1,3 +1,13 @@
+/* MEMORY LAYOUT ASSUMPTIONS
+
+The "chaff" area must be located at the start of Y scratch RAM, 0x20081000: see
+the macro getchaffaddress.
+
+The stack must be located at the end of Y scratch RAM: see the calls to memwipe
+at the end of ctr_crypt_s where memory between __scratch_y_end__ and the stack
+pointer is overwritten.
+*/
+
 .syntax unified
 .cpu cortex-m33
 .thumb
@@ -7,24 +17,18 @@
 #include "hardware/regs/addressmap.h"
 #include "hardware/regs/sha256.h"
 #include "hardware/rcp.h"
+#include "hardware/regs/resets.h"
 
-.global gen_lut_sbox
+.global init_aes
+.global init_key_4way
 .global ctr_crypt_s
-.global remap
-.global gen_rand_sha
-.global init_key
-
-.global rkey_s
-.global lut_a,lut_a_map
-.global lut_b,lut_b_map
-.global rstate_sha,rstate_lfsr
 
 @ RCP macros
 
 #define CTAG0  0x2a
 #define CTAG1  0x2b
 #define CTAG2  0x2c
-#define CTAG3  0x2d @ not used
+#define CTAG3  0x2d
 #define CTAG4  0x2e
 #define CTAG5  0x30
 #define CTAG6  0x31
@@ -39,7 +43,7 @@
 #define CTAG15 0x3a
 #define CTAG16 0x3b
 #define CTAG17 0x3c
-#define CTAG18 0x3d @ not used
+#define CTAG18 0x3d
 
 .macro SET_COUNT n
 .if RC_COUNT
@@ -112,7 +116,9 @@
 @ Put workspace in the second scratch area
 @ The "a"=allocatable attribute (and possibly the %progbits attribute) are necessary to store the murmur3 constants,
 @ otherwise they may end up silently replaced with 0 or 0xffffffff
-.section .scratch_y.aes,"a",%progbits
+.section .scratch_y.aes,"aw",%progbits
+
+workspace_start:
 
 @ chaff has to be at the start of scratch_y = 0x20081000 because this is assumed by the following macro, getchaffaddress
 @ (It seems ADR does not work, nor is it possible to assert that chaff==0x20081000)
@@ -125,6 +131,39 @@
 .endm
 chaff:
 .space 48
+
+.balign 16
+rkey_s:                      @ round key shares: 600 bytes = 15 rounds * 2 shares * (4+1) words
+                             @ see comment at init_key_4way for description of layout and meaning of rkey_s
+.space 600
+rkey4way:                    @ scratch area for init_key_4way; could overlap this with other scratch space if need to save space
+.space 128
+.if CT_BPERM
+bperm_rand:                  @ 32 half words that define the oblivious permutation of blocks
+.space 64
+.endif
+
+.balign 16
+permscratch:                 @ Must be 0 mod 16; 16 bytes of scratch space to store permutation(s)
+perm16:
+.space 16
+@ Scratch space of 32 bytes used both by init_key_sbox and map_sbox_s
+.balign 16
+fourway:                     @ Must be 0 mod 16
+shareA:                      @ 0 mod 16
+.space 20                    @ Only need 16 bytes, but choosing shareB!=shareA mod 16
+shareB:                      @ 4 mod 16
+.space 20
+shareC:                      @ 8 mod 16
+.space 4
+statevperm:                  @ 12 mod 16
+.space 4                     @ vperm state rotation: only last two bits are operational; other bits random
+RKshareC:                    @ Round key common share C; see comment at init_key_4way for explanation
+.space 4
+RKshareCchange:              @ Temporary used by ref_roundkey_share_s
+.space 4
+
+workspace_end:
 
 @ Regardless of configuration, the code uses a single 256-entry LUT,
 @ which is a simple S-box table.
@@ -143,7 +182,22 @@ chaff:
 @ lut_b[x ^ b₀ ^ b₁] ^ c₁ ^ d₁
 .balign 16
 lut_a:                       @ LUT share A (must be 0 mod 16 so that init_key_sbox knows how to mask the lookup)
-.space 256
+.byte 0x63,0x7c,0x77,0x7b,0xf2,0x6b,0x6f,0xc5,0x30,0x01,0x67,0x2b,0xfe,0xd7,0xab,0x76
+.byte 0xca,0x82,0xc9,0x7d,0xfa,0x59,0x47,0xf0,0xad,0xd4,0xa2,0xaf,0x9c,0xa4,0x72,0xc0
+.byte 0xb7,0xfd,0x93,0x26,0x36,0x3f,0xf7,0xcc,0x34,0xa5,0xe5,0xf1,0x71,0xd8,0x31,0x15
+.byte 0x04,0xc7,0x23,0xc3,0x18,0x96,0x05,0x9a,0x07,0x12,0x80,0xe2,0xeb,0x27,0xb2,0x75
+.byte 0x09,0x83,0x2c,0x1a,0x1b,0x6e,0x5a,0xa0,0x52,0x3b,0xd6,0xb3,0x29,0xe3,0x2f,0x84
+.byte 0x53,0xd1,0x00,0xed,0x20,0xfc,0xb1,0x5b,0x6a,0xcb,0xbe,0x39,0x4a,0x4c,0x58,0xcf
+.byte 0xd0,0xef,0xaa,0xfb,0x43,0x4d,0x33,0x85,0x45,0xf9,0x02,0x7f,0x50,0x3c,0x9f,0xa8
+.byte 0x51,0xa3,0x40,0x8f,0x92,0x9d,0x38,0xf5,0xbc,0xb6,0xda,0x21,0x10,0xff,0xf3,0xd2
+.byte 0xcd,0x0c,0x13,0xec,0x5f,0x97,0x44,0x17,0xc4,0xa7,0x7e,0x3d,0x64,0x5d,0x19,0x73
+.byte 0x60,0x81,0x4f,0xdc,0x22,0x2a,0x90,0x88,0x46,0xee,0xb8,0x14,0xde,0x5e,0x0b,0xdb
+.byte 0xe0,0x32,0x3a,0x0a,0x49,0x06,0x24,0x5c,0xc2,0xd3,0xac,0x62,0x91,0x95,0xe4,0x79
+.byte 0xe7,0xc8,0x37,0x6d,0x8d,0xd5,0x4e,0xa9,0x6c,0x56,0xf4,0xea,0x65,0x7a,0xae,0x08
+.byte 0xba,0x78,0x25,0x2e,0x1c,0xa6,0xb4,0xc6,0xe8,0xdd,0x74,0x1f,0x4b,0xbd,0x8b,0x8a
+.byte 0x70,0x3e,0xb5,0x66,0x48,0x03,0xf6,0x0e,0x61,0x35,0x57,0xb9,0x86,0xc1,0x1d,0x9e
+.byte 0xe1,0xf8,0x98,0x11,0x69,0xd9,0x8e,0x94,0x9b,0x1e,0x87,0xe9,0xce,0x55,0x28,0xdf
+.byte 0x8c,0xa1,0x89,0x0d,0xbf,0xe6,0x42,0x68,0x41,0x99,0x2d,0x0f,0xb0,0x54,0xbb,0x16
 lut_a_map:                   @ the current scrambling of lut_a; not particularly secret since it can be deduced from the contents of lut_a and lut_b
 .space 4
 .space 4                     @ align to 8 mod 16
@@ -152,38 +206,12 @@ lut_b:                       @ LUT share B (must be 8 mod 16 so that init_key_sb
 lut_b_map:
 .space 4
 .space 4                     @ align to multiple of 8
-rkey_s:                      @ round key shares: 600 bytes = 15 rounds * 2 shares * (4+1) words
-                             @ every fourth word has a word that is used as a vperm count, and also as a spacer to misalign the shares mod 16
-.space 600
-rkey4way:                    @ scratch area for init_key; could overlap this with other scratch space if need to save space
-.space 128
-.if CT_BPERM
-bperm_rand:                  @ 32 half words that define the oblivious permutation of blocks
-.space 64
-.endif
+
 .balign 16
 rstate_sha:                  @ 128-bit SHA random state, to be initialised to TRNG bytes; zeroth byte must be initialised to zero
 .space 16
 rstate_lfsr:                 @ 32-bit LFSR random state and constant used to step it (initialised by C program)
 .space 8
-.balign 16
-permscratch:                 @ Must be 0 mod 16; 16 bytes of scratch space to store permutation(s)
-perm16:
-.space 16
-@ Scratch space of 32 bytes used both by init_key_sbox and map_sbox_s
-.balign 16
-fourway:                     @ Must be 0 mod 16
-shareA:                      @ 0 mod 16
-.space 20                    @ Only need 16 bytes, but choosing shareB!=shareA mod 16
-shareB:                      @ 4 mod 16
-.space 20
-shareC:                      @ 8 mod 16
-.space 4
-statevperm:                  @ 12 mod 16
-.space 4                     @ vperm state rotation: only last two bits are operational; other bits random
-RKshareC:
-.space 4
-.balign 16
 
 .if CT_BPERM
 .balign 16
@@ -310,6 +338,43 @@ gen_rand_lfsr_nonpres:
 .endm
 
 .ltorg
+
+.balign 4
+.thumb_func
+init_aes:
+ push {r14}
+ GET_CANARY r14,CTAG3
+ push {r0-r12,r14}
+@ first initialise the random number generator
+1:
+ bl get_rand_32
+ movs r4,r0
+ beq 1b            @ get a non-zero random number
+ bl get_rand_32
+ ldr r1,=rstate_sha
+ str r0,[r1,#4]    @ rstate_sha[1]=f1;
+ bic r0,r4,#0xff
+ str r0,[r1]       @ rstate_sha[0]=f0&0xffffff00; bottom byte is set to zero, representing "out of data"
+ mov r2,#0x41414141
+ str r2,[r1,#8]    @ rstate_sha[2]=0x41414141;
+ str r2,[r1,#12]   @ rstate_sha[3]=0x41414141;
+ str r4,[r1,#rstate_lfsr-rstate_sha]   @ must be nonzero for non-degenerate LFSR
+ ldr r2,=0x1d872b41;
+ str r2,[r1,#rstate_lfsr-rstate_sha+4] @ constant that defines a maximal-length LFSR
+.if GEN_RAND_SHA
+ ldr r1,=RESETS_BASE+RESETS_RESET_OFFSET
+ ldr r2,[r1]
+ orr r3,r2,#RESETS_RESET_SHA256_BITS
+ str r3,[r1]       @ reset the SHA hardware
+ str r2,[r1]       @ release the reset
+.endif
+
+init_aes_norand_entry:       @ Entry point for test code that doesn't want to reset the RNGs
+
+ bl remap                    @ scramble the LUTs
+ pop {r0-r12,r14}
+ CHK_CANARY r14,CTAG3
+ pop {r15}
 
 .balign 4
 .thumb_func
@@ -511,7 +576,7 @@ ref_roundkey_shares_s_test:  @ entry point for test code to do fewer than 15 rou
  ldr r4,=rkey_s
  loadlfsr
  steplfsr                    @ r0=change in RKshareC
- adr r2,RKshareCchange
+ ldr r2,=RKshareCchange
  str r0,[r2]
  ldr r3,=RKshareC
  ldr r5,[r3]
@@ -535,7 +600,8 @@ ref_roundkey_shares_s_loop:
  steplfsr; eors r7,r7,r0; ands r9,r9,#3; ldr r3,[r4,r9,lsl#2]; ror r2,r0,r12; eors r3,r3,r2,ror#16; mov r12,r12,ror#8; str r3,[r4,r9,lsl#2]; adds r9,r9,#1
  steplfsr; eors r8,r8,r0; ands r9,r9,#3; ldr r3,[r4,r9,lsl#2]; ror r2,r0,r12; eors r3,r3,r2,ror#16;                    str r3,[r4,r9,lsl#2]
 
- ldr r3,RKshareCchange
+ ldr r3,=RKshareCchange
+ ldr r3,[r3]
  movs r2,#0
  usub8 r10,r2,r10
  ror r2,r3,r10; mov r10,r10,ror#8; eors r5,r5,r2
@@ -554,9 +620,6 @@ ref_roundkey_shares_s_loop:
  clear03 24
 ref_roundkey_shares_s_exit:
  bx r14
- .balign 4
-RKshareCchange:
- .space 4
 
 .balign 4
 .thumb_func
@@ -863,8 +926,6 @@ shift_rows_s:
 
 @ multiply polynomial over GF(2⁸) by d(x) = 0x0Bx³ + 0x0Dx² + 0x09x + 0x0E modulo x⁴+1; c(x)d(x)=1 modulo x⁴+1
 .macro invmixcol rx,rt,ru,rv,rw,r0x00,r0x1b
-@ !!! can probably save some registers, e.g. allow trashing of r0x00, r0x1b
-@ can possibly also simplify slightly with refactorisation
  uadd8 \rt,\rx,\rx           @ field multiplication by 2 as above
  sel \rw,\r0x1b,\r0x00
  eors \rt,\rt,\rw            @ 2x
@@ -902,51 +963,6 @@ mix_cols_s:
  mixcol r10,r0,r1,r2,r3
  mixcol r11,r0,r1,r2,r3
  ldmia r12!,{r0,r1}          @ overwrite  sensitive shareB-related quantities r0,r1 with random numbers
- bx r14
-
-.balign 4
-.thumb_func
-gen_lut_sbox:
-@ gen_lut_sbox sets both lut_a and lut_b to the S-box table and
-@ returns r0=lut_a+256, r1=lut_b+256
-@ first set lut_a to be a table of GF(2⁸) inverses, using lut_b as temporary storage
- ldr r0,=lut_a
- ldr r1,=lut_b
-@ first set lut_a to be a table of antilogarithms, lut_b a table of logarithms
- mov r2,#0
- strb r2,[r0]                @ (*)
- mov r3,#1                   @ we maintain invariant that r2=log(r3)
-1:
- strb r2,[r0,r3]             @ log table
- strb r3,[r1,r2]             @ antilog table
- lsls r12,r3,#25
- it cs
- eorcs r12,r12,#0x1b000000   @ multiply by x
- eor r3,r3,r12,lsr#24        @ multiply by x+1 ("3"), which is a primitive element
- add r2,r2,#1
- cmp r2,#255
- bls 1b
- movs r2,#255
-1:
- ldrb r3,[r0,r2]             @ for each i≠0, find log,...
- eor r3,r3,#255              @ ... negate...
- ldrb r3,[r1,r3]             @ ... and antilog to get inverse
- strb r3,[r0,r2]
- subs r2,r2,#1
- bne 1b                      @ note that inverse(0)=0 by (*) above
-@ At this point r0=lut_a, r1=lut_b, lut_a[] contains inverses and lut_b[] contains other stuff
- mov r12,#256
-1:
- ldrb r2,[r0]
- eors r3,r2,r2,lsl#1         @ convolve byte with 0x1f
- eors r3,r3,r3,lsl#2
- eors r3,r3,r2,lsl#4
- eors r2,r3,r3,lsr#8
- eor r2,r2,#0x63             @ and add 0x63
- strb r2,[r0],#1             @ let lut_a[i]=sbox[i]
- strb r2,[r1],#1             @ let lut_b[i]=sbox[i]
- subs r12,r12,#1
- bne 1b
  bx r14
 
 @ Lookup each byte of a word, Rtarg, in a table and replace Rtarg with the result (used for SBOX lookups)
@@ -1296,7 +1312,7 @@ storeroundkey:
 
 .balign 4
 .thumb_func
-init_key:
+init_key_4way:
 @ On entry, r0 points to 4-way shared raw key data (128 bytes)
 @ The format is a0 b0 c0 d0 a1 b1 c1 d1 ... a7 b7 c7 d7
 @ That is, each word, K, of the original 256-bit key is expanded into four words whose exclusive OR is K.
@@ -1313,16 +1329,20 @@ init_key:
 @ rk[i] = rka_unrot[i] ^ rkb_unrot[i] ^ RKshareC
 
  GET_CANARY r12,CTAG17
- push {r4-r11,r12,r14}
+ push {r0-r12,r14}
  
+@ Transfer 4-way key into local workspace, rerandomising the shares
  mov r5,r0                   @ r5=4-way key input
  bl randomisechaff
- ldr r4,=rkey4way
- movs r6,#8
+ ldr r6,=rkey4way
+ movs r7,#8
 1:
- ldmia r5!,{r0-r3}
- stmia r4!,{r0-r3}
- subs r6,r6,#1
+ ldmia r5!,{r1-r4}
+ bl gen_rand_sha; eors r1,r1,r0; eors r4,r4,r0
+ bl gen_rand_sha; eors r2,r2,r0; eors r4,r4,r0
+ bl gen_rand_sha; eors r3,r3,r0; eors r4,r4,r0
+ stmia r6!,{r1-r4}
+ subs r7,r7,#1
  bne 1b
 
 @ Now raw key is stored in rkey4way[], construct 2-way share in rkey_s[] for
@@ -1400,7 +1420,7 @@ init_key_expandloop:
  cmp r2,#52
  bne init_key_expandloop
 
- pop {r4-r11,r12,r14}
+ pop {r0-r12,r14}
  CHK_CANARY r12,CTAG17
  bx r14
 
@@ -1421,7 +1441,7 @@ addrkey_s:
  ldr r1,[r12,#16]            @ r1=vperm key rotation in top two bits
  ldr r2,[r0,#16]             @ barrier load
 
- rsbs r2,r3,r1,lsr#30        @ r2=vpermkeyrot-vpermstaterot
+ rsb r2,r3,r1,lsr#30         @ r2=vpermkeyrot-vpermstaterot
 @ Read shareA of roundkey, offset by vpermkeyrot-vpermstaterot, and eor it into shareA of state, offset by -vpermstaterot
 @ r1=rkeyArotdata, r2=vpermkeyrot-vpermstaterot, r3=statevperm, r4-r11=state, r12=roundkeyAptr
 .if RK_ROR
@@ -1444,7 +1464,7 @@ addrkey_s:
  bfi r0,r12,#0,#4            @ match chaff pointer (r0) to roundkey ptr (r12) mod 16
  ldr r1,[r12,#16]            @ r1=vperm key rotation in top two bits
  ldr r2,[r0,#16]             @ barrier load
- rsbs r2,r3,r1,lsr#30        @ r2=vpermkeyrot-vpermstaterot
+ rsb r2,r3,r1,lsr#30         @ r2=vpermkeyrot-vpermstaterot
  ldr r3,=RKshareC            @ r3=common round key shareC
  bfi r0,r3,#0,#4
  ldr r3,[r3]
@@ -1466,7 +1486,6 @@ addrkey_s:
  ands r2,r2,#3; ldr r0,[r12,r2,lsl#2]; eor r11,r11,r3,ror#16;                eors r11,r11,r0
 .endif
  clear03
- 
  bx r14
 
 .balign 4
@@ -1485,7 +1504,7 @@ addrkey_s:
 ctr_crypt_s:
 @ r0=IV, r1=cipher/plaintext buffer, r2=number of blocks
  GET_CANARY r12,CTAG0
- push {r0,r4-r11,r12,r14}
+ push {r0-r12,r14}           @ save all registers so that when we restore we overwrite any secrets
 
  push {r0-r2}
  SET_COUNT 93
@@ -1647,7 +1666,7 @@ rounds_s_mainloop:
  bl map_sbox_s
  bl shift_rows_s
 .if ST_VPERM
- ldmia r13,{r2}              @ peek at stack to get round count
+ ldr r2,[r13]                @ peek at stack to get round count
  cmp r2,#NUMREFSTATEVPERM
  bcs 1f
  bl gen_rand_lfsr_nonpres
@@ -1682,6 +1701,7 @@ rounds_s_mainloop:
  push {r0,r3}
 @ r0=IV, r1=cipher/plaintext buffer, r2=number of blocks, r3=block counter, r12=block to be deciphered
 
+decryption_start:
 @ Decrypt ciphertext using AES output in shares: r4-r11
 .if ST_SHAREC
  ldr r0,=shareC
@@ -1689,38 +1709,71 @@ rounds_s_mainloop:
 .else
  movs r0,#0
 .endif
+ ldr r14,=chaff
+@ r0=shareC, r1=cipher/plaintext buffer, r2=number of blocks, r3=free, r4-r11=stateA/B, r12=block to be deciphered, r14=chaff
  CHK_COUNT 89
  add r1,r1,r12,lsl#4         @ Temporarily r1 points to block-to-be-deciphered
- ldr r3,[r1]
- eors r3,r3,r4
- eors r3,r3,r8,ror#16        @ Now r4 and r8 are free
- eors r3,r3,r0
- str r3,[r1]
- ldr r3,[r1,#4]
+ ldr r3,[r1]                 @ r3=ciphertext word
+ eors r3,r3,r4               @ r3=r3^shareA
+ ldr r4,[r14]                @ barrier load
+ eor r3,r3,r8,ror#16         @ r3=r3^shareB
+ eors r3,r3,r0               @ r3=r3^shareC
+ str r3,[r1]                 @ plaintext word=r3
+ ldr r3,[r1,#4]              @ and similarly for words 1,2,3 of block...
+ ldr r4,[r14,#4]
  eors r3,r3,r5
- eors r3,r3,r9,ror#16
+ eor r3,r3,r9,ror#16
  eors r3,r3,r0
  str r3,[r1,#4]
  ldr r3,[r1,#8]
+ ldr r4,[r14,#8]
  eors r3,r3,r6
- eors r3,r3,r10,ror#16
+ eor r3,r3,r10,ror#16
  eors r3,r3,r0
  str r3,[r1,#8]
  ldr r3,[r1,#12]
+ ldr r4,[r14,#12]
  eors r3,r3,r7
- eors r3,r3,r11,ror#16
+ eor r3,r3,r11,ror#16
  eors r3,r3,r0
  str r3,[r1,#12]
+
  sub r1,r1,r12,lsl#4         @ Restore r1 to point to start of buffer
  CHK_COUNT 90
 
  pop {r0,r3}                 @ Restore IV and block counter
 @ r0=IV, r1=cipher/plaintext buffer, r2=number of blocks, r3=block counter
+decryption_end:
 
  adds r3,r3,#1
  cmp r3,r2
  CHK_COUNT 91
  bne ctr_crypt_mainloop
- pop {r0,r4-r11,r12,r14}
+ ldr r0,=workspace_start
+ movs r1,#(workspace_end-workspace_start)/4
+ bl memwipe                  @ overwrite the workspace
+ ldr r0,=__scratch_y_end__
+ sub r1,r13,r0
+ lsrs r1,#2
+ subs r1,r1,#4               @ allow for memwipe's own stack use
+ bl memwipe                  @ overwrite everything below the stack pointer
+ pop {r0-r12,r14}
  CHK_CANARY r12,CTAG0
+ bx r14
+
+.balign 4
+.thumb_func
+@ fill r1 words of memory starting at r0 with random data
+memwipe:
+ GET_CANARY r12,CTAG18
+ push {r4,r5,r12,r14}
+ mov r4,r0
+ mov r5,r1
+1:
+ bl gen_rand_sha_nonpres
+ stmia r4!,{r0}
+ subs r5,r5,#1
+ bne 1b
+ pop {r4,r5,r12,r14}
+ CHK_CANARY r12,CTAG18
  bx r14
