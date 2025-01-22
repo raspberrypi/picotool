@@ -14,7 +14,15 @@ if (NOT USE_PRECOMPILED)
     unset(ENV{LDFLAGS})
 
     # Pull in SDK (must be before project)
-    include(${PICO_SDK_PATH}/external/pico_sdk_import.cmake)
+
+    # Temporary import handling, to ensure SDK branch with PICO_MINIMAL_VECTOR_TABLE is present
+    file(READ ${PICO_SDK_PATH}/src/rp2_common/pico_crt0/crt0.S CRT0_S)
+    if (CRT0_S MATCHES "PICO_MINIMAL_VECTOR_TABLE")
+        include(${PICO_SDK_PATH}/external/pico_sdk_import.cmake)
+    else()
+        # This clones the will-v-pi/pico-sdk repo on the min-vtor branch
+        include(tmp_pico_sdk_import.cmake)
+    endif()
 
     project(enc_bootloader C CXX ASM)
     set(CMAKE_C_STANDARD 11)
@@ -48,7 +56,7 @@ if (NOT USE_PRECOMPILED)
         PICO_RUNTIME_SKIP_INIT_PER_CORE_IRQ_PRIORITIES=1
         PICO_RUNTIME_SKIP_INIT_BOOTROM_LOCKING_ENABLE=1
         # Don't need any vtor irqs
-        PICO_VECTOR_TABLE_NUM_IRQS=0)
+        PICO_MINIMAL_VECTOR_TABLE=1)
 
     # print memory usage
     target_link_options(enc_bootloader PUBLIC -Wl,--print-memory-usage)
