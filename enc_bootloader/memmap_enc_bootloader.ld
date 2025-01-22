@@ -23,8 +23,8 @@
 
 MEMORY
 {
-    RAM_START(rwx) : ORIGIN = 0x20080000, LENGTH = 0x30
-    SCRATCH_X(rwx) : ORIGIN = 0x20080030, LENGTH = 0xFD0
+    RAM_START(rwx) : ORIGIN = 0x20080000, LENGTH = 0x44
+    SCRATCH_X(rwx) : ORIGIN = 0x20080044, LENGTH = 0xFBC
     SCRATCH_Y(rwx) : ORIGIN = 0x20081000, LENGTH = 0x700
     RAM(rwx)       : ORIGIN = 0x20081700, LENGTH = 0x900
 }
@@ -41,6 +41,10 @@ SECTIONS
 
     .start_text : {
         __logical_binary_start = .;
+        /* Vectors require 512-byte alignment on v8-M when >48 IRQs are used,
+           so we would waste RAM if the vector table were not at the
+           start. */
+        KEEP (*(.vectors))
         KEEP (*(.binary_info_header))
         __binary_info_header_end = .;
         KEEP (*(.embedded_block))
@@ -48,10 +52,6 @@ SECTIONS
     } > RAM_START
 
     .text : {
-        /* Vectors require 512-byte alignment on v8-M when >48 IRQs are used,
-           so we would waste RAM if the vector table were not at the
-           start. */
-        KEEP (*(.vectors))
         __reset_start = .;
         KEEP (*(.reset))
         __reset_end = .;
