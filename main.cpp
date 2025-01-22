@@ -467,6 +467,7 @@ struct _settings {
         bool hash = false;
         bool sign = false;
         bool clear_sram = false;
+        bool set_tbyb = false;
         uint16_t major_version = 0;
         uint16_t minor_version = 0;
         uint16_t rollback_version = 0;
@@ -4785,6 +4786,12 @@ void sign_guts_elf(elf_file* elf, private_t private_key, public_t public_key) {
 
     block new_block = place_new_block(elf, first_block);
 
+    if (settings.seal.set_tbyb) {
+        // Set the TBYB bit on the image_type_item
+        std::shared_ptr<image_type_item> image_type = new_block.get_item<image_type_item>();
+        image_type->flags |= PICOBIN_IMAGE_TYPE_EXE_TBYB_BITS;
+    }
+
     if (settings.seal.major_version || settings.seal.minor_version || settings.seal.rollback_version) {
         std::shared_ptr<version_item> version = new_block.get_item<version_item>();
         if (version != nullptr) {
@@ -4915,6 +4922,9 @@ bool encrypt_command::execute(device_map &devices) {
     if (get_file_type() == filetype::elf) {
         isElf = true;
     } else if (get_file_type() == filetype::bin) {
+        if (settings.encrypt.embed) {
+            fail(ERROR_ARGS, "Can only embed decrypting bootloader into ELFs");
+        }
         isBin = true;
     } else {
         fail(ERROR_ARGS, "Can only sign ELFs or BINs");
@@ -4971,10 +4981,6 @@ bool encrypt_command::execute(device_map &devices) {
         elf->editable = true;
 
         if (settings.encrypt.embed) {
-            if (!isElf) {
-                fail(ERROR_ARGS, "Can only embed decrypting bootloader into elfs");
-            }
-
             std::vector<uint8_t> iv_data;
             std::vector<uint8_t> enc_data;
             uint32_t data_start_address = SRAM_START;
@@ -5037,6 +5043,23 @@ bool encrypt_command::execute(device_map &devices) {
             DEBUG_LOG("\n");
 
             enc_elf->content(*data_section, enc_data);
+
+            // Get the version from the encrypted binary
+            std::shared_ptr<version_item> version = new_block.get_item<version_item>();
+            if (version != nullptr) {
+                settings.seal.major_version = version->major;
+                settings.seal.minor_version = version->minor;
+                settings.seal.rollback_version = version->rollback;
+                for (auto row : version->otp_rows) {
+                    settings.seal.rollback_rows.push_back(row);
+                }
+            }
+
+            // Get the TBYB from the encrypted binary
+            std::shared_ptr<image_type_item> image_type = new_block.get_item<image_type_item>();
+            if (image_type->tbyb()) {
+                settings.seal.set_tbyb = true;
+            }
 
             // Sign the final thing
             sign_guts_elf(enc_elf, private_key, public_key);
