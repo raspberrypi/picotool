@@ -7,6 +7,7 @@
 #include <string.h>
 #include "pico/stdlib.h"
 #include "boot/picobin.h"
+#include "boot/picoboot.h"
 #include "pico/bootrom.h"
 #include "hardware/structs/otp.h"
 
@@ -14,11 +15,9 @@
 
 #include "config.h"
 
-extern void remap();
-extern uint32_t gen_rand_sha();
-extern void init_key(uint8_t *key);
-extern void gen_lut_sbox();
-extern int  ctr_crypt_s(uint8_t*iv,uint8_t*buf,int nblk);
+extern void init_aes();
+extern void init_key_4way(uint8_t*key);
+extern int  ctr_crypt_s(uint8_t*iv,uint8_t(*buf)[16],int nblk);
 
 extern uint8_t rkey_s[480];
 extern uint8_t lut_a[256];
@@ -27,36 +26,22 @@ extern uint32_t lut_a_map[1];
 extern uint32_t lut_b_map[1];
 extern uint32_t rstate_sha[4],rstate_lfsr[2];
 
-void resetrng() {
-    uint32_t f0,f1;
+
+// Temporary - should be replaced with ASM code in aes.S
+uint32_t get_rand_32() {
+    static uint8_t i = 0;
+
+    if (i > 3) {
+        // can only provide 4 random numbers before reboot is needed
+        rom_reboot(REBOOT2_FLAG_REBOOT_TYPE_NORMAL | REBOOT2_FLAG_NO_RETURN_ON_SUCCESS, 10, 0, 0);
+        __builtin_unreachable();
+    }
+
     uint32_t boot_random[4];
     rom_get_boot_random(boot_random);
-    do f0=boot_random[0]; while(f0==0);   // make sure we don't initialise the LFSR to zero
-    f1=boot_random[1];
-    rstate_sha[0]=f0&0xffffff00;         // bottom byte must be zero (or 4) for SHA, representing "out of data"
-    rstate_sha[1]=f1;
-    rstate_sha[2]=0x41414141;
-    rstate_sha[3]=0x41414141;
-    rstate_lfsr[0]=f0;                   // must be nonzero for non-degenerate LFSR
-    rstate_lfsr[1]=0x1d872b41;           // constant that defines LFSR
-#if GEN_RAND_SHA
-    reset_block(RESETS_RESET_SHA256_BITS);
-    unreset_block(RESETS_RESET_SHA256_BITS);
-#endif
-}
-
-static void init_lut_map() {
-    int i;
-    for(i=0;i<256;i++) lut_b[i]=gen_rand_sha()&0xff, lut_a[i]^=lut_b[i];
-    lut_a_map[0]=0;
-    lut_b_map[0]=0;
-    remap();
-}
-
-static void init_aes() {
-    resetrng();
-    gen_lut_sbox();
-    init_lut_map();
+    uint32_t ret = boot_random[i];
+    i++;
+    return ret;
 }
 
 int main() {
@@ -87,7 +72,7 @@ int main() {
     // Read key directly from OTP - guarded reads will throw a bus fault if there are any errors
     uint16_t* otp_data = (uint16_t*)OTP_DATA_GUARDED_BASE;
 
-    init_key((uint8_t*)&(otp_data[(OTP_CMD_ROW_BITS & (otp_key_page * 0x40))]));
+    init_key_4way((uint8_t*)&(otp_data[(OTP_CMD_ROW_BITS & (otp_key_page * 0x40))]));
     otp_hw->sw_lock[otp_key_page] = 0xf;
     ctr_crypt_s(iv, (void*)data_start_addr, data_size/16);
 
