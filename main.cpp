@@ -476,6 +476,8 @@ struct _settings {
 
     struct {
         bool embed = false;
+        bool otp_key_page_set = false;
+        uint16_t otp_key_page = 30;
     } encrypt;
 
     struct {
@@ -787,6 +789,10 @@ struct encrypt_command : public cmd {
             option("--quiet").set(settings.quiet) % "Don't print any output" +
             option("--verbose").set(settings.verbose) % "Print verbose output" +
             option("--embed").set(settings.encrypt.embed) % "Embed bootloader in output file" +
+            (
+                option("--otp-key-page").set(settings.encrypt.otp_key_page_set) % "Specify the OTP page storing the AES key" &
+                    integer("page").set(settings.encrypt.otp_key_page) % "OTP page (default 30)"
+            ).force_expand_help(true) +
             (
                 option("--hash").set(settings.seal.hash) % "Hash the encrypted file" +
                 option("--sign").set(settings.seal.sign) % "Sign the encrypted file"
@@ -5011,9 +5017,9 @@ bool encrypt_command::execute(device_map &devices) {
                 config_guts(program);
             }
             // otp_key_page
-            if (false) {
+            if (settings.encrypt.otp_key_page_set) {
                 settings.config.key = "otp_key_page";
-                settings.config.value = hex_string(30);
+                settings.config.value = hex_string(settings.encrypt.otp_key_page);
                 config_guts(program);
             }
 
