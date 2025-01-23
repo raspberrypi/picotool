@@ -97,6 +97,16 @@ pointer is overwritten.
 .endif
 .endm
 
+.macro BRANCH_JITTER rx,tag
+.if BR_JITTER
+ ldr \rx,=branch_jitter
+ ldr \rx,[\rx]
+ tst \rx,1<<(\tag)
+ bne \@f
+\@:
+.endif
+.endm
+
 .macro clear03 offset=0
  getchaffaddress r0,\offset
  ldmia r0,{r0-r3}
@@ -210,8 +220,9 @@ lut_b_map:
 .balign 16
 rstate_sha:                  @ 128-bit SHA random state, to be initialised to TRNG bytes; zeroth byte must be initialised to zero
 .space 16
-rstate_lfsr:                 @ 32-bit LFSR random state and constant used to step it (initialised by C program)
-.space 8
+rstate_lfsr:                 @ 32-bit LFSR random state and constant used to step it
+.space 4
+.word 0x1d872b41             @ constant that defines a maximal-length LFSR
 
 .if CT_BPERM
 .balign 16
@@ -222,6 +233,13 @@ murmur3_constants:           @ Five constants used in murmur3_32 hash
 .word 0x85ebca6b
 .word 0xc2b2ae35
 .endif
+
+.if BR_JITTER
+.balign 4
+branch_jitter:
+.space 4
+.endif
+
 
 @ Put main code in first scratch area
 .section .scratch_x.aes,"ax",%progbits
@@ -359,8 +377,6 @@ init_aes:
  str r2,[r1,#8]    @ rstate_sha[2]=0x41414141;
  str r2,[r1,#12]   @ rstate_sha[3]=0x41414141;
  str r4,[r1,#rstate_lfsr-rstate_sha]   @ must be nonzero for non-degenerate LFSR
- ldr r2,=0x1d872b41;
- str r2,[r1,#rstate_lfsr-rstate_sha+4] @ constant that defines a maximal-length LFSR
 .if GEN_RAND_SHA
  ldr r1,=RESETS_BASE+RESETS_RESET_OFFSET
  ldr r2,[r1]
@@ -1011,6 +1027,8 @@ map_sbox_s:
  uxtb r11,r2                    @ R11 = a0^a1^b0^b1
  movs r12,r1,lsr#16             @ R12 = c0^d0 | (c1^d1)<<8
 
+ BRANCH_JITTER r0,1
+ 
  ldr r4,=perm16
  ldr r5,=shareA
  ldr r6,=shareB
@@ -1469,6 +1487,7 @@ addrkey_s:
  bfi r0,r3,#0,#4
  ldr r3,[r3]
  ldr r0,[r0]                 @ barrier load
+ BRANCH_JITTER r0,0
  
 @ Read shareB of roundkey, offset by vpermkeyrot-vpermstaterot, and eor it into shareB of state, offset by -vpermstaterot
 @ r1=rkeyBrotdata, r2=vpermkeyrot-vpermstaterot, r3=RKshareC, r4-r11=state, r12=roundkeyB ptr
@@ -1558,6 +1577,7 @@ ctr_crypt_mainloop:
 1:
 
  CHK_COUNT 81
+
  pop {r0-r3}
 @ r0=IV, r1=cipher/plaintext buffer, r2=number of blocks, r3=block counter
 
@@ -1607,7 +1627,7 @@ ctr_crypt_mainloop:
 .endif
  CHK_COUNT 82
 
-@ r0=IV, r1=cipher/plaintext buffer, r2=number of blocks, r3=block counter, r12=block to be deciphered
+@ r0=IV, r1=cipher/plaintext buffer, r2=number of blocks, r3=block counter (monotonic), r12=block number (block to be deciphered)
  push {r0-r3,r12}
 
 processIV:                   @ non-target label to assist power analysis
@@ -1624,28 +1644,28 @@ processIV:                   @ non-target label to assist power analysis
  ldr r0,[r13]                @ peek at stack to restore r0=IV ptr
  ldmia r0,{r4-r7}            @ load IV
  clear03                     @ barrier to remove traces of IV from internal CPU load registers
- push {r0-r3}                @ We want to randomise the internal memory registers associated with the above LDM load, but this
- pop {r0-r3}                 @ may come from non-scratch memory and have its own internal registers, so we clear it using a
-                             @ stack save/load. Either R13 is in non-scratch memory, in which case this works, or it isn't, in
-                             @ which case it doesn't matter, because the only subsequent use of non-scratch memory is the stack.
 
 @ Add in r9 in byte-big-endian, bit-little-endian (!) fashion, while trying to avoid rev operations
 @ as far as possible as these tend to expose (via power fluctuations) byte-level hamming weights.
-@ It's worth avoiding revs on r6, r5, r4, even at the cost of introducing a small timing dependency.
-
 @ First do 128-bit addition of r9 to byte-reversed IV
- rev r7,r7; adds r7,r7,r9;            bcc 1f
- rev r6,r6; adcs r6,r6,#0; rev r6,r6; bcc 1f
- rev r5,r5; adcs r5,r5,#0; rev r5,r5; bcc 1f
- rev r4,r4; adcs r4,r4,#0; rev r4,r4
+ rev r7,r7
+ cmn r7,#MAX_NUM_BLOCKS      @ Compare against maximum number of blocks
+ bcs 1f
+ add r7,r7,r9                @ This can temporarily overflow but it doesn't matter as we know that r7+r12 does not overflow
+ sub r7,r7,r8
+ b 2f
 1:
-@ At this point, r7 is reversed and r4-r6 are not
+            adds r7,r7,r9
+ rev r6,r6; adcs r6,r6,#0
+ rev r5,r5; adcs r5,r5,#0
+ rev r4,r4; adcs r4,r4,#0
 @ Now do 128-bit subtraction of r8 from byte-reversed IV
-            subs r7,r7,r8; rev r7,r7; bcs 1f
- rev r6,r6; sbcs r6,r6,#0; rev r6,r6; bcs 1f
- rev r5,r5; sbcs r5,r5,#0; rev r5,r5; bcs 1f
- rev r4,r4; sbcs r4,r4,#0; rev r4,r4
-1:
+ subs r7,r7,r8
+ sbcs r6,r6,#0; rev r6,r6
+ sbcs r5,r5,#0; rev r5,r5
+ sbcs r4,r4,#0; rev r4,r4
+2:
+ rev r7,r7
  clear01 16
  CHK_COUNT 83
 
@@ -1662,6 +1682,11 @@ rounds_s_mainloop:
  add r12,r12,r2,lsl#5        @ pointer to key shares for this round
  add r12,r12,r2,lsl#3
  push {r2}                   @ save round count
+.if BR_JITTER
+ bl gen_rand_sha_nonpres
+ ldr r1,=branch_jitter
+ str r0,[r1]
+.endif
  bl addrkey_s
  bl map_sbox_s
  bl shift_rows_s

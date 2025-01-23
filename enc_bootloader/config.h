@@ -36,7 +36,11 @@
 // much more effort to carry out. It can be disabled for analysis or testing purposes.
 
 #ifndef RC_JITTER
-#define RC_JITTER            1         // use random-delay versions of RCP instructions
+#define RC_JITTER            0         // use random-delay versions of RCP instructions
+#endif
+
+#ifndef BR_JITTER
+#define BR_JITTER            1         // Insert random delays as branches
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -45,20 +49,20 @@
 
 // Period = X means that the operation in question occurs every X blocks, so higher = more performance and lower security.
 // No point in making them more than 16 or so, since the time taken by the subroutines would be negligible.
-// These must be a power of 2. Timings as of commit 24277d13
-//                                                                            RK_ROR=0    RK_ROR=1
-//                                        Baseline time per 16-byte block = {    14066       14336 }                          cycles
+// These must be a power of 2. Timings as of commit 82d31652
+// 
+//                                        Baseline time per 16-byte block = 14109 (with no jitter)         cycles
 #ifndef REFCHAFF_PERIOD
-#define REFCHAFF_PERIOD             1     // Extra cost per 16-byte block = {      462         462 }/REFCHAFF_PERIOD          cycles
+#define REFCHAFF_PERIOD             1     // Extra cost per 16-byte block =   474/REFCHAFF_PERIOD          cycles
 #endif
 #ifndef REMAP_PERIOD
-#define REMAP_PERIOD                4     // Extra cost per 16-byte block = {     4131        4131 }/REMAP_PERIOD             cycles
+#define REMAP_PERIOD                4     // Extra cost per 16-byte block =  4148/REMAP_PERIOD             cycles
 #endif
 #ifndef REFROUNDKEYSHARES_PERIOD
-#define REFROUNDKEYSHARES_PERIOD    1     // Extra cost per 16-byte block = {     1107        1212 }/REFROUNDKEYSHARES_PERIOD cycles
+#define REFROUNDKEYSHARES_PERIOD    1     // Extra cost per 16-byte block =  1304/REFROUNDKEYSHARES_PERIOD cycles
 #endif
 #ifndef REFROUNDKEYHVPERMS_PERIOD
-#define REFROUNDKEYHVPERMS_PERIOD   1     // Extra cost per 16-byte block = {      936        1422 }/REFROUnDKEYVPERM_PERIOD  cycles
+#define REFROUNDKEYHVPERMS_PERIOD   1     // Extra cost per 16-byte block =  1486/REFROUNDKEYVPERM_PERIOD  cycles
 #endif
 
 // Setting NUMREFSTATEVPERM to X means that state vperm refreshing happens on the first X AES rounds only,
@@ -66,5 +70,9 @@
 // The rationale for doing it this way is that later rounds should be protected by CT_BPERM.
 // NUMREFSTATEVPERM can be from 0 to 14.
 #ifndef NUMREFSTATEVPERM
-#define NUMREFSTATEVPERM            7     // Extra cost per 16-byte block =  80*NUMREFSTATEVPERM cycles
+#define NUMREFSTATEVPERM            7     // Extra cost per 16-byte block =  61*NUMREFSTATEVPERM cycles
 #endif
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#define MAX_NUM_BLOCKS 32768
