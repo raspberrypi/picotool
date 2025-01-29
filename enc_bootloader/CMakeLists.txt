@@ -5,6 +5,9 @@ if (NOT USE_PRECOMPILED)
     
     set(PICO_NO_PICOTOOL 1)
 
+    # Ensure we're using a Release build - MinSizeRel doesn't work for some reason
+    set(CMAKE_BUILD_TYPE Release)
+
     # If the user set these environment variables to influence the picotool
     # build, unset them here so that they do not influence the pico-sdk
     # build. This is especially required for flags that are not supported
@@ -45,14 +48,18 @@ if (NOT USE_PRECOMPILED)
         pico_stdlib
     )
 
-    # use stack guards, as AES variables are written near the stack
     target_compile_definitions(enc_bootloader PRIVATE
+        # use stack guards, as AES variables are written near the stack
         PICO_USE_STACK_GUARDS=1
         PICO_STACK_SIZE=0x100
+        # The following are to reduce the size of the binary
         PICO_NO_PROGRAM_INFO=1
+        # No spinlocks used
+        PICO_USE_SW_SPIN_LOCKS=0
         # No heap is used
         PICO_HEAP_SIZE=0
         # These inits are not required
+        PICO_RUNTIME_SKIP_INIT_SPIN_LOCKS_RESET=1
         PICO_RUNTIME_SKIP_INIT_PER_CORE_IRQ_PRIORITIES=1
         PICO_RUNTIME_SKIP_INIT_BOOTROM_LOCKING_ENABLE=1
         # Don't need any vtor irqs
