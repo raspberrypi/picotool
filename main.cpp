@@ -394,8 +394,8 @@ private:
 };
 
 struct _settings {
-    std::array<std::string, 4> filenames;
-    std::array<std::string, 4> file_types;
+    std::array<std::string, 5> filenames;
+    std::array<std::string, 5> file_types;
     uint32_t binary_start = FLASH_START;
     int bus=-1;
     int address=-1;
@@ -804,7 +804,8 @@ struct encrypt_command : public cmd {
             ).force_expand_help(true) % "BIN file options" +
             named_file_selection_x("outfile", 1) % "File to save to" +
             named_typed_file_selection_x("aes_key", 2, "bin") % "AES Key Share" +
-            optional_typed_file_selection_x("signing_key", 3, "pem") % "Signing Key file"
+            optional_typed_file_selection_x("signing_key", 3, "pem") % "Signing Key file" +
+            optional_typed_file_selection_x("otp", 4, "json") % "File to save OTP to (will edit existing file if it exists)"
         );
     }
 
@@ -5103,6 +5104,38 @@ bool encrypt_command::execute(device_map &devices) {
         out->close();
     } else {
         fail(ERROR_ARGS, "Must be ELF or BIN");
+    }
+
+    if (!settings.filenames[4].empty()) {
+        if (get_file_type_idx(4) != filetype::json) {
+            fail(ERROR_ARGS, "Can only output OTP json");
+        }
+        auto check_json_file = std::ifstream(settings.filenames[4]);
+        json otp_json;
+        if (check_json_file.good()) {
+            otp_json = json::parse(check_json_file);
+            DEBUG_LOG("Appending to existing otp json\n");
+            check_json_file.close();
+        }
+        auto json_out = get_file_idx(ios::out, 4);
+
+        // Add otp AES key page
+        for (int i = 0; i < 128; ++i) {
+            std::stringstream ss;
+            ss << settings.encrypt.otp_key_page << ":0";
+            otp_json[ss.str()]["ecc"] = true;
+            otp_json[ss.str()]["value"][i] = aes_key_share.bytes[i];
+        }
+
+        // Add page locks to prevent BL and NS access, and only allow S reads
+        {
+            std::stringstream ss;
+            ss << "PAGE" << settings.encrypt.otp_key_page << "_LOCK1";
+            otp_json[ss.str()] = "0x3d3d3d";
+        }
+
+        *json_out << std::setw(4) << otp_json << std::endl;
+        json_out->close();
     }
 
     return false;
