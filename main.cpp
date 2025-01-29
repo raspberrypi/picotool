@@ -315,7 +315,7 @@ struct family_id : public cli::value_base<family_id> {
                 t = RP2040_FAMILY_ID;
             } else if (value == rp2350_arm_s_family_name) {
                 t = RP2350_ARM_S_FAMILY_ID;
-            } else if (value == rp2350_arm_s_family_name) {
+            } else if (value == rp2350_arm_ns_family_name) {
                 t = RP2350_ARM_NS_FAMILY_ID;
             } else if (value == rp2350_riscv_family_name) {
                 t = RP2350_RISCV_FAMILY_ID;
