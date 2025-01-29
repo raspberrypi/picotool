@@ -51,7 +51,7 @@ if (NOT USE_PRECOMPILED)
     target_compile_definitions(enc_bootloader PRIVATE
         # use stack guards, as AES variables are written near the stack
         PICO_USE_STACK_GUARDS=1
-        PICO_STACK_SIZE=0x100
+        PICO_STACK_SIZE=0x180
         # The following are to reduce the size of the binary
         PICO_NO_PROGRAM_INFO=1
         # No spinlocks used
