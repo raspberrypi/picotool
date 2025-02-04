@@ -31,17 +31,25 @@
 #define RC_COUNT             1         // use rcp_count feature
 #endif
 
-// Although enabling the following option likely has little theoretical benefit, in
-// practice randomising the timing of operations can make side-channel attacks very
-// much more effort to carry out. It can be disabled for analysis or testing purposes.
+// Although jitter/timing-variation may be circumventable in theory, in practice
+// randomising the timing of operations can make side-channel attacks very much more
+// effort to carry out. These can be disabled for analysis or testing purposes.
+// It is advisable to use a least one form of jitter.
 
+// RC_JITTER is quite slow, and is probably the most predictable of the three, so it is disabled by default.
+// (However, it may be that the large delays it produces is advantageous in defeating some sorts of side-channel attacks.)
 #ifndef RC_JITTER
-#define RC_JITTER            0         // use random-delay versions of RCP instructions
+#define RC_JITTER            0         // 0-7. Higher = more jitter. Governs use of random-delay versions of RCP instructions.
 #endif
 
-#ifndef BR_JITTER
-#define BR_JITTER            1         // Insert random delays as branches
+#ifndef SH_JITTER
+#define SH_JITTER            1         // Insert random delays, tagged onto SHA RNG
 #endif
+
+#ifndef CK_JITTER
+#define CK_JITTER            1         // occasionally switch CPU clock to ROSC for extra timing variability
+#endif
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -76,3 +84,7 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #define MAX_NUM_BLOCKS 32768
+
+#if SH_JITTER && !GEN_RAND_SHA
+#error GEN_RAND_SHA must be set if you want to use SH_JITTER
+#endif
