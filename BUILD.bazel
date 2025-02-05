@@ -104,6 +104,8 @@ cc_binary(
         "//errors",
         "//lib/nlohmann_json:json",
         "//picoboot_connection",
+        "//lib/littlefs",
+        "//lib/oofatfs:fatfs",
         "@libusb",
         "@pico-sdk//src/common/boot_picobin_headers",
         "@pico-sdk//src/common/boot_picoboot_headers",

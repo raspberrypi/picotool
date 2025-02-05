@@ -1,0 +1,22 @@
+The original license of this software is given below.  The patches and
+modifications made to the original software are made available under the same
+license, but in some cases have a different copyright holder.
+
+/*----------------------------------------------------------------------------/
+/  FatFs - Generic FAT file system module  Rx.xx                              /
+/-----------------------------------------------------------------------------/
+/
+/ Copyright (C) 2016, ChaN, all right reserved.
+/
+/ FatFs module is an open source software. Redistribution and use of FatFs in
+/ source and binary forms, with or without modification, are permitted provided
+/ that the following condition is met:
+
+/ 1. Redistributions of source code must retain the above copyright notice,
+/    this condition and the following disclaimer.
+/
+/ This software is provided by the copyright holder and contributors "AS IS"
+/ and any warranties related to this software are DISCLAIMED.
+/ The copyright owner or contributors be NOT LIABLE for any damages caused
+/ by use of this software.
+/----------------------------------------------------------------------------*/

@@ -1,0 +1,15 @@
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "fatfs",
+    srcs = [
+        "src/ff.c",
+        "src/ffunicode.c",
+    ],
+    hdrs = [
+        "src/ff.h",
+        "src/ffconf.h",
+        "src/diskio.h",
+    ],
+    includes = ["src"],
+)
