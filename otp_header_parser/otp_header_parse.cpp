@@ -147,7 +147,7 @@ int main(int argc, char **argv) {
         std::string reg_name;
         std::string field_name;
         std::string comment;
-        int expected_redundancy;
+        int expected_redundancy = 1;
         otp_reg reg;
         otp_field field;
         while (std::getline(infile, line)) {

@@ -238,7 +238,7 @@ struct partition_table_item : public single_byte_size_item {
         for (unsigned int i=2; i < size; i++) {
             data.push_back(*it++);
         }
-        int i=0;
+        size_t i=0;
         while (i < data.size()) {
             partition new_p;
             uint32_t permissions_locations = data[i++];
