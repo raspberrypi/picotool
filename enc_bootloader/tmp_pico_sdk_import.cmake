@@ -1,7 +1,7 @@
 # This is a modified copy of <PICO_SDK_PATH>/external/pico_sdk_import.cmake to use a specific git repo and branch
 
 set(PICO_SDK_FETCH_FROM_GIT_URL "https://github.com/will-v-pi/pico-sdk")
-set(PICO_SDK_FETCH_FROM_GIT_TAG "min-vtor")
+set(PICO_SDK_FETCH_FROM_GIT_TAG "self-decrypting")
 
 include(FetchContent)
 FetchContent_Declare(
