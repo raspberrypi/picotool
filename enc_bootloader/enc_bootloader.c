@@ -16,6 +16,10 @@
 
 #include "pico/binary_info.h"
 
+#include "hardware/clocks.h"
+#include "hardware/xosc.h"
+#include "hardware/structs/rosc.h"
+
 #include "config.h"
 
 extern uint32_t rstate_sha[4];
@@ -145,6 +149,125 @@ void init_rstate() {
     // No need to wait for SHA, as we polled the EHR one extra time, which
     // takes longer than the SHA.
     for(i=0;i<4;i++) rstate_sha[i]=sha256->sum[i];
+
+    rosc_hw->random = rstate_sha[0];
+}
+
+// These just have to be higher than the actual frequency, to prevent overclocking unused peripherals
+#define ROSC_HZ 300*MHZ
+#define OTHER_CLK_DIV 30
+
+void runtime_init_clocks(void) {
+    // Disable resus that may be enabled from previous software
+    clocks_hw->resus.ctrl = 0;
+
+    bi_decl(bi_ptr_int32(0, 0, rosc_div, 2)); // default divider 2
+    bi_decl(bi_ptr_int32(0, 0, rosc_drive, 0x0000)); // default drives of 0
+    bi_decl(bi_ptr_int32(0, 0, xosc_mhz, 12)); // xosc freq in MHz
+    bi_decl(bi_ptr_int32(0, 0, clk_mhz, 150)); // xosc freq in MHz
+
+    // Bump up ROSC speed to ~90MHz
+    rosc_hw->freqa = 0; // reset the drive strengths
+    rosc_hw->div = rosc_div | ROSC_DIV_VALUE_PASS; // set divider
+    // Increment the freqency range one step at a time - this is safe provided the current config is not TOOHIGH
+    // because ROSC_CTRL_FREQ_RANGE_VALUE_MEDIUM | ROSC_CTRL_FREQ_RANGE_VALUE_HIGH == ROSC_CTRL_FREQ_RANGE_VALUE_HIGH
+    static_assert(ROSC_CTRL_FREQ_RANGE_VALUE_LOW | ROSC_CTRL_FREQ_RANGE_VALUE_MEDIUM == ROSC_CTRL_FREQ_RANGE_VALUE_MEDIUM);
+    static_assert(ROSC_CTRL_FREQ_RANGE_VALUE_MEDIUM | ROSC_CTRL_FREQ_RANGE_VALUE_HIGH == ROSC_CTRL_FREQ_RANGE_VALUE_HIGH);
+    hw_set_bits(&rosc_hw->ctrl, ROSC_CTRL_FREQ_RANGE_VALUE_MEDIUM);
+    hw_set_bits(&rosc_hw->ctrl, ROSC_CTRL_FREQ_RANGE_VALUE_HIGH);
+
+    // Enable rosc randomisation
+    rosc_hw->freqa = (ROSC_FREQA_PASSWD_VALUE_PASS << ROSC_FREQA_PASSWD_LSB) |
+            rosc_drive | ROSC_FREQA_DS1_RANDOM_BITS | ROSC_FREQA_DS0_RANDOM_BITS; // enable randomisation
+
+    // Not used with FREQ_RANGE_VALUE_HIGH, but should still be set
+    rosc_hw->freqb = (ROSC_FREQB_PASSWD_VALUE_PASS << ROSC_FREQB_PASSWD_LSB) |
+            rosc_drive;
+
+    // Calibrate ROSC frequency if XOSC present - otherwise just configure
+    uint32_t rosc_freq_mhz = 0;
+    if (xosc_mhz) {
+        xosc_init();
+        // CLK_REF = XOSC
+        clock_configure_int_divider(clk_ref,
+                        CLOCKS_CLK_REF_CTRL_SRC_VALUE_XOSC_CLKSRC,
+                        0,
+                        xosc_mhz * MHZ,
+                        1);
+        // CLK_SYS = CLK_REF
+        clock_configure_int_divider(clk_sys,
+                        CLOCKS_CLK_SYS_CTRL_SRC_VALUE_CLK_REF,
+                        CLOCKS_CLK_SYS_CTRL_AUXSRC_VALUE_ROSC_CLKSRC,   // leave the aux source on ROSC
+                        xosc_mhz * MHZ,
+                        1);
+
+        // Max out rosc
+        rosc_hw->div = 1 | ROSC_DIV_VALUE_PASS;
+        rosc_hw->freqa = (ROSC_FREQA_PASSWD_VALUE_PASS << ROSC_FREQA_PASSWD_LSB) |
+                ROSC_FREQA_DS3_BITS | ROSC_FREQA_DS2_BITS |
+                ROSC_FREQA_DS1_RANDOM_BITS | ROSC_FREQA_DS0_RANDOM_BITS; // enable randomisation
+        rosc_hw->freqb = (ROSC_FREQB_PASSWD_VALUE_PASS << ROSC_FREQB_PASSWD_LSB) |
+                ROSC_FREQB_DS7_LSB | ROSC_FREQB_DS6_LSB | ROSC_FREQB_DS5_LSB | ROSC_FREQB_DS4_LSB;
+
+        // Wait for ROSC to be stable
+        while(!(rosc_hw->status & ROSC_STATUS_STABLE_BITS)) {
+            tight_loop_contents();
+        }
+
+        rosc_freq_mhz = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_ROSC_CLKSRC_PH) / KHZ;
+    }
+    if (rosc_freq_mhz > clk_mhz) {
+        // CLK SYS = ROSC divided down to clk_mhz, according to XOSC calibration
+        clock_configure_mhz(clk_sys,
+                        CLOCKS_CLK_SYS_CTRL_SRC_VALUE_CLKSRC_CLK_SYS_AUX,
+                        CLOCKS_CLK_SYS_CTRL_AUXSRC_VALUE_ROSC_CLKSRC,
+                        rosc_freq_mhz,
+                        clk_mhz);
+    } else { // Either ROSC is running too slowly, or there was no XOSC to calibrate it against
+        // CLK SYS = ROSC directly, as it's running slowly enough
+        clock_configure_int_divider(clk_sys,
+                        CLOCKS_CLK_SYS_CTRL_SRC_VALUE_CLKSRC_CLK_SYS_AUX,
+                        CLOCKS_CLK_SYS_CTRL_AUXSRC_VALUE_ROSC_CLKSRC,
+                        ROSC_HZ,    // this doesn't have to be accurate
+                        1);
+    }
+
+    // Configure other clocks - none of these need to be accurate
+
+    // CLK_REF = ROSC / OTHER_CLK_DIV - this and other clocks aren't really used, so just need to be set to a low enough frequency
+    clock_configure_int_divider(clk_ref,
+                    CLOCKS_CLK_REF_CTRL_SRC_VALUE_ROSC_CLKSRC_PH,
+                    0,
+                    ROSC_HZ,
+                    OTHER_CLK_DIV);
+
+    // CLK USB (not used)
+    clock_configure_int_divider(clk_usb,
+                    0, // No GLMUX
+                    CLOCKS_CLK_USB_CTRL_AUXSRC_VALUE_ROSC_CLKSRC_PH,
+                    ROSC_HZ,
+                    OTHER_CLK_DIV);
+
+    // CLK ADC (not used)
+    clock_configure_int_divider(clk_adc,
+                    0, // No GLMUX
+                    CLOCKS_CLK_ADC_CTRL_AUXSRC_VALUE_ROSC_CLKSRC_PH,
+                    ROSC_HZ,
+                    OTHER_CLK_DIV);
+
+    // CLK PERI Used as reference clock for UART and SPI serial. (not used)
+    clock_configure_int_divider(clk_peri,
+                    0,
+                    CLOCKS_CLK_PERI_CTRL_AUXSRC_VALUE_CLK_SYS,
+                    ROSC_HZ,
+                    OTHER_CLK_DIV);
+
+    // CLK_HSTX Transmit bit clock for the HSTX peripheral. (not used)
+    clock_configure_int_divider(clk_hstx,
+                    0,
+                    CLOCKS_CLK_HSTX_CTRL_AUXSRC_VALUE_CLK_SYS,
+                    ROSC_HZ,
+                    OTHER_CLK_DIV);
 }
 
 
@@ -158,14 +281,13 @@ int main() {
         otp_hw->crt_key_w[i] = key_i;
     }
 
-    bi_decl(bi_program_feature_group(0x1111, 0x2222, "encryption_config"));
-    bi_decl(bi_ptr_int32(0x1111, 0x2222, data_start_addr, 0x20000000));
-    bi_decl(bi_ptr_int32(0x1111, 0x2222, data_size, 0x78000));
-    bi_decl(bi_ptr_int32(0x1111, 0x2222, iv0, 0));
-    bi_decl(bi_ptr_int32(0x1111, 0x2222, iv1, 1));
-    bi_decl(bi_ptr_int32(0x1111, 0x2222, iv2, 2));
-    bi_decl(bi_ptr_int32(0x1111, 0x2222, iv3, 3));
-    bi_decl(bi_ptr_int32(0x1111, 0x2222, otp_key_page, 30));
+    bi_decl(bi_ptr_int32(0, 0, data_start_addr, 0x20000000));
+    bi_decl(bi_ptr_int32(0, 0, data_size, 0x78000));
+    bi_decl(bi_ptr_int32(0, 0, iv0, 0));
+    bi_decl(bi_ptr_int32(0, 0, iv1, 1));
+    bi_decl(bi_ptr_int32(0, 0, iv2, 2));
+    bi_decl(bi_ptr_int32(0, 0, iv3, 3));
+    bi_decl(bi_ptr_int32(0, 0, otp_key_page, 30));
 
     // Initialise IV from binary info words
     uint8_t iv[16];

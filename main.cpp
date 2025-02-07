@@ -5000,7 +5000,6 @@ bool encrypt_command::execute(device_map &devices) {
             auto program = get_iostream_memory_access<iostream_memory_access>(tmp, filetype::elf, true);
             program.set_model(rp2350);
 
-            settings.config.group = "encryption_config";
             // data_start_addr
             settings.config.key = "data_start_addr";
             settings.config.value = hex_string(data_start_address);

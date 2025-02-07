@@ -47,7 +47,7 @@
 #endif
 
 #ifndef CK_JITTER
-#define CK_JITTER            1         // occasionally switch CPU clock to ROSC for extra timing variability
+#define CK_JITTER            0         // occasionally switch CPU clock to ROSC for extra timing variability
 #endif
 
 

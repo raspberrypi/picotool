@@ -5,8 +5,8 @@ if (NOT USE_PRECOMPILED)
     
     set(PICO_NO_PICOTOOL 1)
 
-    # Ensure we're using a Release build - MinSizeRel doesn't work for some reason
-    set(CMAKE_BUILD_TYPE Release)
+    # Ensure we're using a MinSizeRel build
+    set(CMAKE_BUILD_TYPE MinSizeRel)
 
     # If the user set these environment variables to influence the picotool
     # build, unset them here so that they do not influence the pico-sdk
