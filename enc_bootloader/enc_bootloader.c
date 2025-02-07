@@ -180,14 +180,15 @@ void runtime_init_clocks(void) {
     rosc_hw->freqa = (ROSC_FREQA_PASSWD_VALUE_PASS << ROSC_FREQA_PASSWD_LSB) |
             rosc_drive | ROSC_FREQA_DS1_RANDOM_BITS | ROSC_FREQA_DS0_RANDOM_BITS; // enable randomisation
 
-    // Not used with FREQ_RANGE_VALUE_HIGH, but should still be set
+    // Not used with FREQ_RANGE_VALUE_HIGH, but should still be set to the maximum drive
     rosc_hw->freqb = (ROSC_FREQB_PASSWD_VALUE_PASS << ROSC_FREQB_PASSWD_LSB) |
-            rosc_drive;
+            ROSC_FREQB_DS7_LSB | ROSC_FREQB_DS6_LSB | ROSC_FREQB_DS5_LSB | ROSC_FREQB_DS4_LSB;
 
     // Calibrate ROSC frequency if XOSC present - otherwise just configure
     uint32_t rosc_freq_mhz = 0;
     if (xosc_mhz) {
         xosc_init();
+        // Switch away from ROSC to avoid overclocking
         // CLK_REF = XOSC
         clock_configure_int_divider(clk_ref,
                         CLOCKS_CLK_REF_CTRL_SRC_VALUE_XOSC_CLKSRC,
@@ -197,17 +198,15 @@ void runtime_init_clocks(void) {
         // CLK_SYS = CLK_REF
         clock_configure_int_divider(clk_sys,
                         CLOCKS_CLK_SYS_CTRL_SRC_VALUE_CLK_REF,
-                        CLOCKS_CLK_SYS_CTRL_AUXSRC_VALUE_ROSC_CLKSRC,   // leave the aux source on ROSC
+                        CLOCKS_CLK_SYS_CTRL_AUXSRC_VALUE_ROSC_CLKSRC,   // leave the aux source on ROSC to prevent glitches when we switch back to it
                         xosc_mhz * MHZ,
                         1);
 
-        // Max out rosc
+        // Max out rosc now we've switched away from it
         rosc_hw->div = 1 | ROSC_DIV_VALUE_PASS;
         rosc_hw->freqa = (ROSC_FREQA_PASSWD_VALUE_PASS << ROSC_FREQA_PASSWD_LSB) |
-                ROSC_FREQA_DS3_BITS | ROSC_FREQA_DS2_BITS |
+                ROSC_FREQA_DS3_BITS | ROSC_FREQA_DS2_BITS | // maximum drive
                 ROSC_FREQA_DS1_RANDOM_BITS | ROSC_FREQA_DS0_RANDOM_BITS; // enable randomisation
-        rosc_hw->freqb = (ROSC_FREQB_PASSWD_VALUE_PASS << ROSC_FREQB_PASSWD_LSB) |
-                ROSC_FREQB_DS7_LSB | ROSC_FREQB_DS6_LSB | ROSC_FREQB_DS5_LSB | ROSC_FREQB_DS4_LSB;
 
         // Wait for ROSC to be stable
         while(!(rosc_hw->status & ROSC_STATUS_STABLE_BITS)) {
