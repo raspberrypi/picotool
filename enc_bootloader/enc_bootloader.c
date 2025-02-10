@@ -163,8 +163,8 @@ void runtime_init_clocks(void) {
 
     bi_decl(bi_ptr_int32(0, 0, rosc_div, 2)); // default divider 2
     bi_decl(bi_ptr_int32(0, 0, rosc_drive, 0x0000)); // default drives of 0
-    bi_decl(bi_ptr_int32(0, 0, xosc_mhz, 12)); // xosc freq in MHz
-    bi_decl(bi_ptr_int32(0, 0, clk_mhz, 150)); // xosc freq in MHz
+    bi_decl(bi_ptr_int32(0, 0, xosc_hz, 12000000)); // xosc freq in Hz
+    bi_decl(bi_ptr_int32(0, 0, clk_khz, 150 * KHZ)); // maximum clk_sys freq in KHz
 
     // Bump up ROSC speed to ~90MHz
     rosc_hw->freqa = 0; // reset the drive strengths
@@ -185,51 +185,50 @@ void runtime_init_clocks(void) {
             ROSC_FREQB_DS7_LSB | ROSC_FREQB_DS6_LSB | ROSC_FREQB_DS5_LSB | ROSC_FREQB_DS4_LSB;
 
     // Calibrate ROSC frequency if XOSC present - otherwise just configure
-    uint32_t rosc_freq_mhz = 0;
-    if (xosc_mhz) {
+    if (xosc_hz) {
         xosc_init();
         // Switch away from ROSC to avoid overclocking
         // CLK_REF = XOSC
         clock_configure_int_divider(clk_ref,
                         CLOCKS_CLK_REF_CTRL_SRC_VALUE_XOSC_CLKSRC,
                         0,
-                        xosc_mhz * MHZ,
+                        xosc_hz,
                         1);
         // CLK_SYS = CLK_REF
         clock_configure_int_divider(clk_sys,
                         CLOCKS_CLK_SYS_CTRL_SRC_VALUE_CLK_REF,
                         CLOCKS_CLK_SYS_CTRL_AUXSRC_VALUE_ROSC_CLKSRC,   // leave the aux source on ROSC to prevent glitches when we switch back to it
-                        xosc_mhz * MHZ,
+                        xosc_hz,
                         1);
 
-        // Max out rosc now we've switched away from it
-        rosc_hw->div = 1 | ROSC_DIV_VALUE_PASS;
-        rosc_hw->freqa = (ROSC_FREQA_PASSWD_VALUE_PASS << ROSC_FREQA_PASSWD_LSB) |
-                ROSC_FREQA_DS3_BITS | ROSC_FREQA_DS2_BITS | // maximum drive
-                ROSC_FREQA_DS1_RANDOM_BITS | ROSC_FREQA_DS0_RANDOM_BITS; // enable randomisation
+        // Go through configurations until you get below 150MHz
+        uint8_t div = 1;
+        uint32_t drives = 0x7777;
+        while (div < 4) {
+            rosc_hw->div = div | ROSC_DIV_VALUE_PASS;
+            rosc_hw->freqa = (ROSC_FREQA_PASSWD_VALUE_PASS << ROSC_FREQA_PASSWD_LSB) |
+                    drives |
+                    ROSC_FREQA_DS1_RANDOM_BITS | ROSC_FREQA_DS0_RANDOM_BITS; // enable randomisation
+            
+            // Wait for ROSC to be stable
+            while(!(rosc_hw->status & ROSC_STATUS_STABLE_BITS)) {
+                tight_loop_contents();
+            }
 
-        // Wait for ROSC to be stable
-        while(!(rosc_hw->status & ROSC_STATUS_STABLE_BITS)) {
-            tight_loop_contents();
+            if (frequency_count_khz(CLOCKS_FC0_SRC_VALUE_ROSC_CLKSRC_PH) < clk_khz) {
+                break;
+            }
+
+            if (!drives) div++;
+            drives = drives ? 0x0000 : 0x7777;
         }
-
-        rosc_freq_mhz = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_ROSC_CLKSRC_PH) / KHZ;
     }
-    if (rosc_freq_mhz > clk_mhz) {
-        // CLK SYS = ROSC divided down to clk_mhz, according to XOSC calibration
-        clock_configure_mhz(clk_sys,
-                        CLOCKS_CLK_SYS_CTRL_SRC_VALUE_CLKSRC_CLK_SYS_AUX,
-                        CLOCKS_CLK_SYS_CTRL_AUXSRC_VALUE_ROSC_CLKSRC,
-                        rosc_freq_mhz,
-                        clk_mhz);
-    } else { // Either ROSC is running too slowly, or there was no XOSC to calibrate it against
-        // CLK SYS = ROSC directly, as it's running slowly enough
-        clock_configure_int_divider(clk_sys,
-                        CLOCKS_CLK_SYS_CTRL_SRC_VALUE_CLKSRC_CLK_SYS_AUX,
-                        CLOCKS_CLK_SYS_CTRL_AUXSRC_VALUE_ROSC_CLKSRC,
-                        ROSC_HZ,    // this doesn't have to be accurate
-                        1);
-    }
+    // CLK SYS = ROSC directly, as it's running slowly enough
+    clock_configure_int_divider(clk_sys,
+                    CLOCKS_CLK_SYS_CTRL_SRC_VALUE_CLKSRC_CLK_SYS_AUX,
+                    CLOCKS_CLK_SYS_CTRL_AUXSRC_VALUE_ROSC_CLKSRC,
+                    ROSC_HZ,    // this doesn't have to be accurate
+                    1);
 
     // Configure other clocks - none of these need to be accurate
 
