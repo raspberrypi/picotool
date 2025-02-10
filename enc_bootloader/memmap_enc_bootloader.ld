@@ -256,5 +256,5 @@ SECTIONS
     ASSERT( __embedded_block_end - __logical_binary_start <= 4096, "Embedded block must be in first 4096 bytes of the binary")
 
     /* todo assert on extra code */
-    /*ASSERT(chaff==0x20081000, "Chaff array must be located at 0x20081000")*/
+    ASSERT(chaff==0x20081000, "Chaff array must be located at 0x20081000")
 }
