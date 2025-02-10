@@ -282,25 +282,15 @@ int main() {
 
     bi_decl(bi_ptr_int32(0, 0, data_start_addr, 0x20000000));
     bi_decl(bi_ptr_int32(0, 0, data_size, 0x78000));
-    bi_decl(bi_ptr_int32(0, 0, iv0, 0));
-    bi_decl(bi_ptr_int32(0, 0, iv1, 1));
-    bi_decl(bi_ptr_int32(0, 0, iv2, 2));
-    bi_decl(bi_ptr_int32(0, 0, iv3, 3));
+    bi_decl(bi_ptr_string(0, 0, iv, "0123456789abcdef", 17))
     bi_decl(bi_ptr_int32(0, 0, otp_key_page, 30));
-
-    // Initialise IV from binary info words
-    uint8_t iv[16];
-    memcpy(iv, (void*)&iv0, sizeof(iv0));
-    memcpy(iv + 4, (void*)&iv1, sizeof(iv1));
-    memcpy(iv + 8, (void*)&iv2, sizeof(iv2));
-    memcpy(iv + 12, (void*)&iv3, sizeof(iv3));
 
     // Initialise random state
     init_rstate();
 
     // Read key directly from OTP - guarded reads will throw a bus fault if there are any errors
     uint16_t* otp_data = (uint16_t*)OTP_DATA_GUARDED_BASE;
-    decrypt((uint8_t*)&(otp_data[(OTP_CMD_ROW_BITS & (otp_key_page * 0x40))]), iv, (void*)data_start_addr, data_size/16);
+    decrypt((uint8_t*)&(otp_data[(OTP_CMD_ROW_BITS & (otp_key_page * 0x40))]), (uint8_t*)iv, (void*)data_start_addr, data_size/16);
     otp_hw->sw_lock[otp_key_page] = 0xf;
 
     // Increase stack limit by 0x100

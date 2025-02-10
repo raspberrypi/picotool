@@ -5010,10 +5010,9 @@ bool encrypt_command::execute(device_map &devices) {
             config_guts(program);
             // iv
             for (int i=0; i < 4; i++) {
-                std::stringstream ss;
-                ss << "iv" << i;
-                settings.config.key = ss.str();
-                settings.config.value = hex_string(*(uint32_t*)(iv_data.data() + i*sizeof(uint32_t)));
+                string s((char*)iv_data.data(), iv_data.size());
+                settings.config.key = "iv";
+                settings.config.value = s;
                 config_guts(program);
             }
             // otp_key_page
