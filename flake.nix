@@ -1,32 +1,3 @@
-# {
-#   description = "A flake for compiling picotool from Raspberry Pi";
-
-#   inputs = {
-#     nixpkgs.url = "github:nixos/nixpkgs";
-#     flake-utils.url = "github:numtide/flake-utils";
-#   };
-
-#   outputs = { self, flake-utils, nixpkgs }:
-#   flake-utils.lib.eachSystem [ flake-utils.lib.system.x86_64-linux]
-#   (system:
-#     let
-#       pkgs = nixpkgs.legacyPackages.${system};
-      
-#       dependencies =  with pkgs; [
-#         libusb1
-#         cmake
-#         pkg-config
-#         libgcc
-#       ];
-        
-  
-#   in {
-
-#   }
-#   );
-
-
-# }
 {
   description = "A flake for compiling picotool from Raspberry Pi";
 
