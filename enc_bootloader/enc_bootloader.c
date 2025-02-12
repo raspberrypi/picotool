@@ -28,6 +28,7 @@ extern void decrypt(uint8_t* key4way, uint8_t* iv, uint8_t(*buf)[16], int nblk);
 #define ROSC_HZ 300*MHZ
 #define OTHER_CLK_DIV 30
 
+#if CK_JITTER
 void runtime_init_clocks(void) {
     // Disable resus that may be enabled from previous software
     clocks_hw->resus.ctrl = 0;
@@ -138,6 +139,7 @@ void runtime_init_clocks(void) {
                     ROSC_HZ,
                     OTHER_CLK_DIV);
 }
+#endif
 
 
 bi_decl(bi_ptr_int32(0, 0, otp_key_page, 30));
