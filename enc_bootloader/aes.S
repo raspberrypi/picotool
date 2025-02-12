@@ -18,6 +18,7 @@ pointer is overwritten.
 #include "hardware/regs/clocks.h"
 #include "hardware/regs/sha256.h"
 #include "hardware/regs/resets.h"
+#include "hardware/regs/rosc.h"
 #include "hardware/regs/trng.h"
 #include "hardware/rcp.h"
 
@@ -291,6 +292,8 @@ init_rstate:
  mov r1,r5         @ give up and use the address of rstate_sha (which is non-zero); this can't really happen (2^{-96} probability)
 1:
  str r1,[r5,#rstate_lfsr-rstate_sha]
+ ldr r2,=ROSC_RANDOM_OFFSET+ROSC_BASE
+ str r1,[r2,#0]
  CHK_COUNT 27,6
 .if GEN_RAND_SHA
 .if SH_JITTER
