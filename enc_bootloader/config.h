@@ -1,6 +1,6 @@
 #pragma once
 
-// These options should be enabled because the security risk of not using them is too high
+// These options (up to long /////////////// line) should be enabled because the security risk of not using them is too high
 // or because the time cost is very low so you may as well have them.
 // They can be set to 0 for analysis or testing purposes.
 
@@ -22,6 +22,10 @@
 #define RK_ROR               1         // store round key shares with random rotations within each word
 #endif
 
+#ifndef WIPE_MEMORY
+#define WIPE_MEMORY          1         // Wipe memory after decryption
+#endif
+
 // The following options should be enabled to increase resistance to glitching attacks.
 
 #ifndef RC_CANARY
@@ -37,7 +41,7 @@
 // It is advisable to use a least one form of jitter.
 
 // RC_JITTER is quite slow, and is probably the most predictable of the three, so it is disabled by default.
-// (However, it may be that the large delays it produces is advantageous in defeating some sorts of side-channel attacks.)
+// (Leaving it as an option because it's just possible that the large delays it produces are advantageous in defeating certain side-channel attacks.)
 #ifndef RC_JITTER
 #define RC_JITTER            0         // 0-7. Higher = more jitter. Governs use of random-delay versions of RCP instructions.
 #endif
@@ -47,7 +51,7 @@
 #endif
 
 #ifndef CK_JITTER
-#define CK_JITTER            0         // occasionally switch CPU clock to ROSC for extra timing variability
+#define CK_JITTER            1         // occasionally switch CPU clock to ROSC for extra timing variability
 #endif
 
 

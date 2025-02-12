@@ -18,12 +18,14 @@ pointer is overwritten.
 #include "hardware/regs/clocks.h"
 #include "hardware/regs/sha256.h"
 #include "hardware/regs/resets.h"
+#include "hardware/regs/trng.h"
 #include "hardware/rcp.h"
 
 .global decrypt
-.global rstate_sha
 .global do_not_wipe
 .global chaff
+
+.extern lock_key
 
 @ RCP macros
 
@@ -46,6 +48,9 @@ pointer is overwritten.
 #define CTAG16 0x3b
 #define CTAG17 0x3c
 #define CTAG18 0x3d @ not used
+
+@ number of blocks from the TRNG processed to initialise rstate_sha
+#define TRNG_BLOCKS 25
 
 @ The lower the jitterpriorty the more the jitter
 .macro SET_COUNT n,jitterpriority
@@ -196,10 +201,6 @@ lut_b_map:
 .space 4
 .space 4                     @ align to multiple of 8
 
-do_not_wipe:
-.byte 0x00                   @ Flag: if this is zero then memory will be wiped after decryption
-                             @ The purpose of this flag is that some test modes require the memory not to be wiped
-
 .balign 16
 rstate_all_start:            @ Mark start of RNG data to allow selective memory wipe
 rstate_sha:                  @ 128-bit SHA random state, to be initialised to TRNG bytes; zeroth byte must be initialised to zero
@@ -221,7 +222,87 @@ murmur3_constants:           @ Five constants used in murmur3_32 hash
 .word 0xc2b2ae35
 .endif
 
-@ Put main code in first scratch area
+scratch_y_end:
+
+@ Initialisation code in main .text section
+.section .text,"ax",%progbits
+
+@ The following is copied from the A2 boot ROM code at src/main/arm/varm_boot_path.c with adjustments.
+@ We feed a stream of bits from the TRNG into the SHA hardware accelerator to generate some
+@ random numbers.
+@ Trashes r0-r6
+.balign 4
+init_rstate:
+ CHK_COUNT 24,6
+ ldr r4,=TRNG_BASE+TRNG_RNG_IMR_OFFSET
+ ldr r5,=SHA256_BASE
+ movs r1,#1
+ str r1,[r4,#TRNG_TRNG_SW_RESET_OFFSET     -TRNG_RNG_IMR_OFFSET]
+ ldr r6,[r4,#TRNG_TRNG_SW_RESET_OFFSET     -TRNG_RNG_IMR_OFFSET]     @ reads as 0
+ movw r1,#SHA256_CSR_RESET|SHA256_CSR_START_BITS                     @ initialise SHA internal state by writing START bit
+ str r1,[r5,#SHA256_CSR_OFFSET]
+ str r6,[r4,#TRNG_SAMPLE_CNT1_OFFSET       -TRNG_RNG_IMR_OFFSET]
+ movs r6,TRNG_BLOCKS*2+1                                             @ odd so that we break out of the loop half-way through loading the SHA hardware, giving
+                                                                     @ time for previous SHA computation to complete
+2:
+ movs r1,#0xff                                                       @ TRNG setup is inside loop in case it is skipped.
+ str r1,[r4,#TRNG_TRNG_DEBUG_CONTROL_OFFSET-TRNG_RNG_IMR_OFFSET]     @ disable checks and bypass decorrelators,to stream raw TRNG ROSC samples
+ str r1,[r4,#TRNG_RND_SOURCE_ENABLE_OFFSET -TRNG_RNG_IMR_OFFSET]     @ start ROSC if it is not already started
+ str r1,[r4,#TRNG_RNG_ICR_OFFSET           -TRNG_RNG_IMR_OFFSET]     @ clear all interrupts (including EHR_VLD)
+ movs r0,r4
+ adds r0,#TRNG_EHR_DATA0_OFFSET            -TRNG_RNG_IMR_OFFSET
+ movs r2,#TRNG_TRNG_BUSY_OFFSET            -TRNG_RNG_IMR_OFFSET
+1:
+ ldr r1,[r4,r2]                                                      @ wait for 192 ROSC samples to fill EHR,should take constant time
+ cmp r1,#0
+ bne 1b
+ subs r6,#1                                                          @ done?
+ beq 3f
+ movs r1,#8
+1:
+ ldmia r0!,{r2}                                                      @ copy 6 EHR words to SHA-256, plus garbage (RND_SOURCE_ENABLE and SAMPLE_CNT1)
+ str r2,[r5,#SHA256_WDATA_OFFSET]                                    @ for a total of half a SHA-256 block
+ subs r1,#1
+ bne 1b
+ ldr r2,[r5,#SHA256_SUM0_OFFSET]                                     @ TRNG is now sampling again; use some SHA bits to modulate the chain length
+ str r2,[r4,#TRNG_TRNG_CONFIG_OFFSET       -TRNG_RNG_IMR_OFFSET]
+ b.n 2b
+
+3:
+ CHK_COUNT 25,6
+ str r1,[r4,#TRNG_TRNG_CONFIG_OFFSET       -TRNG_RNG_IMR_OFFSET]     @ turn off rand source and wipe SHA bits left in TRNG config; r1=0
+ str r1,[r4,#TRNG_RND_SOURCE_ENABLE_OFFSET -TRNG_RNG_IMR_OFFSET]
+ adds r5,r5,#SHA256_SUM0_OFFSET
+ ldmia r5!,{r0-r3}
+ ldr r5,=rstate_sha
+ stmia r5,{r0-r3}
+ CHK_COUNT 26,6
+
+@ r5=rstate_sha
+ movs r0,#0
+ strb r0,[r5]      @ make sure rstate_sha[0] has byte 0 set to 0, representing "out of data"
+@ try to find a non-zero initialiser to create a non-degenerate LFSR
+ ldr r1,[r5,#4]
+ cbnz r1,1f        @ is word 1 non-zero? then use it
+ ldr r1,[r5,#8]
+ cbnz r1,1f        @ otherwise, is word 2 non-zero? use it
+ ldr r1,[r5,#12]
+ cbnz r1,1f        @ otherwise, is word 3 non-zero? use it
+ mov r1,r5         @ give up and use the address of rstate_sha (which is non-zero); this can't really happen (2^{-96} probability)
+1:
+ str r1,[r5,#rstate_lfsr-rstate_sha]
+ CHK_COUNT 27,6
+.if GEN_RAND_SHA
+.if SH_JITTER
+ movs r2,#0
+ str r2,[r5,#jstate-rstate_sha]
+.endif
+.endif
+
+ CHK_COUNT 28,6
+ bx r14
+
+@ Put AES core code in first scratch area
 .section .scratch_x.aes,"ax",%progbits
 
 .if GEN_RAND_SHA
@@ -374,27 +455,10 @@ gen_rand_lfsr_nonpres:
 decrypt:
  push {r14}
  GET_CANARY r14,CTAG3,6
+ SET_COUNT 23,6
  push {r0-r12,r14}
- ldr r5,=rstate_sha
- movs r0,#0
- strb r0,[r5]      @ make sure rstate_sha[0] has byte 0 set to 0, representing "out of data"
-@ try to find a non-zero initialiser to create a non-degenerate LFSR
- ldr r1,[r5,#4]
- cbnz r1,1f        @ is word 1 non-zero? then use it
- ldr r1,[r5,#8]
- cbnz r1,1f        @ otherwise, is word 2 non-zero? use it
- ldr r1,[r5,#12]
- cbnz r1,1f        @ otherwise, is word 3 non-zero? use it
- mov r1,r5         @ give up and use the address of rstate_sha (which is non-zero)
-1:
- str r1,[r5,#rstate_lfsr-rstate_sha]
-.if GEN_RAND_SHA
-.if SH_JITTER
- movs r2,#0
- str r2,[r5,#jstate-rstate_sha]
-.endif
- bl reset_sha
-.endif
+ bl reset_sha_trng
+ bl init_rstate
 @ randomly re-share the LUT contents
  ldr r4,=lut_a
  mov r5,#64                  @ 64 words = 256 bytes
@@ -408,26 +472,31 @@ decrypt:
  stmia r4!,{r6}
  subs r5,r5,#1
  bne 1b
+ CHK_COUNT 29,6
  bl remap                    @ scramble the LUTs
  pop {r0}                    @ pointer to 4way key data
+ CHK_COUNT 30,6
  bl init_key_4way
+ CHK_COUNT 31,6
+ bl lock_key
  pop {r0-r2}
  bl ctr_crypt_s
  bl randomisechaff
  clear03
-@ !!! clear all registers here
-@ !!! chain to code here
  pop {r4-r12,r14}
  CHK_CANARY r14,CTAG3,6
  pop {r15}
 
 .balign 4
 .thumb_func
-reset_sha:
+reset_sha_trng:
  ldr r1,=RESETS_BASE+RESETS_RESET_OFFSET
  ldr r2,[r1]
- orr r3,r2,#RESETS_RESET_SHA256_BITS
- str r3,[r1]       @ reset the SHA hardware
+ ldr r3,=#RESETS_RESET_SHA256_BITS|RESETS_RESET_TRNG_BITS
+ orrs r2,r2,r3
+ str r2,[r1]       @ reset the SHA hardware and the TRNG hardware
+ CHK_COUNT 23,6
+ bics r2,r2,r3
  str r2,[r1]       @ release the reset
  bx r14
 
@@ -1849,12 +1918,8 @@ decryption_end:
  CHK_COUNT 91,6
  bne ctr_crypt_mainloop
 
+#if WIPE_MEMORY
 @ Wipe memory from workspace_start up to the stack pointer
- ldr r0,=do_not_wipe         @ Some test modes require memory not to be wiped
- ldrb r0,[r0]
- movs r0,r0
- bne nowipe
-
 @ First fill everything (except the RNG state itself) with random numbers to avoid any possibly useful power signals
  ldr r4,=workspace_start
  ldr r5,=rstate_all_start
@@ -1864,23 +1929,26 @@ decryption_end:
  cmp r4,r5
  bcc 1b
  ldr r4,=rstate_all_end
+ mov r5,r13                  @ gcc arm assembler says cmp r4,r13 is deprecated, so use another register
 1:
  bl gen_rand_sha_nonpres
  stmia r4!,{r0}
- cmp r4,r13
+ cmp r4,r5
  bcc 1b
 
 @ Then fill everything with zeros so as not to leave behind clues about the RNG state
  ldr r4,=workspace_start
  movs r0,#0
+ mov r5,r13
 1:
  stmia r4!,{r0}
- cmp r4,r13
+ cmp r4,r5
  bcc 1b
-nowipe:
+#endif
 
 .if GEN_RAND_SHA
- bl reset_sha                @ clear out the SHA hardware
+ SET_COUNT 23,6
+ bl reset_sha_trng           @ clear out the SHA hardware
 .endif
  pop {r0-r12,r14}
  CHK_CANARY r12,CTAG0,6
