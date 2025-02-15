@@ -80,10 +80,11 @@ if (NOT PICOTOOL_NO_LIBUSB)
     add_dependencies(xip_ram_perms_elf xip_ram_perms)
     set_property(TARGET xip_ram_perms_elf PROPERTY IMPORTED_LOCATION ${XIP_RAM_PERMS_ELF})
     # copy xip_ram_perms.elf into build directory
-    add_custom_command(TARGET xip_ram_perms
-        COMMAND ${CMAKE_COMMAND} -E copy ${XIP_RAM_PERMS_ELF} ${CMAKE_BINARY_DIR}/xip_ram_perms.elf
-        DEPENDS xip_ram_perms
+    add_custom_command(TARGET xip_ram_perms POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy ${XIP_RAM_PERMS_ELF} ${CMAKE_BINARY_DIR}/xip_ram_perms.elf
     )
+
+    add_dependencies(xip_ram_perms xip_ram_perms)
 
     # compile flash_id
     ExternalProject_Add(flash_id
@@ -104,10 +105,11 @@ if (NOT PICOTOOL_NO_LIBUSB)
     add_dependencies(flash_id_bin flash_id)
     set_property(TARGET flash_id_bin PROPERTY IMPORTED_LOCATION ${FLASH_ID_BIN})
     # copy flash_id.bin into build directory
-    add_custom_command(TARGET flash_id
-        COMMAND ${CMAKE_COMMAND} -E copy ${FLASH_ID_BIN} ${CMAKE_BINARY_DIR}/flash_id.bin
-        DEPENDS flash_id
+    add_custom_command(TARGET flash_id POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy ${FLASH_ID_BIN} ${CMAKE_BINARY_DIR}/flash_id.bin
     )
+
+    add_dependencies(flash_id flash_id)
 
     # We want to generate headers from WELCOME.HTM etc.
     ExternalProject_Add(otp_header_parser

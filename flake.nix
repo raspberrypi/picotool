@@ -7,7 +7,7 @@
   };
 
   outputs = { self, nixpkgs, flake-utils }:
-    flake-utils.lib.eachDefaultSystem (system:
+    flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (system:
       let
         pkgs = import nixpkgs { inherit system; };
 
@@ -17,6 +17,7 @@
           rev = "master"; 
           sha256 = "0qzj3x7vqrflirgbxmji2m5fqxha7ib95nsg6glhpn7id7lkb9s0";
         };
+
       in {
         devShells.default = pkgs.mkShell {
           buildInputs = [
