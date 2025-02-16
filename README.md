@@ -18,6 +18,13 @@ sudo apt install build-essential pkg-config libusb-1.0-0-dev cmake
 
 > If libusb-1.0-0-dev is not installed, picotool still builds, but it omits all options that deal with managing a pico via USB (load, save, erase, verify, reboot). Builds that do not include USB support can be recognized because these commands also do not appear in the help command. The build output message 'libUSB is not found - no USB support will be built' also appears in the build logs.
 
+##### Alternative to install dependencies with nix
+
+Instead of having to manually install every dependency, it can be managed through [Nix](https://nixos.org/download/) / [Lix](https://lix.systems/install/).
+
+Before building the project, just use the following command: `nix develop`
+
+
 Then simply build like a normal CMake project:
 
 ```console
