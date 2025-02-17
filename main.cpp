@@ -1237,6 +1237,8 @@ struct coprodis_command : public cmd {
     string get_doc() const override {
         return "Post-process coprocessor instructions in disassembly files.";
     }
+
+    bool decode_line(uint32_t val, char *buf, size_t buf_len);
 };
 
 struct help_command : public cmd {
@@ -6320,671 +6322,695 @@ string cpu_reg(int val) {
 }
 
 
-bool coprodis_command::execute(device_map &devices) {
-    auto in = get_file(ios::in);
+static bool parse_hex(const std::string& value, uint32_t& out) {
+    try {
+        size_t pos = 0;
+        out = std::stoull(value, &pos, 16);
+        if (pos != value.length()) {
+            return false;
+        }
+        return true;
+    } catch (std::invalid_argument& e) {
+        return false;
+    } catch (std::out_of_range& e) {
+        return false;
+    }
+}
 
-    std::stringstream buffer;
-    buffer << in->rdbuf();
-    auto contents = buffer.str();
+bool coprodis_command::decode_line(uint32_t val, char *buf, size_t buf_len) {
+    uint32_t mcrbits = val & 0xff100010;
+    enum {
+        NONE = 0,
+        MCR = 0x01,
+        MCR2 = 0x02,
+        MRC = 0x04,
+        MRC2 = 0x08,
+        MCRR = 0x10,
+        MCRR2 = 0x20,
+        MRRC = 0x40,
+        MRRC2 = 0x80,
+        CDP = 0x100,
+    } type = NONE;
+    uint32_t mccrbits = (val & 0xfff00000) >> 20;
+    uint32_t cdpbits = val & 0xff000010;
+    const char *inst = "";
 
-    std::regex instruction(
-        R"(([ 0-9a-f]{8}):\s*([0-9a-f]{2})(\s*)([0-9a-f]{2})\s+([0-9a-f]{2})\s*([0-9a-f]{2})\s*(.*))"
-    );
-    vector<vector<string>> insts = {};
-    vector<tuple<string,string,string>> proc_insts;
-    while (true)
-    {
-        std::smatch sm;
-        if (!std::regex_search(contents, sm, instruction)) break;
-        vector<string> tmp;
-        std::copy(sm.begin(), sm.end(), std::back_inserter(tmp));
-        insts.push_back(tmp);
-        contents = sm.suffix();
+    switch (mcrbits) {
+        case 0xee000010:
+            type = MCR;
+            inst = "mcr";
+            break;
+        case 0xfe000010:
+            type = MCR2;
+            inst = "mcr2";
+            break;
+        case 0xee100010:
+            type = MRC;
+            inst = "mrc";
+            break;
+        case 0xfe100010:
+            type = MRC2;
+            inst = "mrc2";
+            break;
+        default:
+            break;
     }
 
-    for (vector<string> sm : insts) {
-        uint32_t val;
-        if (sm.size() < 7) {
-            fos << sm[0] << " was too small\n";
-            continue;
-        }
-        if (sm[3].length()) {
-            // Clang
-            int b0, b1, b2, b3 = 0;
-            get_int("0x" + sm[5], b0);
-            get_int("0x" + sm[6], b1);
-            get_int("0x" + sm[2], b2);
-            get_int("0x" + sm[4], b3);
-            val = b0 + (b1 << 8) + (b2 << 16) + (b3 << 24);
-        } else {
-            // GCC
-            int b0, b1 = 0;
-            get_int("0x" + sm[5] + sm[6], b0);
-            get_int("0x" + sm[2] + sm[4], b1);
-            val = b0 + (b1 << 16);
-        }
+    switch (mccrbits) {
+        case 0xec4:
+            type = MCRR;
+            inst = "mcrr";
+            break;
+        case 0xfc4:
+            type = MCRR2;
+            inst = "mcrr2";
+            break;
+        case 0xec5:
+            type = MRRC;
+            inst = "mrrc";
+            break;
+        case 0xfc5:
+            type = MRRC2;
+            inst = "mrrc2";
+            break;
+        default:
+            break;
+    }
 
-        uint32_t mcrbits = val & 0xff100010;
-        bool mcr = false;
-        uint32_t mccrbits = (val & 0xfff00000) >> 20;
-        bool mccr = false;
-        uint32_t cdpbits = val & 0xff000010;
-        bool cdp = false;
-        string inst;
+    switch (cdpbits) {
+        case 0xee000000:
+            type = CDP;
+            inst = "cdp";
+            break;
+        default:
+            break;
+    }
 
-        switch (mcrbits) {
-            case 0xee000010:
-                mcr = true;
-                inst = "mcr";
-                break;
-            case 0xfe000010:
-                mcr = true;
-                inst = "mcr2";
-                break;
-            case 0xee100010:
-                mcr = true;
-                inst = "mrc";
-                break;
-            case 0xfe100010:
-                mcr = true;
-                inst = "mrc2";
-                break;
-            default:
-                break;
-        }
+    if (type & (MCR | MCR2 | MRC | MRC2)) {
+        uint32_t opc1 = (val >> (16+5)) & 0x7u;
+        uint32_t CRn = (val >> 16) & 0xfu;
+        uint32_t Rt = (val >> 12) & 0xfu;
+        uint32_t coproc = (val >> 8) & 0xfu;
+        uint32_t opc2 = (val >> 5) & 0x7u;
+        uint32_t CRm = val & 0xfu;
 
-        switch (mccrbits) {
-            case 0xec4:
-                mccr = true;
-                inst = "mcrr";
-                break;
-            case 0xfc4:
-                mccr = true;
-                inst = "mcrr2";
-                break;
-            case 0xec5:
-                mccr = true;
-                inst = "mrrc";
-                break;
-            case 0xfc5:
-                mccr = true;
-                inst = "mrrc2";
-                break;
-            default:
-                break;
-        }
-
-        switch (cdpbits) {
-            case 0xee000000:
-                cdp = true;
-                inst = "cdp";
-                break;
-            default:
-                break;
-        }
-
-        char rep[512] = "";
-
-        if (mcr) {
-            uint8_t opc1 = (val >> (16+5)) & 0x7;
-            uint8_t CRn = (val >> 16) & 0xf;
-            uint8_t Rt = (val >> 12) & 0xf;
-            uint8_t coproc = (val >> 8) & 0xf;
-            uint8_t opc2 = (val >> 5) & 0x7;
-            uint8_t CRm = val & 0xf;
-
-            if (coproc == 0) {
-                // GPIO
-                if (CRn != 0 || opc1 >= 8) {
+        if (coproc == 0) {
+            // GPIO
+            if (CRn != 0 || opc1 >= 8) {
 //                    fail(ERROR_INCOMPATIBLE,
 //                         "Instruction %s %d, #%d, %s, c%d, c%d, #%d is not supported by GPIO Coprocessor",
 //                         inst.c_str(), coproc, opc1, cpu_reg(Rt).c_str(), CRn, CRm, opc2
 //                    );
-                    printf("WARNING: Instruction %s %d, #%d, %s, c%d, c%d, #%d is not supported by GPIO Coprocessor\n",
-                         inst.c_str(), coproc, opc1, cpu_reg(Rt).c_str(), CRn, CRm, opc2
+                printf("WARNING: Instruction %s %d, #%d, %s, c%d, c%d, #%d is not supported by GPIO Coprocessor\n",
+                     inst, coproc, opc1, cpu_reg(Rt).c_str(), CRn, CRm, opc2
+                );
+                return false;
+            }
+            if (type == MCR) {
+                if (opc1 < 4) {
+                    snprintf(buf, buf_len, "gpioc_%s_%s %s",
+                        gpiohilo(CRm).c_str(), gpiopxsc(opc1).c_str(), cpu_reg(Rt).c_str()
                     );
-                    continue;
-                }
-                if (inst == "mcr") {
-                    if (opc1 < 4) {
-                        snprintf(rep, sizeof(rep), "gpioc_%s_%s %s",
-                            gpiohilo(CRm).c_str(), gpiopxsc(opc1).c_str(), cpu_reg(Rt).c_str()
-                        );
-                    } else {
-                        snprintf(rep, sizeof(rep), "gpioc_%s_%s %s",
-                            gpiodir(CRm).c_str(), gpioxsc(opc1).c_str(), cpu_reg(Rt).c_str()
-                        );
-                    }
                 } else {
-                    snprintf(rep, sizeof(rep), "gpioc_%s_get %s",
-                        gpiohilo(CRm).c_str(), cpu_reg(Rt).c_str()
+                    snprintf(buf, buf_len, "gpioc_%s_%s %s",
+                        gpiodir(CRm).c_str(), gpioxsc(opc1).c_str(), cpu_reg(Rt).c_str()
                     );
                 }
-            } else if (coproc == 4 || coproc == 5) {
-                // DCP
-                bool ns = coproc == 5;
-                if (inst == "mrc" || inst == "mrc2") {
-                    bool isP = inst == "mrc2";
-                    switch (CRm) {
-                        case 0:
-                            switch (opc2) {
-                                case 0:
-                                    snprintf(rep, sizeof(rep), "dcp%s_%sxvd %s",
-                                        ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str()
-                                    );
-                                    break;
-                                case 1:
-                                    snprintf(rep, sizeof(rep), "dcp%s_%scmp %s",
-                                        ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str()
-                                    );
-                                    break;
-                                default:
-                                    continue;
-                            }
-                            break;
-                        case 2:
-                            switch (opc2) {
-                                case 0:
-                                    snprintf(rep, sizeof(rep), "dcp%s_%sdfa %s",
-                                        ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str()
-                                    );
-                                    break;
-                                case 1:
-                                    snprintf(rep, sizeof(rep), "dcp%s_%sdfs %s",
-                                        ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str()
-                                    );
-                                    break;
-                                case 2:
-                                    snprintf(rep, sizeof(rep), "dcp%s_%sdfm %s",
-                                        ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str()
-                                    );
-                                    break;
-                                case 3:
-                                    snprintf(rep, sizeof(rep), "dcp%s_%sdfd %s",
-                                        ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str()
-                                    );
-                                    break;
-                                case 4:
-                                    snprintf(rep, sizeof(rep), "dcp%s_%sdfq %s",
-                                        ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str()
-                                    );
-                                    break;
-                                case 5:
-                                    snprintf(rep, sizeof(rep), "dcp%s_%sdfg %s",
-                                        ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str()
-                                    );
-                                    break;
-                                default:
-                                    continue;
-                            }
-                            break;
-                        case 3:
-                            switch (opc2) {
-                                case 0:
-                                    snprintf(rep, sizeof(rep), "dcp%s_%sdic %s",
-                                        ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str()
-                                    );
-                                    break;
-                                case 1:
-                                    snprintf(rep, sizeof(rep), "dcp%s_%sduc %s",
-                                        ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str()
-                                    );
-                                    break;
-                                default:
-                                    continue;
-                            }
-                            break;
-                        default:
-                            continue;
-                    }
-                }
-            } else if (coproc == 7) {
-                // RCP
-                if (inst == "mcr" || inst == "mcr2") {
-                    bool delay = inst == "mcr";
-                    switch (opc1) {
-                        case 0:
-                            snprintf(rep, sizeof(rep), "rcp_canary_check %s, 0x%02x (%d), %sdelay",
-                                cpu_reg(Rt).c_str(), CRn*16 + CRm, CRn*16 + CRm, delay ? "" : "no"
-                            );
-                            break;
-                        case 1:
-                            snprintf(rep, sizeof(rep), "rcp_bvalid %s, %sdelay",
-                                cpu_reg(Rt).c_str(), delay ? "" : "no"
-                            );
-                            break;
-                        case 2:
-                            snprintf(rep, sizeof(rep), "rcp_btrue %s, %sdelay",
-                                cpu_reg(Rt).c_str(), delay ? "" : "no"
-                            );
-                            break;
-                        case 3:
-                            snprintf(rep, sizeof(rep), "rcp_bfalse %s, %sdelay",
-                                cpu_reg(Rt).c_str(), delay ? "" : "no"
-                            );
-                            break;
-                        case 4:
-                            snprintf(rep, sizeof(rep), "rcp_count_set 0x%02x (%d), %sdelay",
-                                CRn*16 + CRm, CRn*16 + CRm, delay ? "" : "no"
-                            );
-                            break;
-                        case 5:
-                            snprintf(rep, sizeof(rep), "rcp_count_check 0x%02x (%d), %sdelay",
-                                CRn*16 + CRm, CRn*16 + CRm, delay ? "" : "no"
-                            );
-                            break;
-                        default:
-                            continue;
-                    }
-                } else {
-                    bool delay = inst == "mrc";
-                    switch (opc1) {
-                        case 0:
-                            snprintf(rep, sizeof(rep), "rcp_canary_get %s, 0x%02x (%d), %sdelay",
-                                cpu_reg(Rt).c_str(), CRn*16 + CRm, CRn*16 + CRm, delay ? "" : "no"
-                            );
-                            break;
-                        case 1:
-                            snprintf(rep, sizeof(rep), "rcp_canary_status %s, %sdelay",
-                                cpu_reg(Rt).c_str(), delay ? "" : "no"
-                            );
-                            break;
-                        default:
-                            continue;
-                    }
+            } else {
+                snprintf(buf, buf_len, "gpioc_%s_get %s",
+                    gpiohilo(CRm).c_str(), cpu_reg(Rt).c_str()
+                );
+            }
+        } else if (coproc == 4 || coproc == 5) {
+            // DCP
+            bool ns = coproc == 5;
+            if (type & (MRC | MRC2)) {
+                bool isP = type == MRC2;
+                switch (CRm) {
+                    case 0:
+                        switch (opc2) {
+                            case 0:
+                                snprintf(buf, buf_len, "dcp%s_%sxvd %s",
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str()
+                                );
+                                break;
+                            case 1:
+                                snprintf(buf, buf_len, "dcp%s_%scmp %s",
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str()
+                                );
+                                break;
+                            default:
+                                return false;
+                        }
+                        break;
+                    case 2:
+                        switch (opc2) {
+                            case 0:
+                                snprintf(buf, buf_len, "dcp%s_%sdfa %s",
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str()
+                                );
+                                break;
+                            case 1:
+                                snprintf(buf, buf_len, "dcp%s_%sdfs %s",
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str()
+                                );
+                                break;
+                            case 2:
+                                snprintf(buf, buf_len, "dcp%s_%sdfm %s",
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str()
+                                );
+                                break;
+                            case 3:
+                                snprintf(buf, buf_len, "dcp%s_%sdfd %s",
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str()
+                                );
+                                break;
+                            case 4:
+                                snprintf(buf, buf_len, "dcp%s_%sdfq %s",
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str()
+                                );
+                                break;
+                            case 5:
+                                snprintf(buf, buf_len, "dcp%s_%sdfg %s",
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str()
+                                );
+                                break;
+                            default:
+                                return false;
+                        }
+                        break;
+                    case 3:
+                        switch (opc2) {
+                            case 0:
+                                snprintf(buf, buf_len, "dcp%s_%sdic %s",
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str()
+                                );
+                                break;
+                            case 1:
+                                snprintf(buf, buf_len, "dcp%s_%sduc %s",
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str()
+                                );
+                                break;
+                            default:
+                                return false;
+                        }
+                        break;
+                    default:
+                        return false;
                 }
             }
-        } else if (mccr) {
-            uint8_t Rt2 = (val >> 16) & 0xf;
-            uint8_t Rt = (val >> 12) & 0xf;
-            uint8_t coproc = (val >> 8) & 0xf;
-            uint8_t opc1 = (val >> 4) & 0xf;
-            uint8_t CRm = val & 0xf;
+        } else if (coproc == 7) {
+            // RCP
+            if (type & (MCR | MCR2)) {
+                bool delay = type == MCR;
+                switch (opc1) {
+                    case 0:
+                        snprintf(buf, buf_len, "rcp_canary_check %s, 0x%02x (%d), %sdelay",
+                            cpu_reg(Rt).c_str(), CRn*16 + CRm, CRn*16 + CRm, delay ? "" : "no"
+                        );
+                        break;
+                    case 1:
+                        snprintf(buf, buf_len, "rcp_bvalid %s, %sdelay",
+                            cpu_reg(Rt).c_str(), delay ? "" : "no"
+                        );
+                        break;
+                    case 2:
+                        snprintf(buf, buf_len, "rcp_btrue %s, %sdelay",
+                            cpu_reg(Rt).c_str(), delay ? "" : "no"
+                        );
+                        break;
+                    case 3:
+                        snprintf(buf, buf_len, "rcp_bfalse %s, %sdelay",
+                            cpu_reg(Rt).c_str(), delay ? "" : "no"
+                        );
+                        break;
+                    case 4:
+                        snprintf(buf, buf_len, "rcp_count_set 0x%02x (%d), %sdelay",
+                            CRn*16 + CRm, CRn*16 + CRm, delay ? "" : "no"
+                        );
+                        break;
+                    case 5:
+                        snprintf(buf, buf_len, "rcp_count_check 0x%02x (%d), %sdelay",
+                            CRn*16 + CRm, CRn*16 + CRm, delay ? "" : "no"
+                        );
+                        break;
+                    default:
+                        return false;
+                }
+            } else {
+                bool delay = type == MRC;
+                switch (opc1) {
+                    case 0:
+                        snprintf(buf, buf_len, "rcp_canary_get %s, 0x%02x (%d), %sdelay",
+                            cpu_reg(Rt).c_str(), CRn*16 + CRm, CRn*16 + CRm, delay ? "" : "no"
+                        );
+                        break;
+                    case 1:
+                        snprintf(buf, buf_len, "rcp_canary_status %s, %sdelay",
+                            cpu_reg(Rt).c_str(), delay ? "" : "no"
+                        );
+                        break;
+                    default:
+                        return false;
+                }
+            }
+        }
+    } else if (type & (MCRR | MCRR2 | MRRC | MRRC2)) {
+        uint32_t Rt2 = (val >> 16) & 0xfu;
+        uint32_t Rt = (val >> 12) & 0xfu;
+        uint32_t coproc = (val >> 8) & 0xfu;
+        uint32_t opc1 = (val >> 4) & 0xfu;
+        uint32_t CRm = val & 0xfu;
 
-            if (coproc == 0) {
-                // GPIO
-                if (opc1 >= 12) { // || CRm not in [0, 4, 8]):
+        if (coproc == 0) {
+            // GPIO
+            if (opc1 >= 12) { // || CRm not in [0, 4, 8]):
 //                    fail(ERROR_INCOMPATIBLE,
 //                         "Instruction %s %d, #%d, %s, %s, c%d is not supported by GPIO Coprocessor",
 //                         inst.c_str(), coproc, opc1, cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), CRm
 //                    );
 #ifndef NDEBUG
-                    printf("WARNING: Instruction %s %d, #%d, %s, %s, c%d is not supported by GPIO Coprocessor\n",
-                         inst.c_str(), coproc, opc1, cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), CRm
-                    );
+                printf("WARNING: Instruction %s %d, #%d, %s, %s, c%d is not supported by GPIO Coprocessor\n",
+                     inst, coproc, opc1, cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), CRm
+                );
 #endif
-                    continue;
-                }
-                if (inst == "mcrr") {
-                    if (opc1 < 4) {
-                        snprintf(rep, sizeof(rep), "gpioc_hilo_%s_%s %s, %s",
-                            gpiodir(CRm).c_str(), gpiopxsc(opc1).c_str(), cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
-                        );
-                    } else if (opc1 < 8) {
-                        snprintf(rep, sizeof(rep), "gpioc_bit_%s_%s %s, %s",
-                            gpiodir(CRm).c_str(), gpioxsc2(opc1).c_str(), cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
-                        );
-                    } else {
-                        snprintf(rep, sizeof(rep), "gpioc_index_%s_%s %s, %s",
-                            gpiodir(CRm).c_str(), gpiopxsc(opc1 - 8).c_str(), cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
-                        );
-                    }
+                return false;
+            }
+            if (type == MCRR) {
+                if (opc1 < 4) {
+                    snprintf(buf, buf_len, "gpioc_hilo_%s_%s %s, %s",
+                        gpiodir(CRm).c_str(), gpiopxsc(opc1).c_str(), cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                    );
+                } else if (opc1 < 8) {
+                    snprintf(buf, buf_len, "gpioc_bit_%s_%s %s, %s",
+                        gpiodir(CRm).c_str(), gpioxsc2(opc1).c_str(), cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                    );
                 } else {
-                    snprintf(rep, sizeof(rep), "gpioc_index_%s_get %s, %s",
-                        gpiodir(CRm).c_str(), cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                    snprintf(buf, buf_len, "gpioc_index_%s_%s %s, %s",
+                        gpiodir(CRm).c_str(), gpiopxsc(opc1 - 8).c_str(), cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
                     );
                 }
-            } else if (coproc == 4 || coproc == 5) {
-                // DCP
-                bool ns = coproc == 5;
-                if (inst == "mcrr") {
-                    switch (opc1) {
-                        case 0:
-                            switch (CRm) {
-                                case 0:
-                                    snprintf(rep, sizeof(rep), "dcp%s_wxmd %s, %s",
-                                        ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
-                                    );
-                                    break;
-                                case 1:
-                                    snprintf(rep, sizeof(rep), "dcp%s_wymd %s, %s",
-                                        ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
-                                    );
-                                    break;
-                                case 2:
-                                    snprintf(rep, sizeof(rep), "dcp%s_wefd %s, %s",
-                                        ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
-                                    );
-                                    break;
-                                default:
-                                    continue;
-                            }
-                            break;
-                        case 1:
-                            switch (CRm) {
-                                case 0:
-                                    snprintf(rep, sizeof(rep), "dcp%s_wxup %s, %s",
-                                        ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
-                                    );
-                                    break;
-                                case 1:
-                                    snprintf(rep, sizeof(rep), "dcp%s_wyup %s, %s",
-                                        ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
-                                    );
-                                    break;
-                                case 2:
-                                    snprintf(rep, sizeof(rep), "dcp%s_wxyu %s, %s",
-                                        ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
-                                    );
-                                    break;
-                                default:
-                                    continue;
-                            }
-                            break;
-                        case 2:
-                            snprintf(rep, sizeof(rep), "dcp%s_wxms %s, %s",
-                                ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
-                            );
-                            break;
-                        case 3:
-                            snprintf(rep, sizeof(rep), "dcp%s_wxmo %s, %s",
-                                ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
-                            );
-                            break;
-                        case 4:
-                            snprintf(rep, sizeof(rep), "dcp%s_wxdd %s, %s",
-                                ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
-                            );
-                            break;
-                        case 5:
-                            snprintf(rep, sizeof(rep), "dcp%s_wxdq %s, %s",
-                                ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
-                            );
-                            break;
-                        case 6:
-                            snprintf(rep, sizeof(rep), "dcp%s_wxuc %s, %s",
-                                ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
-                            );
-                            break;
-                        case 7:
-                            snprintf(rep, sizeof(rep), "dcp%s_wxic %s, %s",
-                                ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
-                            );
-                            break;
-                        case 8:
-                            snprintf(rep, sizeof(rep), "dcp%s_wxdc %s, %s",
-                                ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
-                            );
-                            break;
-                        case 9:
-                            snprintf(rep, sizeof(rep), "dcp%s_wxfc %s, %s",
-                                ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
-                            );
-                            break;
-                        case 10:
-                            snprintf(rep, sizeof(rep), "dcp%s_wxfm %s, %s",
-                                ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
-                            );
-                            break;
-                        case 11:
-                            snprintf(rep, sizeof(rep), "dcp%s_wxfd %s, %s",
-                                ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
-                            );
-                            break;
-                        case 12:
-                            snprintf(rep, sizeof(rep), "dcp%s_wxfq %s, %s",
-                                ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
-                            );
-                            break;
-                        default:
-                            continue;
-                    }
-                } else if (inst == "mrrc" || inst == "mrrc2") {
-                    bool isP = inst == "mrrc2";
-                    switch (CRm) {
-                        case 0:
-                            switch (opc1) {
-                                case 1:
-                                    snprintf(rep, sizeof(rep), "dcp%s_%sdda %s, %s",
-                                        ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
-                                    );
-                                    break;
-                                case 3:
-                                    snprintf(rep, sizeof(rep), "dcp%s_%sdds %s, %s",
-                                        ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
-                                    );
-                                    break;
-                                case 5:
-                                    snprintf(rep, sizeof(rep), "dcp%s_%sddm %s, %s",
-                                        ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
-                                    );
-                                    break;
-                                case 7:
-                                    snprintf(rep, sizeof(rep), "dcp%s_%sddd %s, %s",
-                                        ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
-                                    );
-                                    break;
-                                case 9:
-                                    snprintf(rep, sizeof(rep), "dcp%s_%sddq %s, %s",
-                                        ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
-                                    );
-                                    break;
-                                case 11:
-                                    snprintf(rep, sizeof(rep), "dcp%s_%sddg %s, %s",
-                                        ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
-                                    );
-                                    break;
-                                default:
-                                    continue;
-                            }
-                            break;
-                        case 1:
-                            switch (opc1) {
-                                case 1:
-                                    snprintf(rep, sizeof(rep), "dcp%s_%sxyh %s, %s",
-                                        ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
-                                    );
-                                    break;
-                                case 2:
-                                    snprintf(rep, sizeof(rep), "dcp%s_%symr %s, %s",
-                                        ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
-                                    );
-                                    break;
-                                case 4:
-                                    snprintf(rep, sizeof(rep), "dcp%s_%sxmq %s, %s",
-                                        ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
-                                    );
-                                    break;
-                                default:
-                                    continue;
-                            }
-                            break;
-                        case 4:
-                            snprintf(rep, sizeof(rep), "dcp%s_%sxms %s, %s, #0x%01x",
-                                ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), opc1
-                            );
-                            break;
-                        case 5:
-                            snprintf(rep, sizeof(rep), "dcp%s_%syms %s, %s, #0x%01x",
-                                ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), opc1
-                            );
-                            break;
-                        case 8:
-                            snprintf(rep, sizeof(rep), "dcp%s_%sxmd %s, %s",
-                                ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
-                            );
-                            break;
-                        case 9:
-                            snprintf(rep, sizeof(rep), "dcp%s_%symd %s, %s",
-                                ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
-                            );
-                            break;
-                        case 10:
-                            snprintf(rep, sizeof(rep), "dcp%s_%sefd %s, %s",
-                                ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
-                            );
-                            break;
-                        default:
-                            continue;
-                    }
-                }
-            } else if (coproc == 7) {
-                // RCP
-                if (inst == "mcrr" || inst == "mcrr2") {
-                    bool delay = inst == "mcrr";
-                    switch (opc1) {
-                        case 0:
-                            snprintf(rep, sizeof(rep), "rcp_b2valid %s, %s, %sdelay",
-                                cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), delay ? "" : "no"
-                            );
-                            break;
-                        case 1:
-                            snprintf(rep, sizeof(rep), "rcp_b2and %s, %s, %sdelay",
-                                cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), delay ? "" : "no"
-                            );
-                            break;
-                        case 2:
-                            snprintf(rep, sizeof(rep), "rcp_b2or %s, %s, %sdelay",
-                                cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), delay ? "" : "no"
-                            );
-                            break;
-                        case 3:
-                            snprintf(rep, sizeof(rep), "rcp_bxorvalid %s, %s, %sdelay",
-                                cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), delay ? "" : "no"
-                            );
-                            break;
-                        case 4:
-                            snprintf(rep, sizeof(rep), "rcp_bxortrue %s, %s, %sdelay",
-                                cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), delay ? "" : "no"
-                            );
-                            break;
-                        case 5:
-                            snprintf(rep, sizeof(rep), "rcp_bxorfalse %s, %s, %sdelay",
-                                cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), delay ? "" : "no"
-                            );
-                            break;
-                        case 6:
-                            snprintf(rep, sizeof(rep), "rcp_ivalid %s, %s, %sdelay",
-                                cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), delay ? "" : "no"
-                            );
-                            break;
-                        case 7:
-                            snprintf(rep, sizeof(rep), "rcp_iequal %s, %s, %sdelay",
-                                cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), delay ? "" : "no"
-                            );
-                            break;
-                        case 8:
-                            snprintf(rep, sizeof(rep), "rcp_salt_core%d %s, %s, %sdelay",
-                                CRm, cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), delay ? "" : "no"
-                            );
-                            break;
-                        default:
-                            continue;
-                    }
-                }
+            } else {
+                snprintf(buf, buf_len, "gpioc_index_%s_get %s, %s",
+                    gpiodir(CRm).c_str(), cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                );
             }
-        } else if (cdp) {
-            uint8_t opc1 = (val >> 20) & 0xf;
-            uint8_t CRn = (val >> 16) & 0xf;
-            uint8_t CRd = (val >> 12) & 0xf;
-            uint8_t coproc = (val >> 8) & 0xf;
-            uint8_t opc2 = (val >> 5) & 0x7;
-            uint8_t CRm = val & 0xf;
-
-            if (coproc == 0) {
-                // GPIO has no cdp instructions
-                continue;
-            } else if (coproc == 4|| coproc == 5) {
-                // DCP
-                bool ns = coproc == 5;
+        } else if (coproc == 4 || coproc == 5) {
+            // DCP
+            bool ns = coproc == 5;
+            if (type == MCRR) {
                 switch (opc1) {
                     case 0:
-                        if (CRm == 0) {
-                            snprintf(rep, sizeof(rep), "dcp%s_init", ns ? "ns" : "");
-                        } else {
-                            snprintf(rep, sizeof(rep), "dcp%s_add0", ns ? "ns" : "");
+                        switch (CRm) {
+                            case 0:
+                                snprintf(buf, buf_len, "dcp%s_wxmd %s, %s",
+                                    ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                                );
+                                break;
+                            case 1:
+                                snprintf(buf, buf_len, "dcp%s_wymd %s, %s",
+                                    ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                                );
+                                break;
+                            case 2:
+                                snprintf(buf, buf_len, "dcp%s_wefd %s, %s",
+                                    ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                                );
+                                break;
+                            default:
+                                return false;
                         }
                         break;
                     case 1:
-                        if (opc2 == 0) {
-                            snprintf(rep, sizeof(rep), "dcp%s_add1", ns ? "ns" : "");
-                        } else {
-                            snprintf(rep, sizeof(rep), "dcp%s_sub1", ns ? "ns" : "");
+                        switch (CRm) {
+                            case 0:
+                                snprintf(buf, buf_len, "dcp%s_wxup %s, %s",
+                                    ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                                );
+                                break;
+                            case 1:
+                                snprintf(buf, buf_len, "dcp%s_wyup %s, %s",
+                                    ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                                );
+                                break;
+                            case 2:
+                                snprintf(buf, buf_len, "dcp%s_wxyu %s, %s",
+                                    ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                                );
+                                break;
+                            default:
+                                return false;
                         }
                         break;
                     case 2:
-                        snprintf(rep, sizeof(rep), "dcp%s_sqr0", ns ? "ns" : "");
+                        snprintf(buf, buf_len, "dcp%s_wxms %s, %s",
+                            ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                        );
+                        break;
+                    case 3:
+                        snprintf(buf, buf_len, "dcp%s_wxmo %s, %s",
+                            ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                        );
+                        break;
+                    case 4:
+                        snprintf(buf, buf_len, "dcp%s_wxdd %s, %s",
+                            ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                        );
+                        break;
+                    case 5:
+                        snprintf(buf, buf_len, "dcp%s_wxdq %s, %s",
+                            ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                        );
+                        break;
+                    case 6:
+                        snprintf(buf, buf_len, "dcp%s_wxuc %s, %s",
+                            ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                        );
+                        break;
+                    case 7:
+                        snprintf(buf, buf_len, "dcp%s_wxic %s, %s",
+                            ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                        );
                         break;
                     case 8:
-                        if (CRm == 2 && opc2 == 0) {
-                            snprintf(rep, sizeof(rep), "dcp%s_norm", ns ? "ns" : "");
-                        } else if (CRm == 2 && opc2 == 1) {
-                            snprintf(rep, sizeof(rep), "dcp%s_nrdf", ns ? "ns" : "");
-                        } else if (CRm == 0 && opc2 == 1) {
-                            snprintf(rep, sizeof(rep), "dcp%s_nrdd", ns ? "ns" : "");
-                        } else if (CRm == 0 && opc2 == 2) {
-                            snprintf(rep, sizeof(rep), "dcp%s_ntdc", ns ? "ns" : "");
-                        } else if (CRm == 0 && opc2 == 3) {
-                            snprintf(rep, sizeof(rep), "dcp%s_nrdc", ns ? "ns" : "");
-                        } else {
-                            continue;
-                        }
+                        snprintf(buf, buf_len, "dcp%s_wxdc %s, %s",
+                            ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                        );
+                        break;
+                    case 9:
+                        snprintf(buf, buf_len, "dcp%s_wxfc %s, %s",
+                            ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                        );
+                        break;
+                    case 10:
+                        snprintf(buf, buf_len, "dcp%s_wxfm %s, %s",
+                            ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                        );
+                        break;
+                    case 11:
+                        snprintf(buf, buf_len, "dcp%s_wxfd %s, %s",
+                            ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                        );
+                        break;
+                    case 12:
+                        snprintf(buf, buf_len, "dcp%s_wxfq %s, %s",
+                            ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                        );
                         break;
                     default:
-                        continue;
+                        return false;
                 }
-            } else if (coproc == 7) {
-                // RCP
-                if (opc1 == 0 && CRd == 0 && CRn == 0 && CRm == 0) {
-                    snprintf(rep, sizeof(rep), "rcp_panic");
-                } else {
-                    continue;
+            } else if (type & (MRRC | MRRC2)) {
+                bool isP = type == MRRC2;
+                switch (CRm) {
+                    case 0:
+                        switch (opc1) {
+                            case 1:
+                                snprintf(buf, buf_len, "dcp%s_%sdda %s, %s",
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                                );
+                                break;
+                            case 3:
+                                snprintf(buf, buf_len, "dcp%s_%sdds %s, %s",
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                                );
+                                break;
+                            case 5:
+                                snprintf(buf, buf_len, "dcp%s_%sddm %s, %s",
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                                );
+                                break;
+                            case 7:
+                                snprintf(buf, buf_len, "dcp%s_%sddd %s, %s",
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                                );
+                                break;
+                            case 9:
+                                snprintf(buf, buf_len, "dcp%s_%sddq %s, %s",
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                                );
+                                break;
+                            case 11:
+                                snprintf(buf, buf_len, "dcp%s_%sddg %s, %s",
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                                );
+                                break;
+                            default:
+                                return false;
+                        }
+                        break;
+                    case 1:
+                        switch (opc1) {
+                            case 1:
+                                snprintf(buf, buf_len, "dcp%s_%sxyh %s, %s",
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                                );
+                                break;
+                            case 2:
+                                snprintf(buf, buf_len, "dcp%s_%symr %s, %s",
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                                );
+                                break;
+                            case 4:
+                                snprintf(buf, buf_len, "dcp%s_%sxmq %s, %s",
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                                );
+                                break;
+                            default:
+                                return false;
+                        }
+                        break;
+                    case 4:
+                        snprintf(buf, buf_len, "dcp%s_%sxms %s, %s, #0x%01x",
+                            ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), opc1
+                        );
+                        break;
+                    case 5:
+                        snprintf(buf, buf_len, "dcp%s_%syms %s, %s, #0x%01x",
+                            ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), opc1
+                        );
+                        break;
+                    case 8:
+                        snprintf(buf, buf_len, "dcp%s_%sxmd %s, %s",
+                            ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                        );
+                        break;
+                    case 9:
+                        snprintf(buf, buf_len, "dcp%s_%symd %s, %s",
+                            ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                        );
+                        break;
+                    case 10:
+                        snprintf(buf, buf_len, "dcp%s_%sefd %s, %s",
+                            ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                        );
+                        break;
+                    default:
+                        return false;
                 }
             }
-        } else {
-            continue;
+        } else if (coproc == 7) {
+            // RCP
+            if (type & (MCRR | MCRR2)) {
+                bool delay = type == MCRR;
+                switch (opc1) {
+                    case 0:
+                        snprintf(buf, buf_len, "rcp_b2valid %s, %s, %sdelay",
+                            cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), delay ? "" : "no"
+                        );
+                        break;
+                    case 1:
+                        snprintf(buf, buf_len, "rcp_b2and %s, %s, %sdelay",
+                            cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), delay ? "" : "no"
+                        );
+                        break;
+                    case 2:
+                        snprintf(buf, buf_len, "rcp_b2or %s, %s, %sdelay",
+                            cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), delay ? "" : "no"
+                        );
+                        break;
+                    case 3:
+                        snprintf(buf, buf_len, "rcp_bxorvalid %s, %s, %sdelay",
+                            cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), delay ? "" : "no"
+                        );
+                        break;
+                    case 4:
+                        snprintf(buf, buf_len, "rcp_bxortrue %s, %s, %sdelay",
+                            cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), delay ? "" : "no"
+                        );
+                        break;
+                    case 5:
+                        snprintf(buf, buf_len, "rcp_bxorfalse %s, %s, %sdelay",
+                            cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), delay ? "" : "no"
+                        );
+                        break;
+                    case 6:
+                        snprintf(buf, buf_len, "rcp_ivalid %s, %s, %sdelay",
+                            cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), delay ? "" : "no"
+                        );
+                        break;
+                    case 7:
+                        snprintf(buf, buf_len, "rcp_iequal %s, %s, %sdelay",
+                            cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), delay ? "" : "no"
+                        );
+                        break;
+                    case 8:
+                        snprintf(buf, buf_len, "rcp_salt_core%d %s, %s, %sdelay",
+                            CRm, cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), delay ? "" : "no"
+                        );
+                        break;
+                    default:
+                        return false;
+                }
+            }
         }
+    } else if (type == CDP) {
+        uint8_t opc1 = (val >> 20) & 0xf;
+        uint8_t CRn = (val >> 16) & 0xf;
+        uint8_t CRd = (val >> 12) & 0xf;
+        uint8_t coproc = (val >> 8) & 0xf;
+        uint8_t opc2 = (val >> 5) & 0x7;
+        uint8_t CRm = val & 0xf;
 
-        if (strlen(rep) > 0) {
-            tuple<string,string,string> proc = {sm.front(), sm.back(), rep};
-            proc_insts.push_back(proc);
+        if (coproc == 0) {
+            // GPIO has no cdp instructions
+            return false;
+        } else if (coproc == 4|| coproc == 5) {
+            // DCP
+            bool ns = coproc == 5;
+            switch (opc1) {
+                case 0:
+                    if (CRm == 0) {
+                        snprintf(buf, buf_len, "dcp%s_init", ns ? "ns" : "");
+                    } else {
+                        snprintf(buf, buf_len, "dcp%s_add0", ns ? "ns" : "");
+                    }
+                break;
+                case 1:
+                    if (opc2 == 0) {
+                        snprintf(buf, buf_len, "dcp%s_add1", ns ? "ns" : "");
+                    } else {
+                        snprintf(buf, buf_len, "dcp%s_sub1", ns ? "ns" : "");
+                    }
+                break;
+                case 2:
+                    snprintf(buf, buf_len, "dcp%s_sqr0", ns ? "ns" : "");
+                break;
+                case 8:
+                    if (CRm == 2 && opc2 == 0) {
+                        snprintf(buf, buf_len, "dcp%s_norm", ns ? "ns" : "");
+                    } else if (CRm == 2 && opc2 == 1) {
+                        snprintf(buf, buf_len, "dcp%s_nrdf", ns ? "ns" : "");
+                    } else if (CRm == 0 && opc2 == 1) {
+                        snprintf(buf, buf_len, "dcp%s_nrdd", ns ? "ns" : "");
+                    } else if (CRm == 0 && opc2 == 2) {
+                        snprintf(buf, buf_len, "dcp%s_ntdc", ns ? "ns" : "");
+                    } else if (CRm == 0 && opc2 == 3) {
+                        snprintf(buf, buf_len, "dcp%s_nrdc", ns ? "ns" : "");
+                    } else {
+                        return false;
+                    }
+                break;
+                default:
+                    return false;
+            }
+        } else if (coproc == 7) {
+            // RCP
+            if (opc1 == 0 && CRd == 0 && CRn == 0 && CRm == 0) {
+                snprintf(buf, buf_len, "rcp_panic");
+            } else {
+                return false;
+            }
         }
+    } else {
+        return false;
     }
+    return true;
+}
+
+bool coprodis_command::execute(device_map &devices) {
+    auto in = get_file(ios::in);
+
+    std::regex instruction(
+        R"(([ 0-9a-f]{8}):\s*([0-9a-f]{2})(\s*)([0-9a-f]{2})\s+([0-9a-f]{2})\s*([0-9a-f]{2})\s*(.*))"
+        );
 
     auto out = get_file_idx(ios::out, 1);
 
-    if (proc_insts.size() == 0) {
-        *out << buffer.str();
-        return false;
-    }
-
     string line;
-    fos << "Replacing " << proc_insts.size() << " instructions\n";
-    while (getline(buffer, line)) {
-        if (!proc_insts.empty() && line == std::get<0>(proc_insts[0])) {
-            fos << "\nFound instruction\n";
-            fos << line;
-            fos << "\n";
+    static char buf[512];
+    buf[sizeof(buf)-1] = 0;
+    std::smatch sm;
+    while (std::getline(*in, line)) {
+        size_t len = line.length();
+        bool replaced = false;
+        auto consume_whitespace = [&](size_t &pos) {
+            while (pos < len) {
+                char c = line[pos];
+                if (c != ' ' && c !='\t') break;
+                pos++;
+            }
+        };
+        auto consume_hex = [&](size_t &pos, uint32_t& val) {
+            val = 0;
+            size_t pos0 = pos;
+            while (pos < len) {
+                char c = line[pos];
+                if (c >= '0' && c <= '9') val = (val << 4) | (c - '0');
+                else if (c >= 'a' && c <= 'f') val = (val << 4) | (c + 10 - 'a');
+                else if (c >= 'A' && c <= 'F') val = (val << 4) | (c + 10 - 'A');
+                else break;
+                pos++;
+            }
+            return pos - pos0;
+        };
 
-            string olds = std::get<1>(proc_insts[0]);
-            string news = std::get<2>(proc_insts[0]);
-
-            line.replace(line.find(olds), olds.length(), news);
-            fos << "Replaced with\n";
-            fos << line;
-            fos << "\n";
-            proc_insts.erase(proc_insts.begin());
+        size_t pos = 0;
+        do {
+            // regex is too slow on some platforms, so hand code
+            if (len < 16 || len >= sizeof(buf) || line[8]!=':') break;
+            uint32_t val;
+            consume_whitespace(pos);
+            consume_hex(pos, val);
+            if (pos != 8) break;
+            pos = 9;
+            consume_whitespace(pos);
+            // note we only care about 32 bit instructions
+            uint32_t instr, tmp;
+            size_t first_hex_size = consume_hex(pos, instr);
+            if (first_hex_size == 2) {
+                // clang has LL HH ll hh
+                consume_whitespace(pos);
+                if (2 != consume_hex(pos, tmp)) break;
+                instr |= (val << 8u);
+                consume_whitespace(pos);
+                if (2 != consume_hex(pos, tmp)) break;
+                instr = (instr << 16) | val;
+                consume_whitespace(pos);
+                if (2 != consume_hex(pos, tmp)) break;
+                instr |= (val << 8u);
+            } else if (first_hex_size == 4) {
+                // GCC has HHLL hhll
+                consume_whitespace(pos);
+                if (4 != consume_hex(pos, tmp)) break;
+                instr = (instr << 16) | tmp;
+            } else {
+                break;
+            }
+            consume_whitespace(pos);
+            if (pos < sizeof(buf)-1) {
+                strncpy(buf, line.c_str(), sizeof(buf)-1);
+                replaced = decode_line(instr, buf + pos, sizeof(buf) - pos - 1);
+            }
+        } while (false);
+        if (replaced) {
+            *out << buf << "\n";
+        } else {
+            *out << line << "\n";
         }
-        *out << line << "\n";
     }
-
-    for (auto v : proc_insts) {
-        fos << std::get<0>(v) + " : "  + std::get<1>(v) + " : " + std::get<2>(v) + "\n\n\n";
-    }
-
     return false;
 }
-
 
 #if HAS_LIBUSB
 static void check_otp_write_error(picoboot::command_failure &e, bool ecc) {
