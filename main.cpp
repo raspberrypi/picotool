@@ -6307,9 +6307,18 @@ string gpioxsc(int val) {
     return gpiopxsc(val - 4);
 }
 
-string cpu_reg(int val) {
-    if (val < 0xa) return "r" + std::to_string(val);
+const char *cpu_reg(int val) {
     switch (val) {
+        case 0x0: return "r0";
+        case 0x1: return "r1";
+        case 0x2: return "r2";
+        case 0x3: return "r3";
+        case 0x4: return "r4";
+        case 0x5: return "r5";
+        case 0x6: return "r6";
+        case 0x7: return "r7";
+        case 0x8: return "r8";
+        case 0x9: return "r9";
         case 0xa: return "sl";
         case 0xb: return "fp";
         case 0xc: return "ip";
@@ -6320,7 +6329,6 @@ string cpu_reg(int val) {
         default: return "unknown";
     }
 }
-
 
 static bool parse_hex(const std::string& value, uint32_t& out) {
     try {
@@ -6419,26 +6427,26 @@ bool coprodis_command::decode_line(uint32_t val, char *buf, size_t buf_len) {
             if (CRn != 0 || opc1 >= 8) {
 //                    fail(ERROR_INCOMPATIBLE,
 //                         "Instruction %s %d, #%d, %s, c%d, c%d, #%d is not supported by GPIO Coprocessor",
-//                         inst.c_str(), coproc, opc1, cpu_reg(Rt).c_str(), CRn, CRm, opc2
+//                         inst.c_str(), coproc, opc1, cpu_reg(Rt), CRn, CRm, opc2
 //                    );
                 printf("WARNING: Instruction %s %d, #%d, %s, c%d, c%d, #%d is not supported by GPIO Coprocessor\n",
-                     inst, coproc, opc1, cpu_reg(Rt).c_str(), CRn, CRm, opc2
+                     inst, coproc, opc1, cpu_reg(Rt), CRn, CRm, opc2
                 );
                 return false;
             }
             if (type == MCR) {
                 if (opc1 < 4) {
                     snprintf(buf, buf_len, "gpioc_%s_%s %s",
-                        gpiohilo(CRm).c_str(), gpiopxsc(opc1).c_str(), cpu_reg(Rt).c_str()
+                        gpiohilo(CRm).c_str(), gpiopxsc(opc1).c_str(), cpu_reg(Rt)
                     );
                 } else {
                     snprintf(buf, buf_len, "gpioc_%s_%s %s",
-                        gpiodir(CRm).c_str(), gpioxsc(opc1).c_str(), cpu_reg(Rt).c_str()
+                        gpiodir(CRm).c_str(), gpioxsc(opc1).c_str(), cpu_reg(Rt)
                     );
                 }
             } else {
                 snprintf(buf, buf_len, "gpioc_%s_get %s",
-                    gpiohilo(CRm).c_str(), cpu_reg(Rt).c_str()
+                    gpiohilo(CRm).c_str(), cpu_reg(Rt)
                 );
             }
         } else if (coproc == 4 || coproc == 5) {
@@ -6451,12 +6459,12 @@ bool coprodis_command::decode_line(uint32_t val, char *buf, size_t buf_len) {
                         switch (opc2) {
                             case 0:
                                 snprintf(buf, buf_len, "dcp%s_%sxvd %s",
-                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str()
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt)
                                 );
                                 break;
                             case 1:
                                 snprintf(buf, buf_len, "dcp%s_%scmp %s",
-                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str()
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt)
                                 );
                                 break;
                             default:
@@ -6467,32 +6475,32 @@ bool coprodis_command::decode_line(uint32_t val, char *buf, size_t buf_len) {
                         switch (opc2) {
                             case 0:
                                 snprintf(buf, buf_len, "dcp%s_%sdfa %s",
-                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str()
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt)
                                 );
                                 break;
                             case 1:
                                 snprintf(buf, buf_len, "dcp%s_%sdfs %s",
-                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str()
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt)
                                 );
                                 break;
                             case 2:
                                 snprintf(buf, buf_len, "dcp%s_%sdfm %s",
-                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str()
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt)
                                 );
                                 break;
                             case 3:
                                 snprintf(buf, buf_len, "dcp%s_%sdfd %s",
-                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str()
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt)
                                 );
                                 break;
                             case 4:
                                 snprintf(buf, buf_len, "dcp%s_%sdfq %s",
-                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str()
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt)
                                 );
                                 break;
                             case 5:
                                 snprintf(buf, buf_len, "dcp%s_%sdfg %s",
-                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str()
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt)
                                 );
                                 break;
                             default:
@@ -6503,12 +6511,12 @@ bool coprodis_command::decode_line(uint32_t val, char *buf, size_t buf_len) {
                         switch (opc2) {
                             case 0:
                                 snprintf(buf, buf_len, "dcp%s_%sdic %s",
-                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str()
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt)
                                 );
                                 break;
                             case 1:
                                 snprintf(buf, buf_len, "dcp%s_%sduc %s",
-                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str()
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt)
                                 );
                                 break;
                             default:
@@ -6526,22 +6534,22 @@ bool coprodis_command::decode_line(uint32_t val, char *buf, size_t buf_len) {
                 switch (opc1) {
                     case 0:
                         snprintf(buf, buf_len, "rcp_canary_check %s, 0x%02x (%d), %sdelay",
-                            cpu_reg(Rt).c_str(), CRn*16 + CRm, CRn*16 + CRm, delay ? "" : "no"
+                            cpu_reg(Rt), CRn*16 + CRm, CRn*16 + CRm, delay ? "" : "no"
                         );
                         break;
                     case 1:
                         snprintf(buf, buf_len, "rcp_bvalid %s, %sdelay",
-                            cpu_reg(Rt).c_str(), delay ? "" : "no"
+                            cpu_reg(Rt), delay ? "" : "no"
                         );
                         break;
                     case 2:
                         snprintf(buf, buf_len, "rcp_btrue %s, %sdelay",
-                            cpu_reg(Rt).c_str(), delay ? "" : "no"
+                            cpu_reg(Rt), delay ? "" : "no"
                         );
                         break;
                     case 3:
                         snprintf(buf, buf_len, "rcp_bfalse %s, %sdelay",
-                            cpu_reg(Rt).c_str(), delay ? "" : "no"
+                            cpu_reg(Rt), delay ? "" : "no"
                         );
                         break;
                     case 4:
@@ -6562,12 +6570,12 @@ bool coprodis_command::decode_line(uint32_t val, char *buf, size_t buf_len) {
                 switch (opc1) {
                     case 0:
                         snprintf(buf, buf_len, "rcp_canary_get %s, 0x%02x (%d), %sdelay",
-                            cpu_reg(Rt).c_str(), CRn*16 + CRm, CRn*16 + CRm, delay ? "" : "no"
+                            cpu_reg(Rt), CRn*16 + CRm, CRn*16 + CRm, delay ? "" : "no"
                         );
                         break;
                     case 1:
                         snprintf(buf, buf_len, "rcp_canary_status %s, %sdelay",
-                            cpu_reg(Rt).c_str(), delay ? "" : "no"
+                            cpu_reg(Rt), delay ? "" : "no"
                         );
                         break;
                     default:
@@ -6587,11 +6595,11 @@ bool coprodis_command::decode_line(uint32_t val, char *buf, size_t buf_len) {
             if (opc1 >= 12) { // || CRm not in [0, 4, 8]):
 //                    fail(ERROR_INCOMPATIBLE,
 //                         "Instruction %s %d, #%d, %s, %s, c%d is not supported by GPIO Coprocessor",
-//                         inst.c_str(), coproc, opc1, cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), CRm
+//                         inst.c_str(), coproc, opc1, cpu_reg(Rt), cpu_reg(Rt2), CRm
 //                    );
 #ifndef NDEBUG
                 printf("WARNING: Instruction %s %d, #%d, %s, %s, c%d is not supported by GPIO Coprocessor\n",
-                     inst, coproc, opc1, cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), CRm
+                     inst, coproc, opc1, cpu_reg(Rt), cpu_reg(Rt2), CRm
                 );
 #endif
                 return false;
@@ -6599,20 +6607,20 @@ bool coprodis_command::decode_line(uint32_t val, char *buf, size_t buf_len) {
             if (type == MCRR) {
                 if (opc1 < 4) {
                     snprintf(buf, buf_len, "gpioc_hilo_%s_%s %s, %s",
-                        gpiodir(CRm).c_str(), gpiopxsc(opc1).c_str(), cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                        gpiodir(CRm).c_str(), gpiopxsc(opc1).c_str(), cpu_reg(Rt), cpu_reg(Rt2)
                     );
                 } else if (opc1 < 8) {
                     snprintf(buf, buf_len, "gpioc_bit_%s_%s %s, %s",
-                        gpiodir(CRm).c_str(), gpioxsc2(opc1).c_str(), cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                        gpiodir(CRm).c_str(), gpioxsc2(opc1).c_str(), cpu_reg(Rt), cpu_reg(Rt2)
                     );
                 } else {
                     snprintf(buf, buf_len, "gpioc_index_%s_%s %s, %s",
-                        gpiodir(CRm).c_str(), gpiopxsc(opc1 - 8).c_str(), cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                        gpiodir(CRm).c_str(), gpiopxsc(opc1 - 8).c_str(), cpu_reg(Rt), cpu_reg(Rt2)
                     );
                 }
             } else {
                 snprintf(buf, buf_len, "gpioc_index_%s_get %s, %s",
-                    gpiodir(CRm).c_str(), cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                    gpiodir(CRm).c_str(), cpu_reg(Rt), cpu_reg(Rt2)
                 );
             }
         } else if (coproc == 4 || coproc == 5) {
@@ -6624,17 +6632,17 @@ bool coprodis_command::decode_line(uint32_t val, char *buf, size_t buf_len) {
                         switch (CRm) {
                             case 0:
                                 snprintf(buf, buf_len, "dcp%s_wxmd %s, %s",
-                                    ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                                    ns ? "ns" : "", cpu_reg(Rt), cpu_reg(Rt2)
                                 );
                                 break;
                             case 1:
                                 snprintf(buf, buf_len, "dcp%s_wymd %s, %s",
-                                    ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                                    ns ? "ns" : "", cpu_reg(Rt), cpu_reg(Rt2)
                                 );
                                 break;
                             case 2:
                                 snprintf(buf, buf_len, "dcp%s_wefd %s, %s",
-                                    ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                                    ns ? "ns" : "", cpu_reg(Rt), cpu_reg(Rt2)
                                 );
                                 break;
                             default:
@@ -6645,17 +6653,17 @@ bool coprodis_command::decode_line(uint32_t val, char *buf, size_t buf_len) {
                         switch (CRm) {
                             case 0:
                                 snprintf(buf, buf_len, "dcp%s_wxup %s, %s",
-                                    ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                                    ns ? "ns" : "", cpu_reg(Rt), cpu_reg(Rt2)
                                 );
                                 break;
                             case 1:
                                 snprintf(buf, buf_len, "dcp%s_wyup %s, %s",
-                                    ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                                    ns ? "ns" : "", cpu_reg(Rt), cpu_reg(Rt2)
                                 );
                                 break;
                             case 2:
                                 snprintf(buf, buf_len, "dcp%s_wxyu %s, %s",
-                                    ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                                    ns ? "ns" : "", cpu_reg(Rt), cpu_reg(Rt2)
                                 );
                                 break;
                             default:
@@ -6664,57 +6672,57 @@ bool coprodis_command::decode_line(uint32_t val, char *buf, size_t buf_len) {
                         break;
                     case 2:
                         snprintf(buf, buf_len, "dcp%s_wxms %s, %s",
-                            ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                            ns ? "ns" : "", cpu_reg(Rt), cpu_reg(Rt2)
                         );
                         break;
                     case 3:
                         snprintf(buf, buf_len, "dcp%s_wxmo %s, %s",
-                            ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                            ns ? "ns" : "", cpu_reg(Rt), cpu_reg(Rt2)
                         );
                         break;
                     case 4:
                         snprintf(buf, buf_len, "dcp%s_wxdd %s, %s",
-                            ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                            ns ? "ns" : "", cpu_reg(Rt), cpu_reg(Rt2)
                         );
                         break;
                     case 5:
                         snprintf(buf, buf_len, "dcp%s_wxdq %s, %s",
-                            ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                            ns ? "ns" : "", cpu_reg(Rt), cpu_reg(Rt2)
                         );
                         break;
                     case 6:
                         snprintf(buf, buf_len, "dcp%s_wxuc %s, %s",
-                            ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                            ns ? "ns" : "", cpu_reg(Rt), cpu_reg(Rt2)
                         );
                         break;
                     case 7:
                         snprintf(buf, buf_len, "dcp%s_wxic %s, %s",
-                            ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                            ns ? "ns" : "", cpu_reg(Rt), cpu_reg(Rt2)
                         );
                         break;
                     case 8:
                         snprintf(buf, buf_len, "dcp%s_wxdc %s, %s",
-                            ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                            ns ? "ns" : "", cpu_reg(Rt), cpu_reg(Rt2)
                         );
                         break;
                     case 9:
                         snprintf(buf, buf_len, "dcp%s_wxfc %s, %s",
-                            ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                            ns ? "ns" : "", cpu_reg(Rt), cpu_reg(Rt2)
                         );
                         break;
                     case 10:
                         snprintf(buf, buf_len, "dcp%s_wxfm %s, %s",
-                            ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                            ns ? "ns" : "", cpu_reg(Rt), cpu_reg(Rt2)
                         );
                         break;
                     case 11:
                         snprintf(buf, buf_len, "dcp%s_wxfd %s, %s",
-                            ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                            ns ? "ns" : "", cpu_reg(Rt), cpu_reg(Rt2)
                         );
                         break;
                     case 12:
                         snprintf(buf, buf_len, "dcp%s_wxfq %s, %s",
-                            ns ? "ns" : "", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                            ns ? "ns" : "", cpu_reg(Rt), cpu_reg(Rt2)
                         );
                         break;
                     default:
@@ -6727,32 +6735,32 @@ bool coprodis_command::decode_line(uint32_t val, char *buf, size_t buf_len) {
                         switch (opc1) {
                             case 1:
                                 snprintf(buf, buf_len, "dcp%s_%sdda %s, %s",
-                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt), cpu_reg(Rt2)
                                 );
                                 break;
                             case 3:
                                 snprintf(buf, buf_len, "dcp%s_%sdds %s, %s",
-                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt), cpu_reg(Rt2)
                                 );
                                 break;
                             case 5:
                                 snprintf(buf, buf_len, "dcp%s_%sddm %s, %s",
-                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt), cpu_reg(Rt2)
                                 );
                                 break;
                             case 7:
                                 snprintf(buf, buf_len, "dcp%s_%sddd %s, %s",
-                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt), cpu_reg(Rt2)
                                 );
                                 break;
                             case 9:
                                 snprintf(buf, buf_len, "dcp%s_%sddq %s, %s",
-                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt), cpu_reg(Rt2)
                                 );
                                 break;
                             case 11:
                                 snprintf(buf, buf_len, "dcp%s_%sddg %s, %s",
-                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt), cpu_reg(Rt2)
                                 );
                                 break;
                             default:
@@ -6763,17 +6771,17 @@ bool coprodis_command::decode_line(uint32_t val, char *buf, size_t buf_len) {
                         switch (opc1) {
                             case 1:
                                 snprintf(buf, buf_len, "dcp%s_%sxyh %s, %s",
-                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt), cpu_reg(Rt2)
                                 );
                                 break;
                             case 2:
                                 snprintf(buf, buf_len, "dcp%s_%symr %s, %s",
-                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt), cpu_reg(Rt2)
                                 );
                                 break;
                             case 4:
                                 snprintf(buf, buf_len, "dcp%s_%sxmq %s, %s",
-                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                                    ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt), cpu_reg(Rt2)
                                 );
                                 break;
                             default:
@@ -6782,27 +6790,27 @@ bool coprodis_command::decode_line(uint32_t val, char *buf, size_t buf_len) {
                         break;
                     case 4:
                         snprintf(buf, buf_len, "dcp%s_%sxms %s, %s, #0x%01x",
-                            ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), opc1
+                            ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt), cpu_reg(Rt2), opc1
                         );
                         break;
                     case 5:
                         snprintf(buf, buf_len, "dcp%s_%syms %s, %s, #0x%01x",
-                            ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), opc1
+                            ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt), cpu_reg(Rt2), opc1
                         );
                         break;
                     case 8:
                         snprintf(buf, buf_len, "dcp%s_%sxmd %s, %s",
-                            ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                            ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt), cpu_reg(Rt2)
                         );
                         break;
                     case 9:
                         snprintf(buf, buf_len, "dcp%s_%symd %s, %s",
-                            ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                            ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt), cpu_reg(Rt2)
                         );
                         break;
                     case 10:
                         snprintf(buf, buf_len, "dcp%s_%sefd %s, %s",
-                            ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str()
+                            ns ? "ns" : "", isP ? "p" : "r", cpu_reg(Rt), cpu_reg(Rt2)
                         );
                         break;
                     default:
@@ -6816,47 +6824,47 @@ bool coprodis_command::decode_line(uint32_t val, char *buf, size_t buf_len) {
                 switch (opc1) {
                     case 0:
                         snprintf(buf, buf_len, "rcp_b2valid %s, %s, %sdelay",
-                            cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), delay ? "" : "no"
+                            cpu_reg(Rt), cpu_reg(Rt2), delay ? "" : "no"
                         );
                         break;
                     case 1:
                         snprintf(buf, buf_len, "rcp_b2and %s, %s, %sdelay",
-                            cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), delay ? "" : "no"
+                            cpu_reg(Rt), cpu_reg(Rt2), delay ? "" : "no"
                         );
                         break;
                     case 2:
                         snprintf(buf, buf_len, "rcp_b2or %s, %s, %sdelay",
-                            cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), delay ? "" : "no"
+                            cpu_reg(Rt), cpu_reg(Rt2), delay ? "" : "no"
                         );
                         break;
                     case 3:
                         snprintf(buf, buf_len, "rcp_bxorvalid %s, %s, %sdelay",
-                            cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), delay ? "" : "no"
+                            cpu_reg(Rt), cpu_reg(Rt2), delay ? "" : "no"
                         );
                         break;
                     case 4:
                         snprintf(buf, buf_len, "rcp_bxortrue %s, %s, %sdelay",
-                            cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), delay ? "" : "no"
+                            cpu_reg(Rt), cpu_reg(Rt2), delay ? "" : "no"
                         );
                         break;
                     case 5:
                         snprintf(buf, buf_len, "rcp_bxorfalse %s, %s, %sdelay",
-                            cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), delay ? "" : "no"
+                            cpu_reg(Rt), cpu_reg(Rt2), delay ? "" : "no"
                         );
                         break;
                     case 6:
                         snprintf(buf, buf_len, "rcp_ivalid %s, %s, %sdelay",
-                            cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), delay ? "" : "no"
+                            cpu_reg(Rt), cpu_reg(Rt2), delay ? "" : "no"
                         );
                         break;
                     case 7:
                         snprintf(buf, buf_len, "rcp_iequal %s, %s, %sdelay",
-                            cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), delay ? "" : "no"
+                            cpu_reg(Rt), cpu_reg(Rt2), delay ? "" : "no"
                         );
                         break;
                     case 8:
                         snprintf(buf, buf_len, "rcp_salt_core%d %s, %s, %sdelay",
-                            CRm, cpu_reg(Rt).c_str(), cpu_reg(Rt2).c_str(), delay ? "" : "no"
+                            CRm, cpu_reg(Rt), cpu_reg(Rt2), delay ? "" : "no"
                         );
                         break;
                     default:
@@ -6930,6 +6938,8 @@ bool coprodis_command::decode_line(uint32_t val, char *buf, size_t buf_len) {
 
 bool coprodis_command::execute(device_map &devices) {
     auto in = get_file(ios::in);
+    std::stringstream buffer;
+    buffer << in->rdbuf();
 
     std::regex instruction(
         R"(([ 0-9a-f]{8}):\s*([0-9a-f]{2})(\s*)([0-9a-f]{2})\s+([0-9a-f]{2})\s*([0-9a-f]{2})\s*(.*))"
@@ -6941,7 +6951,7 @@ bool coprodis_command::execute(device_map &devices) {
     static char buf[512];
     buf[sizeof(buf)-1] = 0;
     std::smatch sm;
-    while (std::getline(*in, line)) {
+    while (std::getline(buffer, line)) {
         size_t len = line.length();
         bool replaced = false;
         auto consume_whitespace = [&](size_t &pos) {
@@ -6979,7 +6989,7 @@ bool coprodis_command::execute(device_map &devices) {
             uint32_t instr, tmp;
             size_t first_hex_size = consume_hex(pos, instr);
             if (first_hex_size == 2) {
-                // clang has LL HH ll hh
+                // someclang have LL HH ll hh
                 consume_whitespace(pos);
                 if (2 != consume_hex(pos, tmp)) break;
                 instr |= (val << 8u);
