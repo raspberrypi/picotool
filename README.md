@@ -102,7 +102,7 @@ In order for the SDK to find `picotool` in this custom folder, you will usually 
 
 Note for additional documentation see https://rptl.io/pico-get-started
 
-```
+```text
 $ picotool help
 PICOTOOL:
     Tool for interacting with RP-series device(s) in BOOTSEL mode, or with an RP-series binary
@@ -157,13 +157,13 @@ Note commands that aren't acting on files require a device in BOOTSEL mode to be
 
 ## info
 
-The is _Binary Information_ support in the SDK which allows for easily storing compact information that `picotool`
+There is _Binary Information_ support in the SDK which allows for easily storing compact information that `picotool`
 can find (See Binary Info section below). The info command is for reading this information.
 
 The information can be either read from one or more connected devices in BOOTSEL mode, or from 
 a file. This file can be an ELF, a UF2 or a BIN file.
 
-```
+```text
 $ picotool help info
 INFO:
     Display information from the target device(s) or file.
@@ -220,14 +220,14 @@ Note the -f arguments vary slightly for Windows vs macOS / Unix platforms.
 
 e.g.
 
-
+```text
 $ picotool info
 Program Information
  name:      hello_world
  features:  stdout to UART
 ```
 
-
+```text
 $ picotool info -a
 Program Information
  name:          hello_world
@@ -248,7 +248,7 @@ Device Information
  ROM version:  2
 ```
 
-
+```text
 $ picotool info -bp
 Program Information
  name:      hello_world
@@ -259,7 +259,7 @@ Fixed Pin Information
  21:  UART1 RX
 ```
 
-
+```text
 $ picotool info -a lcd_1602_i2c.uf2
 File lcd_1602_i2c.uf2:
 
