@@ -6330,23 +6330,7 @@ const char *cpu_reg(int val) {
     }
 }
 
-static bool parse_hex(const std::string& value, uint32_t& out) {
-    try {
-        size_t pos = 0;
-        out = std::stoull(value, &pos, 16);
-        if (pos != value.length()) {
-            return false;
-        }
-        return true;
-    } catch (std::invalid_argument& e) {
-        return false;
-    } catch (std::out_of_range& e) {
-        return false;
-    }
-}
-
 bool coprodis_command::decode_line(uint32_t val, char *buf, size_t buf_len) {
-    uint32_t mcrbits = val & 0xff100010;
     enum {
         NONE = 0,
         MCR = 0x01,
@@ -6359,6 +6343,8 @@ bool coprodis_command::decode_line(uint32_t val, char *buf, size_t buf_len) {
         MRRC2 = 0x80,
         CDP = 0x100,
     } type = NONE;
+
+    uint32_t mcrbits = val & 0xff100010;
     uint32_t mccrbits = (val & 0xfff00000) >> 20;
     uint32_t cdpbits = val & 0xff000010;
     const char *inst = "";
@@ -6940,10 +6926,6 @@ bool coprodis_command::execute(device_map &devices) {
     auto in = get_file(ios::in);
     std::stringstream buffer;
     buffer << in->rdbuf();
-
-    std::regex instruction(
-        R"(([ 0-9a-f]{8}):\s*([0-9a-f]{2})(\s*)([0-9a-f]{2})\s+([0-9a-f]{2})\s*([0-9a-f]{2})\s*(.*))"
-        );
 
     auto out = get_file_idx(ios::out, 1);
 
