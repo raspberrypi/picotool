@@ -6989,16 +6989,16 @@ bool coprodis_command::execute(device_map &devices) {
             uint32_t instr, tmp;
             size_t first_hex_size = consume_hex(pos, instr);
             if (first_hex_size == 2) {
-                // someclang have LL HH ll hh
+                // some clang have LL HH ll hh
                 consume_whitespace(pos);
                 if (2 != consume_hex(pos, tmp)) break;
-                instr |= (val << 8u);
+                instr |= (tmp << 8u);
                 consume_whitespace(pos);
                 if (2 != consume_hex(pos, tmp)) break;
-                instr = (instr << 16) | val;
+                instr = (instr << 16) | tmp;
                 consume_whitespace(pos);
                 if (2 != consume_hex(pos, tmp)) break;
-                instr |= (val << 8u);
+                instr |= (tmp << 8u);
             } else if (first_hex_size == 4) {
                 // GCC has HHLL hhll
                 consume_whitespace(pos);
