@@ -17,6 +17,16 @@ extern "C" {
 #include <mbedtls/ecp.h>
 #include <mbedtls/aes.h>
 
+/*
+ * Use XOR of counter with IV0 to generate the IV for each encrypted block
+ * 
+ * ie IV = IV0 ^ block_number, rather than the default IV = IV0 + block_number
+ * 
+ * The power signature for this calculation is easier to mask on RP2350 than
+ * adding the block number to the IV0
+ */
+#define IV0_XOR 0
+
 #ifdef __cplusplus
 #define _Static_assert static_assert
 #endif
