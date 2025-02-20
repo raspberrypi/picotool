@@ -477,6 +477,7 @@ struct _settings {
     struct {
         bool embed = false;
         bool otp_key_page_set = false;
+        bool fast_rosc = false;
         uint16_t otp_key_page = 30;
     } encrypt;
 
@@ -789,6 +790,7 @@ struct encrypt_command : public cmd {
             option("--quiet").set(settings.quiet) % "Don't print any output" +
             option("--verbose").set(settings.verbose) % "Print verbose output" +
             option("--embed").set(settings.encrypt.embed) % "Embed bootloader in output file" +
+            option("--fast-rosc").set(settings.encrypt.fast_rosc) % "Use ~180MHz ROSC configuration for embedded bootloader" +
             (
                 option("--otp-key-page").set(settings.encrypt.otp_key_page_set) % "Specify the OTP page storing the AES key" &
                     integer("page").set(settings.encrypt.otp_key_page) % "OTP page (default 30)"
@@ -5019,6 +5021,16 @@ bool encrypt_command::execute(device_map &devices) {
             if (settings.encrypt.otp_key_page_set) {
                 settings.config.key = "otp_key_page";
                 settings.config.value = hex_string(settings.encrypt.otp_key_page);
+                config_guts(program);
+            }
+
+            // fast rosc
+            if (settings.encrypt.fast_rosc) {
+                settings.config.key = "rosc_div";
+                settings.config.value = "0x1";
+                config_guts(program);
+                settings.config.key = "rosc_drive";
+                settings.config.value = "0x0000";
                 config_guts(program);
             }
 
