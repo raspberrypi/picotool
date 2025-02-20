@@ -3,9 +3,9 @@
 The "chaff" area must be located at the start of Y scratch RAM, 0x20081000: see
 the macro getchaffaddress.
 
-The stack must be located at the end of Y scratch RAM: see the calls to memwipe
-at the end of ctr_crypt_s where memory between __scratch_y_end__ and the stack
-pointer is overwritten.
+The stack must be located at the end of Y scratch RAM: see the memory
+wiping at the end of ctr_crypt_s where memory between the start of Y
+scratch RAM and the stack pointer is overwritten.
 */
 
 .syntax unified
@@ -23,7 +23,6 @@ pointer is overwritten.
 #include "hardware/rcp.h"
 
 .global decrypt
-.global do_not_wipe
 .global chaff
 
 .extern lock_key
@@ -53,7 +52,7 @@ pointer is overwritten.
 @ number of blocks from the TRNG processed to initialise rstate_sha
 #define TRNG_BLOCKS 25
 
-@ The lower the jitterpriorty the more the jitter
+@ The lower jitterpriorty is, the more the jitter
 .macro SET_COUNT n,jitterpriority
 .if RC_COUNT
 .if RC_JITTER > \jitterpriority
@@ -243,15 +242,14 @@ init_rstate:
  movw r1,#SHA256_CSR_RESET|SHA256_CSR_START_BITS                     @ initialise SHA internal state by writing START bit
  str r1,[r5,#SHA256_CSR_OFFSET]
  str r6,[r4,#TRNG_SAMPLE_CNT1_OFFSET       -TRNG_RNG_IMR_OFFSET]
- movs r6,TRNG_BLOCKS*2+1                                             @ odd so that we break out of the loop half-way through loading the SHA hardware, giving
+ movs r6,#TRNG_BLOCKS*2+1                                            @ odd so that we break out of the loop half-way through loading the SHA hardware, giving
                                                                      @ time for previous SHA computation to complete
 2:
  movs r1,#0xff                                                       @ TRNG setup is inside loop in case it is skipped.
  str r1,[r4,#TRNG_TRNG_DEBUG_CONTROL_OFFSET-TRNG_RNG_IMR_OFFSET]     @ disable checks and bypass decorrelators,to stream raw TRNG ROSC samples
  str r1,[r4,#TRNG_RND_SOURCE_ENABLE_OFFSET -TRNG_RNG_IMR_OFFSET]     @ start ROSC if it is not already started
  str r1,[r4,#TRNG_RNG_ICR_OFFSET           -TRNG_RNG_IMR_OFFSET]     @ clear all interrupts (including EHR_VLD)
- movs r0,r4
- adds r0,#TRNG_EHR_DATA0_OFFSET            -TRNG_RNG_IMR_OFFSET
+ adds r0,r4,#TRNG_EHR_DATA0_OFFSET         -TRNG_RNG_IMR_OFFSET
  movs r2,#TRNG_TRNG_BUSY_OFFSET            -TRNG_RNG_IMR_OFFSET
 1:
  ldr r1,[r4,r2]                                                      @ wait for 192 ROSC samples to fill EHR,should take constant time
