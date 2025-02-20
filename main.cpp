@@ -4336,7 +4336,7 @@ bool save_command::execute(device_map &devices) {
                 block.block_no = offset / PAGE_SIZE;
                 assert(size <= PAGE_SIZE);
                 memcpy(block.data, buffer, size);
-                if (size < PAGE_SIZE) memset(block.data + size, 0, PAGE_SIZE);
+                if (size < PAGE_SIZE) memset(block.data + size, 0, PAGE_SIZE - size);
                 if (1 != fwrite(&block, sizeof(block), 1, out)) {
                     fail_write_error();
                 }
