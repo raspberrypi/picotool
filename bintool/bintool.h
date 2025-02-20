@@ -29,7 +29,7 @@ block place_new_block(elf_file *elf, std::unique_ptr<block> &first_block);
 #endif
 
 // Bins
-typedef std::function<void(std::vector<uint8_t> &bin, uint32_t size)> get_more_bin_cb;
+typedef std::function<void(std::vector<uint8_t> &bin, uint32_t offset, uint32_t size)> get_more_bin_cb;
 std::unique_ptr<block> find_first_block(std::vector<uint8_t> bin, uint32_t storage_addr);
 std::unique_ptr<block> get_last_block(std::vector<uint8_t> &bin, uint32_t storage_addr, std::unique_ptr<block> &first_block, get_more_bin_cb more_cb = nullptr);
 std::vector<std::unique_ptr<block>> get_all_blocks(std::vector<uint8_t> &bin, uint32_t storage_addr, std::unique_ptr<block> &first_block, get_more_bin_cb more_cb = nullptr);
@@ -38,5 +38,5 @@ uint32_t calc_checksum(std::vector<uint8_t> bin);
 #if HAS_MBEDTLS
     std::vector<uint8_t> hash_andor_sign(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *new_block, const public_t public_key, const private_t private_key, bool hash_value, bool sign, bool clear_sram = false);
     std::vector<uint8_t> encrypt(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *new_block, const private_t aes_key, const public_t public_key, const private_t private_key, bool hash_value, bool sign);
-    void verify_block(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *block, verified_t &hash_verified, verified_t &sig_verified);
+    void verify_block(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *block, verified_t &hash_verified, verified_t &sig_verified, get_more_bin_cb more_cb = nullptr);
 #endif

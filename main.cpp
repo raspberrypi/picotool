@@ -2897,9 +2897,9 @@ std::unique_ptr<block> find_best_block(memory_access &raw_access, vector<uint8_t
     std::unique_ptr<block> best_block = find_first_block(bin, raw_access.get_binary_start());
     if (best_block) {
         // verify stuff
-        get_more_bin_cb more_cb = [&raw_access](std::vector<uint8_t> &bin, uint32_t new_size) {
-            DEBUG_LOG("Now reading from %x size %x\n", raw_access.get_binary_start(), new_size);
-            bin = raw_access.read_vector<uint8_t>(raw_access.get_binary_start(), new_size, true);
+        get_more_bin_cb more_cb = [&raw_access](std::vector<uint8_t> &bin, uint32_t offset, uint32_t size) {
+            DEBUG_LOG("Now reading from %x size %x\n", offset, size);
+            bin = raw_access.read_vector<uint8_t>(offset, size, true);
         };
         auto all_blocks = get_all_blocks(bin, raw_access.get_binary_start(), best_block, more_cb);
 
@@ -2961,9 +2961,9 @@ std::unique_ptr<block> find_last_block(memory_access &raw_access, vector<uint8_t
     std::unique_ptr<block> first_block = find_first_block(bin, raw_access.get_binary_start());
     if (first_block) {
         // verify stuff
-        get_more_bin_cb more_cb = [&raw_access](std::vector<uint8_t> &bin, uint32_t new_size) {
-            DEBUG_LOG("Now reading from %x size %x\n", raw_access.get_binary_start(), new_size);
-            bin = raw_access.read_vector<uint8_t>(raw_access.get_binary_start(), new_size, true);
+        get_more_bin_cb more_cb = [&raw_access](std::vector<uint8_t> &bin, uint32_t offset, uint32_t size) {
+            DEBUG_LOG("Now reading from %x size %x\n", offset, size);
+            bin = raw_access.read_vector<uint8_t>(offset, size, true);
         };
         auto last_block = get_last_block(bin, raw_access.get_binary_start(), first_block, more_cb);
         return last_block;
@@ -3027,6 +3027,11 @@ void info_guts(memory_access &raw_access, void *con) {
 #endif
     // Use flash caching
     settings.use_flash_cache = true;
+    // Callback to pass to bintool, to get more bin data
+    get_more_bin_cb more_cb = [&raw_access](std::vector<uint8_t> &bin, uint32_t offset, uint32_t size) {
+        DEBUG_LOG("Now reading from %x size %x\n", offset, size);
+        bin = raw_access.read_vector<uint8_t>(offset, size, true);
+    };
     try {
         struct group {
             explicit group(string name, bool enabled = true, int min_tab = 0) : name(std::move(name)), enabled(enabled), min_tab(min_tab) {}
@@ -3058,11 +3063,12 @@ void info_guts(memory_access &raw_access, void *con) {
                 infos[current_group].emplace_back(std::make_pair(name, value));
             }
         };
-        auto info_metadata = [&](std::vector<uint8_t> bin, block *current_block, bool verbose_metadata = false) {
+        auto info_metadata = [&](block *current_block, bool verbose_metadata = false) {
             verified_t hash_verified = none;
             verified_t sig_verified = none;
         #if HAS_MBEDTLS
-            verify_block(bin, raw_access.get_binary_start(), raw_access.get_binary_start(), current_block, hash_verified, sig_verified);
+            // Pass empty bin, which will be populated by more_cb if there is a signature/hash_value
+            verify_block({}, raw_access.get_binary_start(), raw_access.get_binary_start(), current_block, hash_verified, sig_verified, more_cb);
         #endif
 
             // Addresses
@@ -3442,18 +3448,14 @@ void info_guts(memory_access &raw_access, void *con) {
                 std::unique_ptr<block> first_block = find_first_block(bin, raw_access.get_binary_start());
                 if (first_block) {
                     // verify stuff
-                    get_more_bin_cb more_cb = [&raw_access](std::vector<uint8_t> &bin, uint32_t new_size) {
-                        DEBUG_LOG("Now reading from %x size %x\n", raw_access.get_binary_start(), new_size);
-                        bin = raw_access.read_vector<uint8_t>(raw_access.get_binary_start(), new_size, true);
-                    };
                     auto all_blocks = get_all_blocks(bin, raw_access.get_binary_start(), first_block, more_cb);
 
                     int block_i = 0;
                     select_group(metadata_info[block_i++], true);
-                    info_metadata(bin, first_block.get(), true);
+                    info_metadata(first_block.get(), true);
                     for (auto &block : all_blocks) {
                         select_group(metadata_info[block_i++], true);
-                        info_metadata(bin, block.get(), true);
+                        info_metadata(block.get(), true);
                     }
                 } else {
                     // This displays that there are no metadata blocks
@@ -3463,7 +3465,7 @@ void info_guts(memory_access &raw_access, void *con) {
             std::unique_ptr<block> best_block = find_best_block(raw_access, bin);
             if (best_block && (settings.info.show_basic || settings.info.all)) {
                 select_group(program_info);
-                info_metadata(bin, best_block.get());
+                info_metadata(best_block.get());
             } else if (!best_block && has_binary_info && get_model(raw_access) == rp2350) {
                 fos << "WARNING: Binary on RP2350 device does not contain a block loop - this binary will not boot\n";
             }

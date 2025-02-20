@@ -319,11 +319,14 @@ std::unique_ptr<block> get_last_block(std::vector<uint8_t> &bin, uint32_t storag
     uint32_t next_block_addr = first_block->physical_addr + first_block->next_block_rel;
     std::unique_ptr<block> new_first_block;
     uint32_t read_size = PICOBIN_MAX_BLOCK_SIZE;
+    uint32_t current_bin_start = storage_addr;
     while (true) {
-        auto offset = next_block_addr - storage_addr;
-        if (offset + read_size > bin.size() && more_cb != nullptr) {
-            more_cb(bin, offset + read_size);
+        if (next_block_addr + read_size > current_bin_start + bin.size() && more_cb != nullptr) {
+            DEBUG_LOG("Reading into bin %08x+%x\n", next_block_addr, read_size);
+            more_cb(bin, next_block_addr, read_size);
+            current_bin_start = next_block_addr;
         }
+        auto offset = next_block_addr - current_bin_start;
         std::vector<uint32_t> words = lsb_bytes_to_words(bin.begin() + offset, bin.end());
         if (words.front() != PICOBIN_BLOCK_MARKER_START) {
             fail(ERROR_UNKNOWN, "Block loop is not valid - no block found at %08x\n", (int)(next_block_addr));
@@ -362,12 +365,15 @@ std::vector<std::unique_ptr<block>> get_all_blocks(std::vector<uint8_t> &bin, ui
     uint32_t next_block_addr = first_block->physical_addr + first_block->next_block_rel;
     std::vector<std::unique_ptr<block>> all_blocks;
     uint32_t read_size = PICOBIN_MAX_BLOCK_SIZE;
+    uint32_t current_bin_start = storage_addr;
     while (true) {
         std::unique_ptr<block> new_first_block;
-        auto offset = next_block_addr - storage_addr;
-        if (offset + read_size > bin.size() && more_cb != nullptr) {
-            more_cb(bin, offset + read_size);
+        if (next_block_addr + read_size > current_bin_start + bin.size() && more_cb != nullptr) {
+            DEBUG_LOG("Reading into bin %08x+%x\n", next_block_addr, read_size);
+            more_cb(bin, next_block_addr, read_size);
+            current_bin_start = next_block_addr;
         }
+        auto offset = next_block_addr - current_bin_start;
         std::vector<uint32_t> words = lsb_bytes_to_words(bin.begin() + offset, bin.end());
         words.erase(words.begin());
         DEBUG_LOG("Checking block at %x\n", next_block_addr);
@@ -698,7 +704,7 @@ std::vector<uint8_t> get_lm_hash_data(elf_file *elf, block *new_block, bool clea
 }
 
 
-std::vector<uint8_t> get_lm_hash_data(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *new_block, bool clear_sram = false) {
+std::vector<uint8_t> get_lm_hash_data(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *new_block, get_more_bin_cb more_cb, bool clear_sram = false) {
     std::vector<uint8_t> to_hash;
     std::shared_ptr<load_map_item> load_map = new_block->get_item<load_map_item>();
     if (load_map == nullptr) {
@@ -729,6 +735,7 @@ std::vector<uint8_t> get_lm_hash_data(std::vector<uint8_t> bin, uint32_t storage
     } else {
         DEBUG_LOG("Already has load map, so hashing that\n");
         // todo hash existing load map
+        uint32_t current_bin_start = storage_addr;
         for(const auto &entry : load_map->entries) {
             if (entry.storage_address == 0) {
                 std::copy(
@@ -737,7 +744,15 @@ std::vector<uint8_t> get_lm_hash_data(std::vector<uint8_t> bin, uint32_t storage
                     std::back_inserter(to_hash));
                 DEBUG_LOG("CLEAR %08x + %08x\n", (int)entry.runtime_address, (int)entry.size);
             } else {
-                uint32_t rel_addr = entry.storage_address - storage_addr;
+                if (entry.storage_address + entry.size > current_bin_start + bin.size()) {
+                    if (more_cb == nullptr) {
+                        fail(ERROR_NOT_POSSIBLE, "BIN does not contain data for load_map entry %08x->%08x", entry.storage_address, entry.storage_address + entry.size);
+                    }
+                    DEBUG_LOG("Reading into bin %08x+%x\n", entry.storage_address, entry.size);
+                    more_cb(bin, entry.storage_address, entry.size);
+                    current_bin_start = entry.storage_address;
+                }
+                uint32_t rel_addr = entry.storage_address - current_bin_start;
                 std::copy(
                     bin.begin() + rel_addr,
                     bin.begin() + rel_addr + entry.size,
@@ -787,10 +802,10 @@ int hash_andor_sign(elf_file *elf, block *new_block, const public_t public_key, 
 
 
 std::vector<uint8_t> hash_andor_sign(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *new_block, const public_t public_key, const private_t private_key, bool hash_value, bool sign, bool clear_sram) {
-    std::vector<uint8_t> to_hash = get_lm_hash_data(bin, storage_addr, runtime_addr, new_block, clear_sram);
+    std::vector<uint8_t> to_hash = get_lm_hash_data(bin, storage_addr, runtime_addr, new_block, nullptr, clear_sram);
 
-    hash_andor_sign_block(new_block, public_key, private_key, hash_value, sign, bin);
-    
+    hash_andor_sign_block(new_block, public_key, private_key, hash_value, sign, to_hash);
+
     auto tmp = new_block->to_words();
     std::vector<uint8_t> data = words_to_lsb_bytes(tmp.begin(), tmp.end());
 
@@ -800,7 +815,7 @@ std::vector<uint8_t> hash_andor_sign(std::vector<uint8_t> bin, uint32_t storage_
 }
 
 
-void verify_block(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *block, verified_t &hash_verified, verified_t &sig_verified) {
+void verify_block(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *block, verified_t &hash_verified, verified_t &sig_verified, get_more_bin_cb more_cb) {
     std::shared_ptr<load_map_item> load_map = block->get_item<load_map_item>();
     std::shared_ptr<hash_def_item> hash_def = block->get_item<hash_def_item>();
     hash_verified = none;
@@ -808,7 +823,7 @@ void verify_block(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runt
     if (load_map == nullptr || hash_def == nullptr) {
         return;
     }
-    std::vector<uint8_t> to_hash = get_lm_hash_data(bin, storage_addr, runtime_addr, block, false);
+    std::vector<uint8_t> to_hash = get_lm_hash_data(bin, storage_addr, runtime_addr, block, more_cb, false);
 
     // auto it = std::find(block->items.begin(), block->items.end(), hash_def);
     // assert (it != block->items.end());
