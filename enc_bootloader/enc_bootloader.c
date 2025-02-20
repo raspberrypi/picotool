@@ -28,17 +28,18 @@ extern void decrypt(uint8_t* key4way, uint8_t* iv, uint8_t(*buf)[16], int nblk);
 #define ROSC_HZ 300*MHZ
 #define OTHER_CLK_DIV 30
 
+// Enable calibration of the ROSC using the XOSC - if disabled it runs with the fixed ~110MHz ROSC configuration
+#define XOSC_CALIBRATION 0
+
 #if CK_JITTER
 void runtime_init_clocks(void) {
     // Disable resus that may be enabled from previous software
     clocks_hw->resus.ctrl = 0;
 
     bi_decl(bi_ptr_int32(0, 0, rosc_div, 2)); // default divider 2
-    bi_decl(bi_ptr_int32(0, 0, rosc_drive, 0x0000)); // default drives of 0
-    bi_decl(bi_ptr_int32(0, 0, xosc_hz, 12000000)); // xosc freq in Hz
-    bi_decl(bi_ptr_int32(0, 0, clk_khz, 150 * KHZ)); // maximum clk_sys freq in KHz
+    bi_decl(bi_ptr_int32(0, 0, rosc_drive, 0x7777)); // default drives of 0b111 (0x7)
 
-    // Bump up ROSC speed to ~90MHz
+    // Bump up ROSC speed to ~110MHz
     rosc_hw->freqa = 0; // reset the drive strengths
     rosc_hw->div = rosc_div | ROSC_DIV_VALUE_PASS; // set divider
     // Increment the freqency range one step at a time - this is safe provided the current config is not TOOHIGH
@@ -56,7 +57,10 @@ void runtime_init_clocks(void) {
     rosc_hw->freqb = (ROSC_FREQB_PASSWD_VALUE_PASS << ROSC_FREQB_PASSWD_LSB) |
             ROSC_FREQB_DS7_LSB | ROSC_FREQB_DS6_LSB | ROSC_FREQB_DS5_LSB | ROSC_FREQB_DS4_LSB;
 
+#if XOSC_CALIBRATION
     // Calibrate ROSC frequency if XOSC present - otherwise just configure
+    bi_decl(bi_ptr_int32(0, 0, xosc_hz, 12000000)); // xosc freq in Hz
+    bi_decl(bi_ptr_int32(0, 0, clk_khz, 150 * KHZ)); // maximum clk_sys freq in KHz
     if (xosc_hz) {
         xosc_init();
         // Switch away from ROSC to avoid overclocking
@@ -95,6 +99,7 @@ void runtime_init_clocks(void) {
             drives = drives ? 0x0000 : 0x7777;
         }
     }
+#endif // XOSC_CALIBRATION
     // CLK SYS = ROSC directly, as it's running slowly enough
     clock_configure_int_divider(clk_sys,
                     CLOCKS_CLK_SYS_CTRL_SRC_VALUE_CLKSRC_CLK_SYS_AUX,
