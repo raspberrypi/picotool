@@ -412,6 +412,7 @@ struct _settings {
     uint32_t family_id = 0;
     bool quiet = false;
     bool verbose = false;
+    bool use_flash_cache = false;
 
     struct {
         int redundancy = -1;
@@ -1867,7 +1868,7 @@ struct picoboot_memory_access : public memory_access {
     }
 
     void read(uint32_t address, uint8_t *buffer, unsigned int size, __unused bool zero_fill) override {
-        if (flash == get_memory_type(address, model)) {
+        if (flash == get_memory_type(address, model) && settings.use_flash_cache) {
             read_cached(address, buffer, size);
         } else {
             read_raw(address, buffer, size);
@@ -3024,6 +3025,8 @@ void info_guts(memory_access &raw_access, picoboot::connection *con) {
 #else
 void info_guts(memory_access &raw_access, void *con) {
 #endif
+    // Use flash caching
+    settings.use_flash_cache = true;
     try {
         struct group {
             explicit group(string name, bool enabled = true, int min_tab = 0) : name(std::move(name)), enabled(enabled), min_tab(min_tab) {}
