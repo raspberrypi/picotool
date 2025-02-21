@@ -4308,6 +4308,7 @@ bool save_command::execute(device_map &devices) {
         fail(ERROR_NOT_POSSIBLE, "Save range crosses unmapped memory");
     }
     uint32_t size = end - start;
+    uint32_t chunk_size = std::max(size / 100, FLASH_SECTOR_ERASE_SIZE);
 
     std::function<void(FILE *out, const uint8_t *buffer, unsigned int size, unsigned int offset)> writer256 = [](FILE *out, const uint8_t *buffer, unsigned int size, unsigned int offset) { assert(false); };
     uf2_block block;
@@ -4356,11 +4357,16 @@ bool save_command::execute(device_map &devices) {
             vector<uint8_t> buf;
             {
                 progress_bar bar("Saving file: ");
-                for (uint32_t addr = start; addr < end; addr += PAGE_SIZE) {
+                for (uint32_t addr = start; addr < end; addr += chunk_size) {
                     bar.progress(addr-start, end-start);
-                    uint32_t this_size = std::min(PAGE_SIZE, end - addr);
-                    raw_access.read_into_vector(addr, this_size, buf);
-                    writer256(out, buf.data(), this_size, addr - start);
+                    uint32_t this_chunk_size = std::min(chunk_size, end - addr);
+                    raw_access.read_into_vector(addr, this_chunk_size, buf);
+                    uint32_t remaining_size = this_chunk_size;
+                    while (remaining_size) {
+                        uint32_t this_size = std::min(PAGE_SIZE, remaining_size);
+                        writer256(out, buf.data() + (this_chunk_size - remaining_size), this_size, addr - start + (this_chunk_size - remaining_size));
+                        remaining_size -= this_size;
+                    }
                 }
                 bar.progress(100);
             }
