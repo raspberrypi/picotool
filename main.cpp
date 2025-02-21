@@ -4389,12 +4389,11 @@ bool save_command::execute(device_map &devices) {
             bool ok = true;
             {
                 progress_bar bar("Verifying " + memory_names[type] + ": ");
-                uint32_t batch_size = FLASH_SECTOR_ERASE_SIZE;
                 vector<uint8_t> file_buf;
                 vector<uint8_t> device_buf;
                 uint32_t pos = mem_range.from;
-                for (uint32_t base = mem_range.from; base < mem_range.to && ok; base += batch_size) {
-                    uint32_t this_batch = std::min(std::min(mem_range.to, end) - base, batch_size);
+                for (uint32_t base = mem_range.from; base < mem_range.to && ok; base += chunk_size) {
+                    uint32_t this_batch = std::min(std::min(mem_range.to, end) - base, chunk_size);
                     // note we pass zero_fill = true in case the file has holes, but this does
                     // mean that the verification will fail if those holes are not filled with zeros
                     // on the device
@@ -4650,7 +4649,7 @@ bool load_guts(picoboot::connection con, iostream_memory_access &file_access) {
             bool ok = true;
             {
                 progress_bar bar("Verifying " + memory_names[type] + ": ");
-                uint32_t batch_size = FLASH_SECTOR_ERASE_SIZE;
+                uint32_t batch_size = std::max(mem_range.len() / 100, FLASH_SECTOR_ERASE_SIZE);
                 vector<uint8_t> file_buf;
                 vector<uint8_t> device_buf;
                 uint32_t pos = mem_range.from;
@@ -5285,7 +5284,7 @@ bool verify_command::execute(device_map &devices) {
                     progress_bar bar("Verifying " + memory_names[t1] + ": ");
                     vector<uint8_t> file_buf;
                     vector<uint8_t> device_buf;
-                    uint32_t batch_size = 1024;
+                    uint32_t batch_size = std::max(mem_range.len() / 100, FLASH_SECTOR_ERASE_SIZE);
                     for(uint32_t base = mem_range.from; base < mem_range.to && ok; base += batch_size) {
                         uint32_t this_batch = std::min(mem_range.to - base, batch_size);
                         // note we pass zero_fill = true in case the file has holes, but this does
