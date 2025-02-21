@@ -375,6 +375,9 @@ std::vector<std::unique_ptr<block>> get_all_blocks(std::vector<uint8_t> &bin, ui
         }
         auto offset = next_block_addr - current_bin_start;
         std::vector<uint32_t> words = lsb_bytes_to_words(bin.begin() + offset, bin.end());
+        if (words.front() != PICOBIN_BLOCK_MARKER_START) {
+            fail(ERROR_UNKNOWN, "Block loop is not valid - no block found at %08x\n", (int)(next_block_addr));
+        }
         words.erase(words.begin());
         DEBUG_LOG("Checking block at %x\n", next_block_addr);
         DEBUG_LOG("Starts with %x %x %x %x\n", words[0], words[1], words[2], words[3]);
