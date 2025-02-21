@@ -4603,7 +4603,9 @@ bool load_guts(picoboot::connection con, iostream_memory_access &file_access) {
         // new scope for progress bar
         {
             progress_bar bar("Loading into " + memory_names[type] + ": ");
-            uint32_t batch_size = FLASH_SECTOR_ERASE_SIZE;
+            // Use batches of size/100 rounded up to FLASH_SECTOR_ERASE_SIZE
+            uint32_t batch_size = std::max(FLASH_SECTOR_ERASE_SIZE,
+                (mem_range.len()/100 + FLASH_SECTOR_ERASE_SIZE - 1) & ~(FLASH_SECTOR_ERASE_SIZE - 1));
             bool ok = true;
             vector<uint8_t> file_buf;
             vector<uint8_t> device_buf;
@@ -4612,24 +4614,24 @@ bool load_guts(picoboot::connection con, iostream_memory_access &file_access) {
                 if (type == flash) {
                     // we have to erase an entire page, so then fill with zeros
                     range aligned_range(base & ~(FLASH_SECTOR_ERASE_SIZE - 1),
-                                        (base & ~(FLASH_SECTOR_ERASE_SIZE - 1)) + FLASH_SECTOR_ERASE_SIZE);
+                                        (base + this_batch + FLASH_SECTOR_ERASE_SIZE - 1) & ~(FLASH_SECTOR_ERASE_SIZE - 1));
                     range read_range(base, base + this_batch);
                     read_range.intersect(aligned_range);
                     file_access.read_into_vector(read_range.from, read_range.to - read_range.from, file_buf, true); // zero fill to cope with holes
-                    // zero padding up to FLASH_SECTOR_ERASE_SIZE
+                    // zero padding up to batch_size
                     file_buf.insert(file_buf.begin(), read_range.from - aligned_range.from, 0);
                     file_buf.insert(file_buf.end(), aligned_range.to - read_range.to, 0);
-                    assert(file_buf.size() == FLASH_SECTOR_ERASE_SIZE);
+                    assert(file_buf.size() == aligned_range.len());
 
                     bool skip = false;
                     if (settings.load.update) {
                         vector<uint8_t> read_device_buf;
-                        raw_access.read_into_vector(aligned_range.from, batch_size, read_device_buf);
+                        raw_access.read_into_vector(aligned_range.from, file_buf.size(), read_device_buf);
                         skip = file_buf == read_device_buf;
                     }
                     if (!skip) {
                         con.exit_xip();
-                        con.flash_erase(aligned_range.from, FLASH_SECTOR_ERASE_SIZE);
+                        con.flash_erase(aligned_range.from, file_buf.size());
                         raw_access.write_vector(aligned_range.from, file_buf);
                     }
                     base = read_range.to; // about to add batch_size
