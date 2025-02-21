@@ -23,6 +23,7 @@ std::map<enum picoboot_status, const char *> status_code_strings = {
         {picoboot_status::PICOBOOT_INVALID_TRANSFER_LENGTH, "invalid transfer length"},
         {picoboot_status::PICOBOOT_REBOOTING, "rebooting"},
         {picoboot_status::PICOBOOT_UNKNOWN_CMD, "unknown cmd"},
+        {picoboot_status::PICOBOOT_UNKNOWN_ERROR, "unknown error"},
         {picoboot_status::PICOBOOT_INVALID_STATE, "invalid state"},
         {picoboot_status::PICOBOOT_INVALID_ADDRESS, "invalid argument"},
         {picoboot_status::PICOBOOT_NOT_PERMITTED, "permission failure"},
