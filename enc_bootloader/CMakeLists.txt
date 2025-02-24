@@ -20,8 +20,7 @@ if (NOT USE_PRECOMPILED)
 
     # Temporary import handling, to ensure SDK branch with PICO_MINIMAL_VECTOR_TABLE is present
     file(READ ${PICO_SDK_PATH}/src/rp2_common/pico_crt0/crt0.S CRT0_S)
-    file(READ ${PICO_SDK_PATH}/src/rp2_common/hardware_clocks/clocks.c CLOCKS_C)
-    if ((CRT0_S MATCHES "PICO_MINIMAL_VECTOR_TABLE") AND (CLOCKS_C MATCHES "clock_configure_mhz"))
+    if (CRT0_S MATCHES "PICO_MINIMAL_VECTOR_TABLE")
         include(${PICO_SDK_PATH}/external/pico_sdk_import.cmake)
     else()
         # This clones the will-v-pi/pico-sdk repo on the self-decrypting branch
