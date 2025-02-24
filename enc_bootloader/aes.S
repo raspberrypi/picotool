@@ -352,23 +352,6 @@ gen_rand_sha_nonpres:
  strb r3,[r2]                @ save updated SUM register offset in bottom byte of rstate_sha[]
  bx r14
 1:
-.if CK_JITTER
- ldr r3,=CLOCKS_BASE+CLOCKS_CLK_REF_CTRL_OFFSET
- ldr r1,[r3,#0]
- push {r1}
- bic r1,r1,#3
- str r1,[r3,#0]                                                      @ switch ref_clk to ROSC
- ldr r1,[r3,#CLOCKS_CLK_SYS_CTRL_OFFSET-CLOCKS_CLK_REF_CTRL_OFFSET]
- push {r1}
- bic r1,r1,#3
- str r1,[r3,#CLOCKS_CLK_SYS_CTRL_OFFSET-CLOCKS_CLK_REF_CTRL_OFFSET]  @ switch sys_clk to ref_clk
- @ run for a couple of cycles off ROSC (ca. 11MHz rather than 150MHz) to jitter the timing
- @ could also insert a random delay here
- pop {r1}
- str r1,[r3,#CLOCKS_CLK_SYS_CTRL_OFFSET-CLOCKS_CLK_REF_CTRL_OFFSET]  @ switch sys_clk back to clksrc_clk_sys_aux
- pop {r1}
- str r1,[r3,#0]
-.endif
  movs r3,#SHA256_SUM6_OFFSET+1
  strb r3,[r2]                @ reset word counter: the +1 is compensated for later
  movw r1,#(1<<SHA256_CSR_BSWAP_LSB)+(1<<SHA256_CSR_START_LSB)
