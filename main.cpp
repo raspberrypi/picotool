@@ -412,6 +412,7 @@ struct _settings {
     uint32_t family_id = 0;
     bool quiet = false;
     bool verbose = false;
+    bool use_flash_cache = false;
 
     struct {
         int redundancy = -1;
@@ -1867,7 +1868,7 @@ struct picoboot_memory_access : public memory_access {
     }
 
     void read(uint32_t address, uint8_t *buffer, unsigned int size, __unused bool zero_fill) override {
-        if (flash == get_memory_type(address, model)) {
+        if (settings.use_flash_cache && flash == get_memory_type(address, model)) {
             read_cached(address, buffer, size);
         } else {
             read_raw(address, buffer, size);
@@ -2896,9 +2897,9 @@ std::unique_ptr<block> find_best_block(memory_access &raw_access, vector<uint8_t
     std::unique_ptr<block> best_block = find_first_block(bin, raw_access.get_binary_start());
     if (best_block) {
         // verify stuff
-        get_more_bin_cb more_cb = [&raw_access](std::vector<uint8_t> &bin, uint32_t new_size) {
-            DEBUG_LOG("Now reading from %x size %x\n", raw_access.get_binary_start(), new_size);
-            bin = raw_access.read_vector<uint8_t>(raw_access.get_binary_start(), new_size, true);
+        get_more_bin_cb more_cb = [&raw_access](std::vector<uint8_t> &bin, uint32_t offset, uint32_t size) {
+            DEBUG_LOG("Now reading from %x size %x\n", offset, size);
+            bin = raw_access.read_vector<uint8_t>(offset, size, true);
         };
         auto all_blocks = get_all_blocks(bin, raw_access.get_binary_start(), best_block, more_cb);
 
@@ -2960,9 +2961,9 @@ std::unique_ptr<block> find_last_block(memory_access &raw_access, vector<uint8_t
     std::unique_ptr<block> first_block = find_first_block(bin, raw_access.get_binary_start());
     if (first_block) {
         // verify stuff
-        get_more_bin_cb more_cb = [&raw_access](std::vector<uint8_t> &bin, uint32_t new_size) {
-            DEBUG_LOG("Now reading from %x size %x\n", raw_access.get_binary_start(), new_size);
-            bin = raw_access.read_vector<uint8_t>(raw_access.get_binary_start(), new_size, true);
+        get_more_bin_cb more_cb = [&raw_access](std::vector<uint8_t> &bin, uint32_t offset, uint32_t size) {
+            DEBUG_LOG("Now reading from %x size %x\n", offset, size);
+            bin = raw_access.read_vector<uint8_t>(offset, size, true);
         };
         auto last_block = get_last_block(bin, raw_access.get_binary_start(), first_block, more_cb);
         return last_block;
@@ -3024,6 +3025,13 @@ void info_guts(memory_access &raw_access, picoboot::connection *con) {
 #else
 void info_guts(memory_access &raw_access, void *con) {
 #endif
+    // Use flash caching
+    settings.use_flash_cache = true;
+    // Callback to pass to bintool, to get more bin data
+    get_more_bin_cb more_cb = [&raw_access](std::vector<uint8_t> &bin, uint32_t offset, uint32_t size) {
+        DEBUG_LOG("Now reading from %x size %x\n", offset, size);
+        bin = raw_access.read_vector<uint8_t>(offset, size, true);
+    };
     try {
         struct group {
             explicit group(string name, bool enabled = true, int min_tab = 0) : name(std::move(name)), enabled(enabled), min_tab(min_tab) {}
@@ -3055,11 +3063,12 @@ void info_guts(memory_access &raw_access, void *con) {
                 infos[current_group].emplace_back(std::make_pair(name, value));
             }
         };
-        auto info_metadata = [&](std::vector<uint8_t> bin, block *current_block, bool verbose_metadata = false) {
+        auto info_metadata = [&](block *current_block, bool verbose_metadata = false) {
             verified_t hash_verified = none;
             verified_t sig_verified = none;
         #if HAS_MBEDTLS
-            verify_block(bin, raw_access.get_binary_start(), raw_access.get_binary_start(), current_block, hash_verified, sig_verified);
+            // Pass empty bin, which will be populated by more_cb if there is a signature/hash_value
+            verify_block({}, raw_access.get_binary_start(), raw_access.get_binary_start(), current_block, hash_verified, sig_verified, more_cb);
         #endif
 
             // Addresses
@@ -3439,18 +3448,14 @@ void info_guts(memory_access &raw_access, void *con) {
                 std::unique_ptr<block> first_block = find_first_block(bin, raw_access.get_binary_start());
                 if (first_block) {
                     // verify stuff
-                    get_more_bin_cb more_cb = [&raw_access](std::vector<uint8_t> &bin, uint32_t new_size) {
-                        DEBUG_LOG("Now reading from %x size %x\n", raw_access.get_binary_start(), new_size);
-                        bin = raw_access.read_vector<uint8_t>(raw_access.get_binary_start(), new_size, true);
-                    };
                     auto all_blocks = get_all_blocks(bin, raw_access.get_binary_start(), first_block, more_cb);
 
                     int block_i = 0;
                     select_group(metadata_info[block_i++], true);
-                    info_metadata(bin, first_block.get(), true);
+                    info_metadata(first_block.get(), true);
                     for (auto &block : all_blocks) {
                         select_group(metadata_info[block_i++], true);
-                        info_metadata(bin, block.get(), true);
+                        info_metadata(block.get(), true);
                     }
                 } else {
                     // This displays that there are no metadata blocks
@@ -3460,7 +3465,7 @@ void info_guts(memory_access &raw_access, void *con) {
             std::unique_ptr<block> best_block = find_best_block(raw_access, bin);
             if (best_block && (settings.info.show_basic || settings.info.all)) {
                 select_group(program_info);
-                info_metadata(bin, best_block.get());
+                info_metadata(best_block.get());
             } else if (!best_block && has_binary_info && get_model(raw_access) == rp2350) {
                 fos << "WARNING: Binary on RP2350 device does not contain a block loop - this binary will not boot\n";
             }
@@ -4303,6 +4308,7 @@ bool save_command::execute(device_map &devices) {
         fail(ERROR_NOT_POSSIBLE, "Save range crosses unmapped memory");
     }
     uint32_t size = end - start;
+    uint32_t chunk_size = std::max(size / 100, FLASH_SECTOR_ERASE_SIZE);
 
     std::function<void(FILE *out, const uint8_t *buffer, unsigned int size, unsigned int offset)> writer256 = [](FILE *out, const uint8_t *buffer, unsigned int size, unsigned int offset) { assert(false); };
     uf2_block block;
@@ -4351,11 +4357,16 @@ bool save_command::execute(device_map &devices) {
             vector<uint8_t> buf;
             {
                 progress_bar bar("Saving file: ");
-                for (uint32_t addr = start; addr < end; addr += PAGE_SIZE) {
+                for (uint32_t addr = start; addr < end; addr += chunk_size) {
                     bar.progress(addr-start, end-start);
-                    uint32_t this_size = std::min(PAGE_SIZE, end - addr);
-                    raw_access.read_into_vector(addr, this_size, buf);
-                    writer256(out, buf.data(), this_size, addr - start);
+                    uint32_t this_chunk_size = std::min(chunk_size, end - addr);
+                    raw_access.read_into_vector(addr, this_chunk_size, buf);
+                    uint32_t remaining_size = this_chunk_size;
+                    while (remaining_size) {
+                        uint32_t this_size = std::min(PAGE_SIZE, remaining_size);
+                        writer256(out, buf.data() + (this_chunk_size - remaining_size), this_size, addr - start + (this_chunk_size - remaining_size));
+                        remaining_size -= this_size;
+                    }
                 }
                 bar.progress(100);
             }
@@ -4378,12 +4389,11 @@ bool save_command::execute(device_map &devices) {
             bool ok = true;
             {
                 progress_bar bar("Verifying " + memory_names[type] + ": ");
-                uint32_t batch_size = FLASH_SECTOR_ERASE_SIZE;
                 vector<uint8_t> file_buf;
                 vector<uint8_t> device_buf;
                 uint32_t pos = mem_range.from;
-                for (uint32_t base = mem_range.from; base < mem_range.to && ok; base += batch_size) {
-                    uint32_t this_batch = std::min(std::min(mem_range.to, end) - base, batch_size);
+                for (uint32_t base = mem_range.from; base < mem_range.to && ok; base += chunk_size) {
+                    uint32_t this_batch = std::min(std::min(mem_range.to, end) - base, chunk_size);
                     // note we pass zero_fill = true in case the file has holes, but this does
                     // mean that the verification will fail if those holes are not filled with zeros
                     // on the device
@@ -4592,7 +4602,9 @@ bool load_guts(picoboot::connection con, iostream_memory_access &file_access) {
         // new scope for progress bar
         {
             progress_bar bar("Loading into " + memory_names[type] + ": ");
-            uint32_t batch_size = FLASH_SECTOR_ERASE_SIZE;
+            // Use batches of size/100 rounded up to FLASH_SECTOR_ERASE_SIZE
+            uint32_t batch_size = std::max(FLASH_SECTOR_ERASE_SIZE,
+                (mem_range.len()/100 + FLASH_SECTOR_ERASE_SIZE - 1) & ~(FLASH_SECTOR_ERASE_SIZE - 1));
             bool ok = true;
             vector<uint8_t> file_buf;
             vector<uint8_t> device_buf;
@@ -4601,24 +4613,24 @@ bool load_guts(picoboot::connection con, iostream_memory_access &file_access) {
                 if (type == flash) {
                     // we have to erase an entire page, so then fill with zeros
                     range aligned_range(base & ~(FLASH_SECTOR_ERASE_SIZE - 1),
-                                        (base & ~(FLASH_SECTOR_ERASE_SIZE - 1)) + FLASH_SECTOR_ERASE_SIZE);
+                                        (base + this_batch + FLASH_SECTOR_ERASE_SIZE - 1) & ~(FLASH_SECTOR_ERASE_SIZE - 1));
                     range read_range(base, base + this_batch);
                     read_range.intersect(aligned_range);
                     file_access.read_into_vector(read_range.from, read_range.to - read_range.from, file_buf, true); // zero fill to cope with holes
-                    // zero padding up to FLASH_SECTOR_ERASE_SIZE
+                    // zero padding up to batch_size
                     file_buf.insert(file_buf.begin(), read_range.from - aligned_range.from, 0);
                     file_buf.insert(file_buf.end(), aligned_range.to - read_range.to, 0);
-                    assert(file_buf.size() == FLASH_SECTOR_ERASE_SIZE);
+                    assert(file_buf.size() == aligned_range.len());
 
                     bool skip = false;
                     if (settings.load.update) {
                         vector<uint8_t> read_device_buf;
-                        raw_access.read_into_vector(aligned_range.from, batch_size, read_device_buf);
+                        raw_access.read_into_vector(aligned_range.from, file_buf.size(), read_device_buf);
                         skip = file_buf == read_device_buf;
                     }
                     if (!skip) {
                         con.exit_xip();
-                        con.flash_erase(aligned_range.from, FLASH_SECTOR_ERASE_SIZE);
+                        con.flash_erase(aligned_range.from, file_buf.size());
                         raw_access.write_vector(aligned_range.from, file_buf);
                     }
                     base = read_range.to; // about to add batch_size
@@ -4637,7 +4649,7 @@ bool load_guts(picoboot::connection con, iostream_memory_access &file_access) {
             bool ok = true;
             {
                 progress_bar bar("Verifying " + memory_names[type] + ": ");
-                uint32_t batch_size = FLASH_SECTOR_ERASE_SIZE;
+                uint32_t batch_size = std::max(mem_range.len() / 100, FLASH_SECTOR_ERASE_SIZE);
                 vector<uint8_t> file_buf;
                 vector<uint8_t> device_buf;
                 uint32_t pos = mem_range.from;
@@ -5272,7 +5284,7 @@ bool verify_command::execute(device_map &devices) {
                     progress_bar bar("Verifying " + memory_names[t1] + ": ");
                     vector<uint8_t> file_buf;
                     vector<uint8_t> device_buf;
-                    uint32_t batch_size = 1024;
+                    uint32_t batch_size = std::max(mem_range.len() / 100, FLASH_SECTOR_ERASE_SIZE);
                     for(uint32_t base = mem_range.from; base < mem_range.to && ok; base += batch_size) {
                         uint32_t this_batch = std::min(mem_range.to - base, batch_size);
                         // note we pass zero_fill = true in case the file has holes, but this does
