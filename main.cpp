@@ -4960,6 +4960,10 @@ bool encrypt_command::execute(device_map &devices) {
     aes_file->exceptions(std::iostream::failbit | std::iostream::badbit);
 
     aes_key_share_t aes_key_share;
+    aes_file->seekg(0, std::ios::end);
+    if (aes_file->tellg() != 128) {
+        fail(ERROR_INCOMPATIBLE, "The AES key share must be a 128 byte file (the supplied file is %d bytes)", aes_file->tellg());
+    }
     aes_file->read((char*)aes_key_share.bytes, sizeof(aes_key_share.bytes));
 
     aes_key_t aes_key;
