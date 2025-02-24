@@ -63,20 +63,20 @@ endif()
 
 # compile enc_bootloader.elf
 if (NOT DEFINED USE_PRECOMPILED)
-set(USE_PRECOMPILED true)
+    set(USE_PRECOMPILED true)
 endif()
 ExternalProject_Add(enc_bootloader
-    PREFIX enc_bootloader
-    SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/enc_bootloader
-    BINARY_DIR ${CMAKE_BINARY_DIR}/enc_bootloader
-    CMAKE_ARGS 
-        "-DCMAKE_MAKE_PROGRAM:FILEPATH=${CMAKE_MAKE_PROGRAM}"
-        "-DPICO_SDK_PATH:FILEPATH=${PICO_SDK_PATH}"
-        "-DUSE_PRECOMPILED:BOOL=${USE_PRECOMPILED}"
-        "-DPICO_DEBUG_INFO_IN_RELEASE=OFF"
-    BUILD_ALWAYS 1 # todo remove this
-    INSTALL_COMMAND ""
-    )
+        PREFIX enc_bootloader
+        SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/enc_bootloader
+        BINARY_DIR ${CMAKE_BINARY_DIR}/enc_bootloader
+        CMAKE_ARGS 
+            "-DCMAKE_MAKE_PROGRAM:FILEPATH=${CMAKE_MAKE_PROGRAM}"
+            "-DPICO_SDK_PATH:FILEPATH=${PICO_SDK_PATH}"
+            "-DUSE_PRECOMPILED:BOOL=${USE_PRECOMPILED}"
+            "-DPICO_DEBUG_INFO_IN_RELEASE=OFF"
+        BUILD_ALWAYS 1 # todo remove this
+        INSTALL_COMMAND ""
+        )
 
 set(ENC_BOOTLOADER_ELF ${CMAKE_BINARY_DIR}/enc_bootloader/enc_bootloader.elf)
 add_executable(enc_bootloader_elf IMPORTED)
@@ -84,8 +84,8 @@ add_dependencies(enc_bootloader_elf enc_bootloader)
 set_property(TARGET enc_bootloader_elf PROPERTY IMPORTED_LOCATION ${ENC_BOOTLOADER_ELF})
 # copy enc_bootloader.elf into build directory
 add_custom_command(TARGET enc_bootloader
-COMMAND ${CMAKE_COMMAND} -E copy ${ENC_BOOTLOADER_ELF} ${CMAKE_BINARY_DIR}/enc_bootloader.elf
-DEPENDS enc_bootloader
+    COMMAND ${CMAKE_COMMAND} -E copy ${ENC_BOOTLOADER_ELF} ${CMAKE_BINARY_DIR}/enc_bootloader.elf
+    DEPENDS enc_bootloader
 )
 
 if (NOT PICOTOOL_NO_LIBUSB)
@@ -371,8 +371,8 @@ install(FILES
 
 #Install enc_bootloader.elf
 install(FILES
-${ENC_BOOTLOADER_ELF}
-DESTINATION ${INSTALL_DATADIR}
+    ${ENC_BOOTLOADER_ELF}
+    DESTINATION ${INSTALL_DATADIR}
 )
 
 if (NOT PICOTOOL_NO_LIBUSB)
