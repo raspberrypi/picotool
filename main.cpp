@@ -1868,7 +1868,7 @@ struct picoboot_memory_access : public memory_access {
     }
 
     void read(uint32_t address, uint8_t *buffer, unsigned int size, __unused bool zero_fill) override {
-        if (flash == get_memory_type(address, model) && settings.use_flash_cache) {
+        if (settings.use_flash_cache && flash == get_memory_type(address, model)) {
             read_cached(address, buffer, size);
         } else {
             read_raw(address, buffer, size);

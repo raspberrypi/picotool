@@ -315,52 +315,6 @@ block place_new_block(elf_file *elf, std::unique_ptr<block> &first_block) {
 }
 
 
-std::unique_ptr<block> get_last_block(std::vector<uint8_t> &bin, uint32_t storage_addr, std::unique_ptr<block> &first_block, get_more_bin_cb more_cb) {
-    uint32_t next_block_addr = first_block->physical_addr + first_block->next_block_rel;
-    std::unique_ptr<block> new_first_block;
-    uint32_t read_size = PICOBIN_MAX_BLOCK_SIZE;
-    uint32_t current_bin_start = storage_addr;
-    while (true) {
-        if (next_block_addr + read_size > current_bin_start + bin.size() && more_cb != nullptr) {
-            DEBUG_LOG("Reading into bin %08x+%x\n", next_block_addr, read_size);
-            more_cb(bin, next_block_addr, read_size);
-            current_bin_start = next_block_addr;
-        }
-        auto offset = next_block_addr - current_bin_start;
-        std::vector<uint32_t> words = lsb_bytes_to_words(bin.begin() + offset, bin.end());
-        if (words.front() != PICOBIN_BLOCK_MARKER_START) {
-            fail(ERROR_UNKNOWN, "Block loop is not valid - no block found at %08x\n", (int)(next_block_addr));
-        }
-        words.erase(words.begin());
-        DEBUG_LOG("Checking block at %x\n", next_block_addr);
-        DEBUG_LOG("Starts with %x %x %x %x\n", words[0], words[1], words[2], words[3]);
-        for(auto next_item = words.begin(); next_item < words.end(); ) {
-            unsigned int size = item::decode_size(*next_item);
-            if ((uint8_t)*next_item == PICOBIN_BLOCK_ITEM_2BS_LAST) {
-                if (size == next_item - words.begin()) {
-                    if (next_item < words.end() && next_item[2] == PICOBIN_BLOCK_MARKER_END) {
-                        DEBUG_LOG("is a valid block\n");
-                        new_first_block = block::parse(next_block_addr, next_item + 1, words.begin(), words.begin() + size);
-                        break;
-                    }
-                }
-            } else {
-                next_item += size;
-            }
-        }
-        if (new_first_block->physical_addr + new_first_block->next_block_rel == first_block->physical_addr) {
-            DEBUG_LOG("Found last block in block loop\n");
-            break;
-        } else {
-            DEBUG_LOG("Continue looping\n");
-            next_block_addr = new_first_block->physical_addr + new_first_block->next_block_rel;
-            new_first_block.reset();
-        }
-    }
-    return new_first_block;
-}
-
-
 std::vector<std::unique_ptr<block>> get_all_blocks(std::vector<uint8_t> &bin, uint32_t storage_addr, std::unique_ptr<block> &first_block, get_more_bin_cb more_cb) {
     uint32_t next_block_addr = first_block->physical_addr + first_block->next_block_rel;
     std::vector<std::unique_ptr<block>> all_blocks;
@@ -406,6 +360,12 @@ std::vector<std::unique_ptr<block>> get_all_blocks(std::vector<uint8_t> &bin, ui
         }
     }
     return all_blocks;
+}
+
+
+std::unique_ptr<block> get_last_block(std::vector<uint8_t> &bin, uint32_t storage_addr, std::unique_ptr<block> &first_block, get_more_bin_cb more_cb) {
+    auto all_blocks = get_all_blocks(bin, storage_addr, first_block, more_cb);
+    return std::move(all_blocks.back());
 }
 
 
