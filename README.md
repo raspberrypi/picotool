@@ -83,7 +83,7 @@ Whilst the SDK can download picotool on its own per project, if you have multipl
 > cmake -DCMAKE_INSTALL_PREFIX=~/.local ..
 > make install
 > ```
-> This will only work if `~/.local` is included in your `PATH`
+> This will only work if `~/.local/bin` is included in your `PATH`
 
 Alternatively, you can install to a custom path via:
 
