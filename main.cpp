@@ -33,6 +33,7 @@
 
 #include "boot/uf2.h"
 #include "boot/picobin.h"
+#include "enc_bootloader.h"
 #if HAS_LIBUSB
     #include "picoboot_connection_cxx.h"
     #include "rp2350.rom.h"
@@ -245,6 +246,10 @@ template <typename T> struct range_map {
         }
     }
 
+    void empty() {
+        m.clear();
+    }
+
     pair<mapping, T> get(uint32_t p) {
         auto f = m.upper_bound(p);
         if (f == m.end()) {
@@ -389,8 +394,8 @@ private:
 };
 
 struct _settings {
-    std::array<std::string, 4> filenames;
-    std::array<std::string, 4> file_types;
+    std::array<std::string, 6> filenames;
+    std::array<std::string, 6> file_types;
     uint32_t binary_start = FLASH_START;
     int bus=-1;
     int address=-1;
@@ -462,11 +467,19 @@ struct _settings {
         bool hash = false;
         bool sign = false;
         bool clear_sram = false;
+        bool set_tbyb = false;
         uint16_t major_version = 0;
         uint16_t minor_version = 0;
         uint16_t rollback_version = 0;
         std::vector<uint16_t> rollback_rows;
     } seal;
+
+    struct {
+        bool embed = false;
+        bool otp_key_page_set = false;
+        bool fast_rosc = false;
+        uint16_t otp_key_page = 30;
+    } encrypt;
 
     struct {
         uint32_t align = 0x1000;
@@ -776,6 +789,12 @@ struct encrypt_command : public cmd {
         return (
             option("--quiet").set(settings.quiet) % "Don't print any output" +
             option("--verbose").set(settings.verbose) % "Print verbose output" +
+            option("--embed").set(settings.encrypt.embed) % "Embed bootloader in output file" +
+            option("--fast-rosc").set(settings.encrypt.fast_rosc) % "Use ~180MHz ROSC configuration for embedded bootloader" +
+            (
+                option("--otp-key-page").set(settings.encrypt.otp_key_page_set) % "Specify the OTP page storing the AES key (IV salt is stored on the next page)" &
+                    integer("page").set(settings.encrypt.otp_key_page) % "OTP page (default 30)"
+            ).force_expand_help(true) +
             (
                 option("--hash").set(settings.seal.hash) % "Hash the encrypted file" +
                 option("--sign").set(settings.seal.sign) % "Sign the encrypted file"
@@ -786,8 +805,10 @@ struct encrypt_command : public cmd {
                      hex("offset").set(settings.offset) % "Load offset (memory address; default 0x10000000)"
             ).force_expand_help(true) % "BIN file options" +
             named_file_selection_x("outfile", 1) % "File to save to" +
-            named_typed_file_selection_x("aes_key", 2, "bin") % "AES Key" +
-            optional_typed_file_selection_x("signing_key", 3, "pem") % "Signing Key file"
+            named_typed_file_selection_x("aes_key", 2, "bin") % "AES Key Share" +
+            named_typed_file_selection_x("iv_otp", 3, "bin") % "IV OTP Salt" +
+            optional_typed_file_selection_x("signing_key", 4, "pem") % "Signing Key file" +
+            optional_typed_file_selection_x("otp", 5, "json") % "File to save OTP to (will edit existing file if it exists)"
         );
     }
 
@@ -2775,7 +2796,13 @@ void build_rmap_load_map(std::shared_ptr<load_map_item>load_map, range_map<uint3
     for (unsigned int i=0; i < load_map->entries.size(); i++) {
         auto e = load_map->entries[i];
         if (e.storage_address != 0) {
-            rmap.insert(range(e.runtime_address, e.runtime_address + e.size), e.storage_address);
+            try {
+                rmap.insert(range(e.runtime_address, e.runtime_address + e.size), e.storage_address);
+            } catch (command_failure&) {
+                // Overlapping memory ranges are permitted in a load_map, so empty the range map and then add the entry
+                rmap.empty();
+                rmap.insert(range(e.runtime_address, e.runtime_address + e.size), e.storage_address);
+            }
         }
     }
 }
@@ -4761,93 +4788,6 @@ bool load_command::execute(device_map &devices) {
 #endif
 
 #if HAS_MBEDTLS
-bool encrypt_command::execute(device_map &devices) {
-    bool isElf = false;
-    bool isBin = false;
-    if (get_file_type() == filetype::elf) {
-        isElf = true;
-    } else if (get_file_type() == filetype::bin) {
-        isBin = true;
-    } else {
-        fail(ERROR_ARGS, "Can only sign ELFs or BINs");
-    }
-
-    if (get_file_type_idx(1) != get_file_type()) {
-        fail(ERROR_ARGS, "Can only sign to same file type");
-    }
-
-    if (get_file_type_idx(2) != filetype::bin) {
-        fail(ERROR_ARGS, "Can only read AES key from BIN file");
-    }
-
-    if (settings.seal.sign && settings.filenames[3].empty()) {
-        fail(ERROR_ARGS, "missing key file for signing after encryption");
-    }
-
-    if (!settings.filenames[3].empty() && get_file_type_idx(3) != filetype::pem) {
-        fail(ERROR_ARGS, "Can only read pem keys");
-    }
-
-
-    auto aes_file = get_file_idx(ios::in|ios::binary, 2);
-    
-    private_t aes_key;
-    aes_file->read((char*)aes_key.bytes, sizeof(aes_key.bytes));
-
-
-    private_t private_key = {};
-    public_t public_key = {};
-
-    if (settings.seal.sign) read_keys(settings.filenames[3], &public_key, &private_key);
-
-    if (isElf) {
-        elf_file source_file(settings.verbose);
-        elf_file *elf = &source_file;
-        elf->read_file(get_file(ios::in|ios::binary));
-
-        std::unique_ptr<block> first_block = find_first_block(elf);
-        if (!first_block) {
-            fail(ERROR_FORMAT, "No first block found");
-        }
-        elf->editable = false;
-        block new_block = place_new_block(elf, first_block);
-        elf->editable = true;
-
-        encrypt(elf, &new_block, aes_key, public_key, private_key, settings.seal.hash, settings.seal.sign);
-
-        auto out = get_file_idx(ios::out|ios::binary, 1);
-        elf->write(out);
-        out->close();
-    } else if (isBin) {
-        auto binfile = get_file_memory_access(0);
-        auto rmap = binfile.get_rmap();
-        auto ranges = rmap.ranges();
-        assert(ranges.size() == 1);
-        auto bin_start = ranges[0].from;
-        auto bin_size = ranges[0].len();
-
-        vector<uint8_t> bin = binfile.read_vector<uint8_t>(bin_start, bin_size, false);
-
-        std::unique_ptr<block> first_block = find_first_block(bin, bin_start);
-        if (!first_block) {
-            fail(ERROR_FORMAT, "No first block found");
-        }
-        auto bin_cp = bin;
-        block new_block = place_new_block(bin_cp, bin_start, first_block);
-
-        auto enc_data = encrypt(bin, bin_start, bin_start, &new_block, aes_key, public_key, private_key, settings.seal.hash, settings.seal.sign);
-
-        auto out = get_file_idx(ios::out|ios::binary, 1);
-        out->write((const char *)enc_data.data(), enc_data.size());
-        out->close();
-    } else {
-        fail(ERROR_ARGS, "Must be ELF or BIN");
-    }
-
-    return false;
-}
-
-#if HAS_MBEDTLS
 void sign_guts_elf(elf_file* elf, private_t private_key, public_t public_key) {
     std::unique_ptr<block> first_block = find_first_block(elf);
     if (!first_block) {
@@ -4855,6 +4795,12 @@ void sign_guts_elf(elf_file* elf, private_t private_key, public_t public_key) {
     }
 
     block new_block = place_new_block(elf, first_block);
+
+    if (settings.seal.set_tbyb) {
+        // Set the TBYB bit on the image_type_item
+        std::shared_ptr<image_type_item> image_type = new_block.get_item<image_type_item>();
+        image_type->flags |= PICOBIN_IMAGE_TYPE_EXE_TBYB_BITS;
+    }
 
     if (settings.seal.major_version || settings.seal.minor_version || settings.seal.rollback_version) {
         std::shared_ptr<version_item> version = new_block.get_item<version_item>();
@@ -4897,9 +4843,12 @@ void sign_guts_elf(elf_file* elf, private_t private_key, public_t public_key) {
                     }
                 }
             }
-            auto segment = elf->segment_from_physical_address(vtor_loc);
+            auto segment = elf->segment_from_virtual_address(vtor_loc);
+            if (segment == nullptr) {
+                fail(ERROR_NOT_POSSIBLE, "The ELF file does not contain the vector table location %x", vtor_loc);
+            }
             auto content = elf->content(*segment);
-            auto offset = vtor_loc - segment->physical_address();
+            auto offset = vtor_loc - segment->virtual_address();
             uint32_t ep;
             memcpy(&ep, content.data() + offset + 4, sizeof(ep));
             uint32_t sp;
@@ -4976,7 +4925,269 @@ vector<uint8_t> sign_guts_bin(iostream_memory_access in, private_t private_key, 
 
     return sig_data;
 }
-#endif
+
+bool encrypt_command::execute(device_map &devices) {
+    bool isElf = false;
+    bool isBin = false;
+    if (get_file_type() == filetype::elf) {
+        isElf = true;
+    } else if (get_file_type() == filetype::bin) {
+        if (settings.encrypt.embed) {
+            fail(ERROR_ARGS, "Can only embed decrypting bootloader into ELFs");
+        }
+        isBin = true;
+    } else {
+        fail(ERROR_ARGS, "Can only sign ELFs or BINs");
+    }
+
+    if (get_file_type_idx(1) != get_file_type()) {
+        fail(ERROR_ARGS, "Can only sign to same file type");
+    }
+
+    if (get_file_type_idx(2) != filetype::bin) {
+        fail(ERROR_ARGS, "Can only read AES key share from BIN file");
+    }
+
+    if (get_file_type_idx(3) != filetype::bin) {
+        fail(ERROR_ARGS, "Can only read IV OTP salt from BIN file");
+    }
+
+    if (settings.seal.sign && settings.filenames[4].empty()) {
+        fail(ERROR_ARGS, "missing key file for signing after encryption");
+    }
+
+    if (!settings.filenames[4].empty() && get_file_type_idx(4) != filetype::pem) {
+        fail(ERROR_ARGS, "Can only read pem keys");
+    }
+
+
+    auto aes_file = get_file_idx(ios::in|ios::binary, 2);
+    aes_file->exceptions(std::iostream::failbit | std::iostream::badbit);
+
+    aes_key_share_t aes_key_share;
+    aes_file->seekg(0, std::ios::end);
+    if (aes_file->tellg() != 128) {
+        fail(ERROR_INCOMPATIBLE, "The AES key share must be a 128 byte file (the supplied file is %d bytes)", aes_file->tellg());
+    }
+    aes_file->seekg(0, std::ios::beg);
+    aes_file->read((char*)aes_key_share.bytes, sizeof(aes_key_share.bytes));
+
+    aes_key_t aes_key;
+    // Key is stored as a 4-way share of each word, ie X[0] = A[0] ^ B[0] ^ C[0] ^ D[0], stored as A[0], B[0], C[0], D[0]
+    for (int i=0; i < count_of(aes_key.words); i++) {
+        aes_key.words[i] = aes_key_share.words[i*4]
+                         ^ aes_key_share.words[i*4 + 1]
+                         ^ aes_key_share.words[i*4 + 2]
+                         ^ aes_key_share.words[i*4 + 3];
+    }
+
+    private_t private_key = {};
+    public_t public_key = {};
+
+    if (settings.seal.sign) read_keys(settings.filenames[4], &public_key, &private_key);
+
+    // Read IV Salt
+    auto iv_salt_file = get_file_idx(ios::in|ios::binary, 3);
+    iv_salt_file->exceptions(std::iostream::failbit | std::iostream::badbit);
+    uint8_t iv_salt[16];
+    iv_salt_file->seekg(0, std::ios::end);
+    if (iv_salt_file->tellg() != 16) {
+        fail(ERROR_INCOMPATIBLE, "The IV OTP salt must be a 16 byte file (the supplied file is %d bytes)", iv_salt_file->tellg());
+    }
+    iv_salt_file->seekg(0, std::ios::beg);
+    iv_salt_file->read((char*)iv_salt, sizeof(iv_salt));
+
+    if (isElf) {
+        elf_file source_file(settings.verbose);
+        elf_file *elf = &source_file;
+        elf->read_file(get_file(ios::in|ios::binary));
+
+        std::unique_ptr<block> first_block = find_first_block(elf);
+        if (!first_block) {
+            fail(ERROR_FORMAT, "No first block found");
+        }
+        elf->editable = false;
+        block new_block = place_new_block(elf, first_block);
+        elf->editable = true;
+
+        if (settings.encrypt.embed) {
+            std::vector<uint8_t> iv_data;
+            std::vector<uint8_t> enc_data;
+            uint32_t data_start_address = SRAM_START;
+            encrypt_guts(elf, &new_block, aes_key, iv_data, enc_data);
+
+            // Salt IV
+            assert(iv_data.size() == sizeof(iv_salt));
+            for (int i=0; i < iv_data.size(); i++) {
+                iv_data[i] ^= iv_salt[i];
+            }
+            auto tmp = std::make_shared<std::stringstream>();
+            auto file = get_enc_bootloader();
+            *tmp << file->rdbuf();
+
+            auto program = get_iostream_memory_access<iostream_memory_access>(tmp, filetype::elf, true);
+            program.set_model(rp2350);
+
+            // data_start_addr
+            settings.config.key = "data_start_addr";
+            settings.config.value = hex_string(data_start_address);
+            config_guts(program);
+            // data_size
+            settings.config.key = "data_size";
+            settings.config.value = hex_string(enc_data.size());
+            config_guts(program);
+            // iv
+            {
+                string s((char*)iv_data.data(), iv_data.size());
+                settings.config.key = "iv";
+                settings.config.value = s;
+                config_guts(program);
+            }
+            // otp_key_page
+            if (settings.encrypt.otp_key_page_set) {
+                settings.config.key = "otp_key_page";
+                settings.config.value = hex_string(settings.encrypt.otp_key_page);
+                config_guts(program);
+            }
+
+            // fast rosc
+            if (settings.encrypt.fast_rosc) {
+                settings.config.key = "rosc_div";
+                settings.config.value = "0x1";
+                config_guts(program);
+                settings.config.key = "rosc_drive";
+                settings.config.value = "0x0000";
+                config_guts(program);
+            }
+
+            elf_file source_file(settings.verbose);
+            elf_file *enc_elf = &source_file;
+            enc_elf->read_file(tmp);
+
+            // Bootloader size
+            auto bootloader_start = enc_elf->get_symbol("__enc_bootloader_start");
+            auto bootloader_end = enc_elf->get_symbol("__enc_bootloader_end");
+            uint32_t bootloader_size = bootloader_end - bootloader_start;
+
+            // Move bootloader down in physical space to start of SRAM (which will be start of flash once packaged)
+            enc_elf->move_all(data_start_address - bootloader_start);
+
+            // Add encrypted blob
+            enc_elf->append_segment(data_start_address, data_start_address + bootloader_size, enc_data.size(), ".enc_data");
+            auto data_section = enc_elf->get_section(".enc_data");
+            assert(data_section);
+            assert(data_section->virtual_address() == data_start_address);
+
+            if (data_section->size < enc_data.size()) {
+                fail(ERROR_UNKNOWN, "Block is too big for elf section\n");
+            }
+
+            DEBUG_LOG("Adding enc_data len %d\n", (int)enc_data.size());
+            for (auto x : enc_data) DEBUG_LOG("%02x", x);
+            DEBUG_LOG("\n");
+
+            enc_elf->content(*data_section, enc_data);
+
+            // Get the version from the encrypted binary
+            std::shared_ptr<version_item> version = new_block.get_item<version_item>();
+            if (version != nullptr) {
+                settings.seal.major_version = version->major;
+                settings.seal.minor_version = version->minor;
+                settings.seal.rollback_version = version->rollback;
+                for (auto row : version->otp_rows) {
+                    settings.seal.rollback_rows.push_back(row);
+                }
+            }
+
+            // Get the TBYB from the encrypted binary
+            std::shared_ptr<image_type_item> image_type = new_block.get_item<image_type_item>();
+            if (image_type->tbyb()) {
+                settings.seal.set_tbyb = true;
+            }
+
+            // Sign the final thing
+            sign_guts_elf(enc_elf, private_key, public_key);
+            
+            auto out = get_file_idx(ios::out|ios::binary, 1);
+            enc_elf->write(out);
+            out->close();
+        } else {
+            encrypt(elf, &new_block, aes_key, public_key, private_key, settings.seal.hash, settings.seal.sign);
+            auto out = get_file_idx(ios::out|ios::binary, 1);
+            elf->write(out);
+            out->close();
+        }
+    } else if (isBin) {
+        auto binfile = get_file_memory_access(0);
+        auto rmap = binfile.get_rmap();
+        auto ranges = rmap.ranges();
+        assert(ranges.size() == 1);
+        auto bin_start = ranges[0].from;
+        auto bin_size = ranges[0].len();
+
+        vector<uint8_t> bin = binfile.read_vector<uint8_t>(bin_start, bin_size, false);
+
+        std::unique_ptr<block> first_block = find_first_block(bin, bin_start);
+        if (!first_block) {
+            fail(ERROR_FORMAT, "No first block found");
+        }
+        auto bin_cp = bin;
+        block new_block = place_new_block(bin_cp, bin_start, first_block);
+
+        auto enc_data = encrypt(bin, bin_start, bin_start, &new_block, aes_key, public_key, private_key, settings.seal.hash, settings.seal.sign);
+
+        auto out = get_file_idx(ios::out|ios::binary, 1);
+        out->write((const char *)enc_data.data(), enc_data.size());
+        out->close();
+    } else {
+        fail(ERROR_ARGS, "Must be ELF or BIN");
+    }
+
+    if (!settings.filenames[5].empty()) {
+        if (get_file_type_idx(5) != filetype::json) {
+            fail(ERROR_ARGS, "Can only output OTP json");
+        }
+        auto check_json_file = std::ifstream(settings.filenames[5]);
+        json otp_json;
+        if (check_json_file.good()) {
+            otp_json = json::parse(check_json_file);
+            DEBUG_LOG("Appending to existing otp json\n");
+            check_json_file.close();
+        }
+        auto json_out = get_file_idx(ios::out, 5);
+
+        // Add otp AES key page
+        for (int i = 0; i < 128; ++i) {
+            std::stringstream ss;
+            ss << settings.encrypt.otp_key_page << ":0";
+            otp_json[ss.str()]["ecc"] = true;
+            otp_json[ss.str()]["value"][i] = aes_key_share.bytes[i];
+        }
+
+        // Add otp IV salt page
+        for (int i = 0; i < sizeof(iv_salt); ++i) {
+            std::stringstream ss;
+            ss << settings.encrypt.otp_key_page + 1 << ":0";
+            otp_json[ss.str()]["ecc"] = true;
+            otp_json[ss.str()]["value"][i] = iv_salt[i];
+        }
+
+        // Add page locks to prevent BL and NS access, and only allow S reads
+        {
+            std::stringstream ss;
+            ss << "PAGE" << settings.encrypt.otp_key_page << "_LOCK1";
+            otp_json[ss.str()] = "0x3d3d3d";
+            ss.str(string());
+            ss << "PAGE" << settings.encrypt.otp_key_page + 1 << "_LOCK1";
+            otp_json[ss.str()] = "0x3d3d3d";
+        }
+
+        *json_out << std::setw(4) << otp_json << std::endl;
+        json_out->close();
+    }
+
+    return false;
+}
 
 bool seal_command::execute(device_map &devices) {
     bool isElf = false;

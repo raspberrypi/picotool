@@ -57,11 +57,39 @@ endif()
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
 
+if (NOT DEFINED USE_PRECOMPILED)
+    set(USE_PRECOMPILED true)
+endif()
+
+# compile enc_bootloader.elf
+if (NOT DEFINED USE_PRECOMPILED)
+    set(USE_PRECOMPILED true)
+endif()
+ExternalProject_Add(enc_bootloader
+        PREFIX enc_bootloader
+        SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/enc_bootloader
+        BINARY_DIR ${CMAKE_BINARY_DIR}/enc_bootloader
+        CMAKE_ARGS 
+            "-DCMAKE_MAKE_PROGRAM:FILEPATH=${CMAKE_MAKE_PROGRAM}"
+            "-DPICO_SDK_PATH:FILEPATH=${PICO_SDK_PATH}"
+            "-DUSE_PRECOMPILED:BOOL=${USE_PRECOMPILED}"
+            "-DPICO_DEBUG_INFO_IN_RELEASE=OFF"
+        BUILD_ALWAYS 1 # todo remove this
+        INSTALL_COMMAND ""
+        )
+
+set(ENC_BOOTLOADER_ELF ${CMAKE_BINARY_DIR}/enc_bootloader/enc_bootloader.elf)
+add_executable(enc_bootloader_elf IMPORTED)
+add_dependencies(enc_bootloader_elf enc_bootloader)
+set_property(TARGET enc_bootloader_elf PROPERTY IMPORTED_LOCATION ${ENC_BOOTLOADER_ELF})
+# copy enc_bootloader.elf into build directory
+add_custom_command(TARGET enc_bootloader
+    COMMAND ${CMAKE_COMMAND} -E copy ${ENC_BOOTLOADER_ELF} ${CMAKE_BINARY_DIR}/enc_bootloader.elf
+    DEPENDS enc_bootloader
+)
+
 if (NOT PICOTOOL_NO_LIBUSB)
     # compile xip_ram_perms.elf
-    if (NOT DEFINED USE_PRECOMPILED)
-        set(USE_PRECOMPILED true)
-    endif()
     ExternalProject_Add(xip_ram_perms
             PREFIX xip_ram_perms
             SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/xip_ram_perms
@@ -169,6 +197,9 @@ if (NOT PICOTOOL_NO_LIBUSB)
     endif()
 endif()
 
+add_custom_target(binary_data_no_libusb DEPENDS
+        ${CMAKE_CURRENT_BINARY_DIR}/enc_bootloader_elf.h)
+
 add_custom_target(binary_data DEPENDS
         ${CMAKE_CURRENT_BINARY_DIR}/rp2350.rom.h
         ${CMAKE_CURRENT_BINARY_DIR}/xip_ram_perms_elf.h
@@ -187,6 +218,14 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/xip_ram_perms_elf.h
             -P ${CMAKE_CURRENT_LIST_DIR}/cmake/binh.cmake
         DEPENDS xip_ram_perms
         COMMENT "Configuring xip_ram_perms_elf.h"
+        VERBATIM)
+add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/enc_bootloader_elf.h
+        COMMAND ${CMAKE_COMMAND}
+            -D BINARY_FILE=${ENC_BOOTLOADER_ELF}
+            -D OUTPUT_NAME=enc_bootloader_elf
+            -P ${CMAKE_CURRENT_LIST_DIR}/cmake/binh.cmake
+        DEPENDS enc_bootloader
+        COMMENT "Configuring enc_bootloader_elf.h"
         VERBATIM)
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/flash_id_bin.h
         COMMAND ${CMAKE_COMMAND}
@@ -233,8 +272,10 @@ target_include_directories(regs_headers INTERFACE ${PICO_SDK_PATH}/src/rp2350/ha
 # Main picotool executable
 add_executable(picotool
     data_locs.cpp
+    enc_bootloader.cpp
     ${OTP_EXE}
     main.cpp)
+add_dependencies(picotool enc_bootloader_elf binary_data_no_libusb)
 if (NOT PICOTOOL_NO_LIBUSB)
     target_sources(picotool PRIVATE xip_ram_perms.cpp)
     add_dependencies(picotool generate_otp_header xip_ram_perms_elf binary_data)
@@ -326,6 +367,12 @@ install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/picotoolConfig.cmake
     ${CMAKE_CURRENT_BINARY_DIR}/picotoolConfigVersion.cmake
     DESTINATION ${INSTALL_CONFIGDIR}
+)
+
+#Install enc_bootloader.elf
+install(FILES
+    ${ENC_BOOTLOADER_ELF}
+    DESTINATION ${INSTALL_DATADIR}
 )
 
 if (NOT PICOTOOL_NO_LIBUSB)

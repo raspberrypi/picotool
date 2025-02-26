@@ -648,7 +648,7 @@ std::vector<uint8_t> get_lm_hash_data(elf_file *elf, block *new_block, bool clea
             if (data.size() != seg->physical_size()) {
                 fail(ERROR_INCOMPATIBLE, "Elf segment physical size (%" PRIx32 ") does not match data size in file (%zx)", seg->physical_size(), data.size());
             }
-            if (seg->physical_size() && seg->physical_address() < new_block->physical_addr) {
+            if (seg->physical_size()) {
                 std::copy(data.begin(), data.end(), std::back_inserter(to_hash));
                 DEBUG_LOG("HASH %08x + %08x\n", (int)seg->physical_address(), (int)seg->physical_size());
                 entries.push_back(
@@ -869,8 +869,7 @@ void verify_block(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runt
 }
 
 
-int encrypt(elf_file *elf, block *new_block, const private_t aes_key, const public_t public_key, const private_t private_key, bool hash_value, bool sign) {
-
+void encrypt_guts(elf_file *elf, block *new_block, const aes_key_t aes_key, std::vector<uint8_t> &iv_data, std::vector<uint8_t> &enc_data) {
     std::vector<uint8_t> to_enc = get_lm_hash_data(elf, new_block);
 
     std::random_device rand{};
@@ -886,13 +885,21 @@ int encrypt(elf_file *elf, block *new_block, const private_t aes_key, const publ
         e = rand();
     }
 
-    std::vector<uint8_t> iv_data(iv.bytes, iv.bytes + sizeof(iv.bytes));
+    iv_data.resize(sizeof(iv.bytes));
+    memcpy(iv_data.data(), iv.bytes, sizeof(iv.bytes));
 
-    std::vector<uint8_t> enc_data;
     enc_data.resize(to_enc.size());
 
     aes256_buffer(to_enc.data(), to_enc.size(), enc_data.data(), &aes_key, &iv);
+}
 
+
+int encrypt(elf_file *elf, block *new_block, const aes_key_t aes_key, const public_t public_key, const private_t private_key, bool hash_value, bool sign) {
+
+    std::vector<uint8_t> iv_data;
+    std::vector<uint8_t> enc_data;
+    encrypt_guts(elf, new_block, aes_key, iv_data, enc_data);
+    
     unsigned int i=0;
     for(const auto &seg : sorted_segs(elf)) {
         if (!seg->is_load()) continue;
@@ -975,7 +982,7 @@ int encrypt(elf_file *elf, block *new_block, const private_t aes_key, const publ
 }
 
 
-std::vector<uint8_t> encrypt(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *new_block, const private_t aes_key, const public_t public_key, const private_t private_key, bool hash_value, bool sign) {
+std::vector<uint8_t> encrypt(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *new_block, const aes_key_t aes_key, const public_t public_key, const private_t private_key, bool hash_value, bool sign) {
     std::random_device rand{};
     assert(rand.max() - rand.min() >= 256);
 

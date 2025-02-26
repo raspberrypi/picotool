@@ -25,7 +25,8 @@ std::unique_ptr<block> find_first_block(elf_file *elf);
 block place_new_block(elf_file *elf, std::unique_ptr<block> &first_block);
 #if HAS_MBEDTLS
     int hash_andor_sign(elf_file *elf, block *new_block, const public_t public_key, const private_t private_key, bool hash_value, bool sign, bool clear_sram = false);
-    int encrypt(elf_file *elf, block *new_block, const private_t aes_key, const public_t public_key, const private_t private_key, bool hash_value, bool sign);
+    void encrypt_guts(elf_file *elf, block *new_block, const aes_key_t aes_key, std::vector<uint8_t> &iv_data, std::vector<uint8_t> &enc_data);
+    int encrypt(elf_file *elf, block *new_block, const aes_key_t aes_key, const public_t public_key, const private_t private_key, bool hash_value, bool sign);
 #endif
 
 // Bins
@@ -37,6 +38,6 @@ block place_new_block(std::vector<uint8_t> &bin, uint32_t storage_addr, std::uni
 uint32_t calc_checksum(std::vector<uint8_t> bin);
 #if HAS_MBEDTLS
     std::vector<uint8_t> hash_andor_sign(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *new_block, const public_t public_key, const private_t private_key, bool hash_value, bool sign, bool clear_sram = false);
-    std::vector<uint8_t> encrypt(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *new_block, const private_t aes_key, const public_t public_key, const private_t private_key, bool hash_value, bool sign);
+    std::vector<uint8_t> encrypt(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *new_block, const aes_key_t aes_key, const public_t public_key, const private_t private_key, bool hash_value, bool sign);
     void verify_block(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *block, verified_t &hash_verified, verified_t &sig_verified);
 #endif
