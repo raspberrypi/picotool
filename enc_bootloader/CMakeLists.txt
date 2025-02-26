@@ -17,15 +17,7 @@ if (NOT USE_PRECOMPILED)
     unset(ENV{LDFLAGS})
 
     # Pull in SDK (must be before project)
-
-    # Temporary import handling, to ensure SDK branch with PICO_MINIMAL_VECTOR_TABLE is present
-    file(READ ${PICO_SDK_PATH}/src/rp2_common/pico_crt0/crt0.S CRT0_S)
-    if (CRT0_S MATCHES "PICO_MINIMAL_VECTOR_TABLE")
-        include(${PICO_SDK_PATH}/external/pico_sdk_import.cmake)
-    else()
-        # This clones the will-v-pi/pico-sdk repo on the self-decrypting branch
-        include(tmp_pico_sdk_import.cmake)
-    endif()
+    include(${PICO_SDK_PATH}/external/pico_sdk_import.cmake)
 
     project(enc_bootloader C CXX ASM)
     set(CMAKE_C_STANDARD 11)
