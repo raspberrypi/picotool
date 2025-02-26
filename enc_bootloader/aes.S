@@ -278,31 +278,39 @@ init_rstate:
  str r1,[r4,#TRNG_TRNG_CONFIG_OFFSET       -TRNG_RNG_IMR_OFFSET]     @ turn off rand source and wipe SHA bits left in TRNG config; r1=0
  str r1,[r4,#TRNG_RND_SOURCE_ENABLE_OFFSET -TRNG_RNG_IMR_OFFSET]
  adds r5,r5,#SHA256_SUM0_OFFSET
- ldmia r5!,{r0-r3}
- ldr r5,=rstate_sha
- stmia r5,{r0-r3}
+@ r5=SHA256 SUM0 register (r5+4=SUM1, r4+8=SUM2, etc)
+ ldmia r5,{r0-r3}  @ load first 4 words of the 8 word SHA256 output
+ ldr r6,=rstate_sha
+@ r5=SHA256 SUM0 register (r5+4=SUM1, r4+8=SUM2, etc), r6=rstate_sha
+ stmia r6,{r0-r3}
  CHK_COUNT 26,6
-
-@ r5=rstate_sha
  movs r0,#0
- strb r0,[r5]      @ make sure rstate_sha[0] has byte 0 set to 0, representing "out of data"
-@ try to find a non-zero initialiser to create a non-degenerate LFSR
- ldr r1,[r5,#4]
- cbnz r1,1f        @ is word 1 non-zero? then use it
- ldr r1,[r5,#8]
- cbnz r1,1f        @ otherwise, is word 2 non-zero? use it
- ldr r1,[r5,#12]
- cbnz r1,1f        @ otherwise, is word 3 non-zero? use it
- mov r1,r5         @ give up and use the address of rstate_sha (which is non-zero); this can't really happen (2^{-96} probability)
+ strb r0,[r6]      @ make sure rstate_sha[0] has byte 0 set to 0, representing "out of data"
+
+@ try to find a non-zero initialiser to create a non-degenerate LFSR random state
+ ldr r1,[r5,#16]   @ SHA SUM4
+ cbnz r1,1f        @ is word 4 non-zero? then use it
+ ldr r1,[r5,#20]   @ SHA SUM5
+ cbnz r1,1f        @ otherwise, is word 5 non-zero? use it
+ mov r1,r6         @ give up and use the address of rstate_sha (which is non-zero); this can't really happen (2^{-64} probability)
 1:
- str r1,[r5,#rstate_lfsr-rstate_sha]
+ str r1,[r6,#rstate_lfsr-rstate_sha]
+ 
+@ try to find a non-zero initialiser to create a non-degenerate ROSC random state
+ ldr r1,[r5,#24]   @ SHA SUM6
+ cbnz r1,1f        @ is word 6 non-zero? then use it
+ ldr r1,[r5,#28]   @ SHA SUM7
+ cbnz r1,1f        @ otherwise, is word 7 non-zero? use it
+ mov r1,r6         @ give up and use the address of rstate_sha (which is non-zero); this can't really happen (2^{-64} probability)
+1:
  ldr r2,=ROSC_RANDOM_OFFSET+ROSC_BASE
- str r1,[r2,#0]
+ str r1,[r2,#0]    @ Initialise ROSC LFSR
  CHK_COUNT 27,6
+ 
 .if GEN_RAND_SHA
 .if SH_JITTER
  movs r2,#0
- str r2,[r5,#jstate-rstate_sha]
+ str r2,[r6,#jstate-rstate_sha]
 .endif
 .endif
 
