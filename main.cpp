@@ -5065,11 +5065,12 @@ bool encrypt_command::execute(device_map &devices) {
             enc_elf->read_file(tmp);
 
             // Bootloader size
-            auto bootloader_txt = enc_elf->get_section(".start_text");
-            uint32_t bootloader_size = 0x20082000 - bootloader_txt->virtual_address();
+            auto bootloader_start = enc_elf->get_symbol("__enc_bootloader_start");
+            auto bootloader_end = enc_elf->get_symbol("__enc_bootloader_end");
+            uint32_t bootloader_size = bootloader_end - bootloader_start;
 
             // Move bootloader down in physical space to start of SRAM (which will be start of flash once packaged)
-            enc_elf->move_all(data_start_address - bootloader_txt->virtual_address());
+            enc_elf->move_all(data_start_address - bootloader_start);
 
             // Add encrypted blob
             enc_elf->append_segment(data_start_address, data_start_address + bootloader_size, enc_data.size(), ".enc_data");

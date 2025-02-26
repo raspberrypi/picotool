@@ -23,10 +23,9 @@
 
 MEMORY
 {
-    RAM_START(rwx) : ORIGIN = 0x20080000, LENGTH = 0x44
-    SCRATCH_X(rwx) : ORIGIN = 0x20080044, LENGTH = 0xFBC
-    SCRATCH_Y(rwx) : ORIGIN = 0x20081000, LENGTH = 0x800
-    RAM(rwx)       : ORIGIN = 0x20081800, LENGTH = 0x800
+    RAM(rwx) : ORIGIN =  0x13ffc000, LENGTH = 16k
+    SCRATCH_X(rwx) : ORIGIN = 0x20080000, LENGTH = 4k
+    SCRATCH_Y(rwx) : ORIGIN = 0x20081000, LENGTH = 4k
 }
 
 ENTRY(_entry_point)
@@ -49,7 +48,7 @@ SECTIONS
         __binary_info_header_end = .;
         KEEP (*(.embedded_block))
         __embedded_block_end = .;
-    } > RAM_START
+    } > RAM
 
     .text : {
         __reset_start = .;
@@ -256,9 +255,9 @@ SECTIONS
     ASSERT( __embedded_block_end - __logical_binary_start <= 4096, "Embedded block must be in first 4096 bytes of the binary")
 
     /* todo assert on extra code */
-    ASSERT(chaff==0x20081000, "Chaff array must be located at 0x20081000")
 
     /* Provide symbols for picotool */
-    __enc_bootloader_start = ORIGIN(RAM_START);
+    __enc_bootloader_start = ORIGIN(RAM);
     __enc_bootloader_end = ORIGIN(RAM) + LENGTH(RAM);
 }
+

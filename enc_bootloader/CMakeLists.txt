@@ -33,19 +33,39 @@ if (NOT USE_PRECOMPILED)
     # Encrypted Bootloader
     add_executable(enc_bootloader
         enc_bootloader.c
-        aes.S
     )
 
     target_link_libraries(enc_bootloader
         pico_stdlib
     )
 
+    if (USE_MBEDTLS)
+        target_sources(enc_bootloader PRIVATE mbedtls_aes.c)
+
+        target_link_libraries(enc_bootloader pico_mbedtls)
+
+        target_compile_definitions(enc_bootloader PRIVATE
+            PICO_STACK_SIZE=0x800
+            # 0x20080000 -> 0x20081000 doesn't overlap the stack
+            ROM_CHAIN_WORKSPACE=0x20080000)
+
+        target_include_directories(enc_bootloader PRIVATE ${CMAKE_CURRENT_LIST_DIR})
+
+        pico_set_linker_script(enc_bootloader ${CMAKE_CURRENT_LIST_DIR}/memmap_mbedtls.ld)
+    else()
+        target_sources(enc_bootloader PRIVATE aes.S)
+
+        target_compile_definitions(enc_bootloader PRIVATE
+            PICO_STACK_SIZE=0x180
+            # AES Code & workspace from 0x20080044 -> 0x20081604, so 0x20080200 -> 0x20081200 is inside that
+            ROM_CHAIN_WORKSPACE=0x20080200)
+
+        pico_set_linker_script(enc_bootloader ${CMAKE_CURRENT_LIST_DIR}/memmap_enc_bootloader.ld)
+    endif()
+
     target_compile_definitions(enc_bootloader PRIVATE
-        # increase startup delay for stability
-        PICO_XOSC_STARTUP_DELAY_MULTIPLIER=64
         # use stack guards, as AES variables are written near the stack
         PICO_USE_STACK_GUARDS=1
-        PICO_STACK_SIZE=0x180
         # The following are to reduce the size of the binary
         PICO_NO_PROGRAM_INFO=1
         # No spinlocks used
@@ -66,7 +86,6 @@ if (NOT USE_PRECOMPILED)
     pico_minimize_runtime(enc_bootloader)
 
     pico_set_binary_type(enc_bootloader no_flash)
-    pico_set_linker_script(enc_bootloader ${CMAKE_CURRENT_LIST_DIR}/memmap_enc_bootloader.ld)
     pico_add_dis_output(enc_bootloader)
 else()
     project(enc_bootloader C CXX ASM)

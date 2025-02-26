@@ -192,7 +192,7 @@ int main() {
 
     // Chain into decrypted image
     rom_chain_image(
-        (uint8_t*)0x20080200, // AES Code & workspace from 0x20080030 -> 0x20081500
+        (uint8_t*)ROM_CHAIN_WORKSPACE,
         4 * 1024,
         data_start_addr,
         data_size
