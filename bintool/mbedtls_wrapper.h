@@ -25,7 +25,7 @@ extern "C" {
  * The power signature for this calculation is easier to mask on RP2350 than
  * adding the block number to the IV0
  */
-#define IV0_XOR 0
+#define IV0_XOR 1
 
 #ifdef __cplusplus
 #define _Static_assert static_assert

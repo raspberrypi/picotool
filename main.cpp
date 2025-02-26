@@ -394,8 +394,8 @@ private:
 };
 
 struct _settings {
-    std::array<std::string, 5> filenames;
-    std::array<std::string, 5> file_types;
+    std::array<std::string, 6> filenames;
+    std::array<std::string, 6> file_types;
     uint32_t binary_start = FLASH_START;
     int bus=-1;
     int address=-1;
@@ -792,7 +792,7 @@ struct encrypt_command : public cmd {
             option("--embed").set(settings.encrypt.embed) % "Embed bootloader in output file" +
             option("--fast-rosc").set(settings.encrypt.fast_rosc) % "Use ~180MHz ROSC configuration for embedded bootloader" +
             (
-                option("--otp-key-page").set(settings.encrypt.otp_key_page_set) % "Specify the OTP page storing the AES key" &
+                option("--otp-key-page").set(settings.encrypt.otp_key_page_set) % "Specify the OTP page storing the AES key (IV salt is stored on the next page)" &
                     integer("page").set(settings.encrypt.otp_key_page) % "OTP page (default 30)"
             ).force_expand_help(true) +
             (
@@ -806,8 +806,9 @@ struct encrypt_command : public cmd {
             ).force_expand_help(true) % "BIN file options" +
             named_file_selection_x("outfile", 1) % "File to save to" +
             named_typed_file_selection_x("aes_key", 2, "bin") % "AES Key Share" +
-            optional_typed_file_selection_x("signing_key", 3, "pem") % "Signing Key file" +
-            optional_typed_file_selection_x("otp", 4, "json") % "File to save OTP to (will edit existing file if it exists)"
+            named_typed_file_selection_x("iv_otp", 3, "bin") % "IV OTP Salt" +
+            optional_typed_file_selection_x("signing_key", 4, "pem") % "Signing Key file" +
+            optional_typed_file_selection_x("otp", 5, "json") % "File to save OTP to (will edit existing file if it exists)"
         );
     }
 
@@ -4947,11 +4948,15 @@ bool encrypt_command::execute(device_map &devices) {
         fail(ERROR_ARGS, "Can only read AES key share from BIN file");
     }
 
-    if (settings.seal.sign && settings.filenames[3].empty()) {
+    if (get_file_type_idx(3) != filetype::bin) {
+        fail(ERROR_ARGS, "Can only read IV OTP salt from BIN file");
+    }
+
+    if (settings.seal.sign && settings.filenames[4].empty()) {
         fail(ERROR_ARGS, "missing key file for signing after encryption");
     }
 
-    if (!settings.filenames[3].empty() && get_file_type_idx(3) != filetype::pem) {
+    if (!settings.filenames[4].empty() && get_file_type_idx(4) != filetype::pem) {
         fail(ERROR_ARGS, "Can only read pem keys");
     }
 
@@ -4964,6 +4969,7 @@ bool encrypt_command::execute(device_map &devices) {
     if (aes_file->tellg() != 128) {
         fail(ERROR_INCOMPATIBLE, "The AES key share must be a 128 byte file (the supplied file is %d bytes)", aes_file->tellg());
     }
+    aes_file->seekg(0, std::ios::beg);
     aes_file->read((char*)aes_key_share.bytes, sizeof(aes_key_share.bytes));
 
     aes_key_t aes_key;
@@ -4978,7 +4984,18 @@ bool encrypt_command::execute(device_map &devices) {
     private_t private_key = {};
     public_t public_key = {};
 
-    if (settings.seal.sign) read_keys(settings.filenames[3], &public_key, &private_key);
+    if (settings.seal.sign) read_keys(settings.filenames[4], &public_key, &private_key);
+
+    // Read IV Salt
+    auto iv_salt_file = get_file_idx(ios::in|ios::binary, 3);
+    iv_salt_file->exceptions(std::iostream::failbit | std::iostream::badbit);
+    uint8_t iv_salt[16];
+    iv_salt_file->seekg(0, std::ios::end);
+    if (iv_salt_file->tellg() != 16) {
+        fail(ERROR_INCOMPATIBLE, "The IV OTP salt must be a 16 byte file (the supplied file is %d bytes)", iv_salt_file->tellg());
+    }
+    iv_salt_file->seekg(0, std::ios::beg);
+    iv_salt_file->read((char*)iv_salt, sizeof(iv_salt));
 
     if (isElf) {
         elf_file source_file(settings.verbose);
@@ -4999,6 +5016,11 @@ bool encrypt_command::execute(device_map &devices) {
             uint32_t data_start_address = SRAM_START;
             encrypt_guts(elf, &new_block, aes_key, iv_data, enc_data);
 
+            // Salt IV
+            assert(iv_data.size() == sizeof(iv_salt));
+            for (int i=0; i < iv_data.size(); i++) {
+                iv_data[i] ^= iv_salt[i];
+            }
             auto tmp = std::make_shared<std::stringstream>();
             auto file = get_enc_bootloader();
             *tmp << file->rdbuf();
@@ -5015,7 +5037,7 @@ bool encrypt_command::execute(device_map &devices) {
             settings.config.value = hex_string(enc_data.size());
             config_guts(program);
             // iv
-            for (int i=0; i < 4; i++) {
+            {
                 string s((char*)iv_data.data(), iv_data.size());
                 settings.config.key = "iv";
                 settings.config.value = s;
@@ -5120,18 +5142,18 @@ bool encrypt_command::execute(device_map &devices) {
         fail(ERROR_ARGS, "Must be ELF or BIN");
     }
 
-    if (!settings.filenames[4].empty()) {
-        if (get_file_type_idx(4) != filetype::json) {
+    if (!settings.filenames[5].empty()) {
+        if (get_file_type_idx(5) != filetype::json) {
             fail(ERROR_ARGS, "Can only output OTP json");
         }
-        auto check_json_file = std::ifstream(settings.filenames[4]);
+        auto check_json_file = std::ifstream(settings.filenames[5]);
         json otp_json;
         if (check_json_file.good()) {
             otp_json = json::parse(check_json_file);
             DEBUG_LOG("Appending to existing otp json\n");
             check_json_file.close();
         }
-        auto json_out = get_file_idx(ios::out, 4);
+        auto json_out = get_file_idx(ios::out, 5);
 
         // Add otp AES key page
         for (int i = 0; i < 128; ++i) {
@@ -5141,10 +5163,21 @@ bool encrypt_command::execute(device_map &devices) {
             otp_json[ss.str()]["value"][i] = aes_key_share.bytes[i];
         }
 
+        // Add otp IV salt page
+        for (int i = 0; i < sizeof(iv_salt); ++i) {
+            std::stringstream ss;
+            ss << settings.encrypt.otp_key_page + 1 << ":0";
+            otp_json[ss.str()]["ecc"] = true;
+            otp_json[ss.str()]["value"][i] = iv_salt[i];
+        }
+
         // Add page locks to prevent BL and NS access, and only allow S reads
         {
             std::stringstream ss;
             ss << "PAGE" << settings.encrypt.otp_key_page << "_LOCK1";
+            otp_json[ss.str()] = "0x3d3d3d";
+            ss.str(string());
+            ss << "PAGE" << settings.encrypt.otp_key_page + 1 << "_LOCK1";
             otp_json[ss.str()] = "0x3d3d3d";
         }
 

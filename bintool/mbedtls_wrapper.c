@@ -53,18 +53,24 @@ int mb_aes_crypt_ctr_xor(mbedtls_aes_context *ctx,
     int c;
     int ret = 0;
     size_t n = 0;
-    size_t counter = 0;
+    uint32_t counter = 0;
+
+    assert(length == (uint32_t)length);
 
     while (length--) {
         if (n == 0) {
-            for (int i = 16; i > 16 - sizeof(counter); i--) {
-                nonce_xor[i-1] == iv0[i-1] ^ (unsigned char)(counter >> (i*8));
+            for (int i = 16; i > 0; i--) {
+                nonce_xor[i-1] = iv0[i-1];
+                if (i - (int)(16 - sizeof(counter)) > (int)0) {
+                    nonce_xor[i-1] ^= (unsigned char)(counter >> ((16-i)*8));
+                }
             }
 
             ret = mbedtls_aes_crypt_ecb(ctx, MBEDTLS_AES_ENCRYPT, nonce_xor, stream_block);
             if (ret != 0) {
                 break;
             }
+            counter++;
         }
         c = *input++;
         *output++ = (unsigned char) (c ^ stream_block[n]);

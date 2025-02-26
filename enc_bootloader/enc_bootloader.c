@@ -22,7 +22,7 @@
 
 #include "config.h"
 
-extern void decrypt(uint8_t* key4way, uint8_t* iv, uint8_t(*buf)[16], int nblk);
+extern void decrypt(uint8_t* key4way, uint8_t* IV_OTPsalt, uint8_t* IV_public, uint8_t(*buf)[16], int nblk);
 
 // These just have to be higher than the actual frequency, to prevent overclocking unused peripherals
 #define ROSC_HZ 300*MHZ
@@ -172,7 +172,16 @@ int main() {
 
     // Read key directly from OTP - guarded reads will throw a bus fault if there are any errors
     uint16_t* otp_data = (uint16_t*)OTP_DATA_GUARDED_BASE;
-    decrypt((uint8_t*)&(otp_data[(OTP_CMD_ROW_BITS & (otp_key_page * 0x40))]), (uint8_t*)iv, (void*)data_start_addr, data_size/16);
+    decrypt(
+        (uint8_t*)&(otp_data[otp_key_page * 0x40]),
+        (uint8_t*)&(otp_data[(otp_key_page + 1) * 0x40]),
+        (uint8_t*)iv,
+        (void*)data_start_addr,
+        data_size/16
+    );
+
+    // Lock the IV salt
+    otp_hw->sw_lock[otp_key_page + 1] = 0xf;
 
     // Increase stack limit by 0x100
     pico_default_asm_volatile(
