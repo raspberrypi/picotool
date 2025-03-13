@@ -54,6 +54,7 @@ private:
     int read_header(void);
     void read_ph(void);
     void read_sh(void);
+    void remove_sh_holes(void);
     void read_sh_data(void);
     void read_ph_data(void);
     void read_bytes(unsigned offset, unsigned length, void *dest);

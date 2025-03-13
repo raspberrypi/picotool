@@ -260,6 +260,29 @@ void elf_file::read_sh(void) {
     }
 }
 
+// If there are holes between sections within segments, increase the section size to plug the hole
+// This is necessary to ensure the whole segment contains data defined in sections, otherwise you end up
+// signing/hashing/encrypting data that may not be written, as many tools write in sections not segments
+void elf_file::remove_sh_holes(void) {
+    for (int i=0; i+1 < sh_entries.size(); i++) {
+        auto sh0 = &(sh_entries[i]);
+        elf32_sh_entry sh1 = sh_entries[i+1];
+        if (
+            (sh0->type == SHT_PROGBITS && sh1.type == SHT_PROGBITS)
+            && (sh0->size && sh1.size)
+            && (sh0->addr + sh0->size < sh1.addr)
+            && (segment_from_virtual_address(sh0->addr) == segment_from_virtual_address(sh1.addr))
+        ) {
+            uint32_t gap = sh1.addr - sh0->addr - sh0->size;
+            if (gap > sh1.addralign) {
+                fail(ERROR_INCOMPATIBLE, "Cannot plug gap greater than alignment - gap %d, alignment %d", gap, sh1.addralign);
+            }
+            if (verbose) printf("Section %d: Moving end from 0x%08x to 0x%08x to plug gap\n", i, sh0->addr + sh0->size, sh1.addr);
+            sh0->size = sh1.addr - sh0->addr;
+        }
+    }
+}
+
 // Read the section data from the internal byte array into discrete sections.
 // This is used after modifying segments but before inserting new segments
 void elf_file::read_sh_data(void) {
@@ -391,6 +414,9 @@ int elf_file::read_file(std::shared_ptr<std::iostream> file) {
         if (!rc) {
             read_ph();
             read_sh();
+
+            // Remove any holes in the ELF file, as these cause issues when signing/hashing/encrypting
+            remove_sh_holes();
         }
         read_sh_data();
         read_ph_data();
