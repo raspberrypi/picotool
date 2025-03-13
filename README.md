@@ -1031,7 +1031,7 @@ Device Descriptor:
 
 ### permissions
 
-This command will run a binary on your device in order to set the OTP permissions, as these are not directly accessible from `picotool` on due to errata RP2350-E15 on RP2350 A2. 
+This command will run a binary on your device in order to set the OTP permissions, as these are not directly accessible from `picotool` due to errata RP2350-E15 on RP2350 A2. 
 Because it runs a binary, the binary needs to be signed if secure boot is enabled. The binary will light an LED when running, which
 can be configured using the `--led` argument. You can define your OTP permissions in a json file, an example of which
 is in [sample-permissions.json](json/sample-permissions.json). The schema for this JSON file is [here](json/schemas/permissions-schema.json)
