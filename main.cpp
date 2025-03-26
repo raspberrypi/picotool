@@ -291,6 +291,14 @@ private:
     map<uint32_t, pair<uint32_t, T>> m;
 };
 
+
+// Calculate chunk size for load/save/verify
+// Returns size/100 rounded up to FLASH_SECTOR_ERASE_SIZE
+uint32_t calculate_chunk_size(uint32_t size) {
+    return ((size/100 + FLASH_SECTOR_ERASE_SIZE - 1) & ~(FLASH_SECTOR_ERASE_SIZE - 1));
+}
+
+
 using cli::group;
 using cli::option;
 using cli::integer;
@@ -4308,7 +4316,7 @@ bool save_command::execute(device_map &devices) {
         fail(ERROR_NOT_POSSIBLE, "Save range crosses unmapped memory");
     }
     uint32_t size = end - start;
-    uint32_t chunk_size = std::max(size / 100, FLASH_SECTOR_ERASE_SIZE);
+    uint32_t chunk_size = calculate_chunk_size(size);
 
     std::function<void(FILE *out, const uint8_t *buffer, unsigned int size, unsigned int offset)> writer256 = [](FILE *out, const uint8_t *buffer, unsigned int size, unsigned int offset) { assert(false); };
     uf2_block block;
@@ -4603,8 +4611,7 @@ bool load_guts(picoboot::connection con, iostream_memory_access &file_access) {
         {
             progress_bar bar("Loading into " + memory_names[type] + ": ");
             // Use batches of size/100 rounded up to FLASH_SECTOR_ERASE_SIZE
-            uint32_t batch_size = std::max(FLASH_SECTOR_ERASE_SIZE,
-                (mem_range.len()/100 + FLASH_SECTOR_ERASE_SIZE - 1) & ~(FLASH_SECTOR_ERASE_SIZE - 1));
+            uint32_t batch_size = calculate_chunk_size(mem_range.len());
             bool ok = true;
             vector<uint8_t> file_buf;
             vector<uint8_t> device_buf;
@@ -4649,7 +4656,7 @@ bool load_guts(picoboot::connection con, iostream_memory_access &file_access) {
             bool ok = true;
             {
                 progress_bar bar("Verifying " + memory_names[type] + ": ");
-                uint32_t batch_size = std::max(mem_range.len() / 100, FLASH_SECTOR_ERASE_SIZE);
+                uint32_t batch_size = calculate_chunk_size(mem_range.len());
                 vector<uint8_t> file_buf;
                 vector<uint8_t> device_buf;
                 uint32_t pos = mem_range.from;
@@ -5284,7 +5291,7 @@ bool verify_command::execute(device_map &devices) {
                     progress_bar bar("Verifying " + memory_names[t1] + ": ");
                     vector<uint8_t> file_buf;
                     vector<uint8_t> device_buf;
-                    uint32_t batch_size = std::max(mem_range.len() / 100, FLASH_SECTOR_ERASE_SIZE);
+                    uint32_t batch_size = calculate_chunk_size(mem_range.len());
                     for(uint32_t base = mem_range.from; base < mem_range.to && ok; base += batch_size) {
                         uint32_t this_batch = std::min(mem_range.to - base, batch_size);
                         // note we pass zero_fill = true in case the file has holes, but this does
