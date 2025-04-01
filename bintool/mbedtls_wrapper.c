@@ -175,7 +175,11 @@ void mb_sign_sha256(const uint8_t *entropy, size_t entropy_size, const message_d
 
     DEBUG_LOG(" ok (key size: %d bits)\n", (int) ctx_sign.grp.pbits);
 
+#if MBEDTLS_VERSION_MAJOR == 2
     ret = mbedtls_ecp_check_pub_priv(&ctx_sign, &ctx_sign);
+#else
+    ret = mbedtls_ecp_check_pub_priv(&ctx_sign, &ctx_sign, mbedtls_ctr_drbg_random, &ctr_drbg);
+#endif
     DEBUG_LOG("Pub Priv Returned %d\n", ret);
 
     dump_pubkey("  + Public key: ", &ctx_sign);
@@ -187,7 +191,11 @@ void mb_sign_sha256(const uint8_t *entropy, size_t entropy_size, const message_d
 
     if ((ret = mbedtls_ecdsa_write_signature(&ctx_sign, MBEDTLS_MD_SHA256,
                                              m->bytes, sizeof(m->bytes),
-                                             out->der, &out->der_len,
+                                             out->der,
+                                             #if MBEDTLS_VERSION_MAJOR >= 3
+                                             sizeof(out->der),
+                                             #endif
+                                             &out->der_len,
                                              mbedtls_ctr_drbg_random, &ctr_drbg)) != 0) {
         DEBUG_LOG(" failed\n  ! mbedtls_ecdsa_write_signature returned %d\n", ret);
         return;

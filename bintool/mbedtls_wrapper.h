@@ -4,6 +4,7 @@ extern "C" {
 #endif
 
 #undef MBEDTLS_ECDSA_DETERMINISTIC
+#define MBEDTLS_ALLOW_PRIVATE_ACCESS
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -16,6 +17,7 @@ extern "C" {
 #include <mbedtls/pk.h>
 #include <mbedtls/ecp.h>
 #include <mbedtls/aes.h>
+#include <mbedtls/version.h>
 
 #ifdef __cplusplus
 #define _Static_assert static_assert

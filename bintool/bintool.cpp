@@ -50,7 +50,15 @@ int read_keys(const std::string &filename, public_t *public_key, private_t *priv
     int rc;
 
     mbedtls_pk_init(&pk_ctx);
+#if MBEDTLS_VERSION_MAJOR == 2
     rc = mbedtls_pk_parse_keyfile(&pk_ctx, filename.c_str(), NULL);
+#else
+    // This rng is only used for blinding when reading the key file
+    // As this should only be done on a secure computer, blinding is not required, so it's fine to not actually seed it with any entropy
+    mbedtls_ctr_drbg_context ctr_drbg;
+    mbedtls_ctr_drbg_init(&ctr_drbg);
+    rc = mbedtls_pk_parse_keyfile(&pk_ctx, filename.c_str(), NULL, mbedtls_ctr_drbg_random, &ctr_drbg);
+#endif
     if (rc != 0) {
         char error_string[128];
         mbedtls_strerror(rc, error_string, sizeof(error_string));
