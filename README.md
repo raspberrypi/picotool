@@ -112,9 +112,12 @@ SYNOPSIS:
     picotool info [-b] [-m] [-p] [-d] [--debug] [-l] [-a] <filename> [-t <type>]
     picotool config [-s <key> <value>] [-g <group>] [device-selection]
     picotool config [-s <key> <value>] [-g <group>] <filename> [-t <type>]
-    picotool load [--ignore-partitions] [--family <family_id>] [-p <partition>] [-n] [-N] [-u] [-v] [-x] <filename> [-t <type>] [-o <offset>] [device-selection]
-    picotool encrypt [--quiet] [--verbose] [--hash] [--sign] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] <aes_key> [-t <type>] [<signing_key>] [-t <type>]
-    picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] [<key>] [-t <type>] [<otp>] [-t <type>] [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
+    picotool load [--ignore-partitions] [--family <family_id>] [-p <partition>] [-n] [-N] [-u] [-v] [-x] <filename> [-t <type>] [-o
+                <offset>] [device-selection]
+    picotool encrypt [--quiet] [--verbose] [--hash] [--sign] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] <aes_key> [-t <type>]
+                [<signing_key>] [-t <type>]
+    picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] [<key>] [-t
+                <type>] [<otp>] [-t <type>] [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
     picotool link [--quiet] [--verbose] <outfile> [-t <type>] <infile1> [-t <type>] <infile2> [-t <type>] [<infile3>] [-t <type>] [-p] <pad>
     picotool save [-p] [-v] [--family <family_id>] [device-selection]
     picotool save -a [-v] [--family <family_id>] [device-selection]
@@ -460,7 +463,7 @@ OPTIONS:
         --family
             Specify the family ID to save the file as
         <family_id>
-            family id to save file as
+            family ID to save file as
     Source device selection
         --bus <bus>
             Filter devices by USB bus number
@@ -523,7 +526,7 @@ ERASE:
 
 SYNOPSIS:
     picotool erase [-a] [device-selection]
-    picotool erase [-p <partition>] [device-selection]
+    picotool erase -p <partition> [device-selection]
     picotool erase -r <from> <to> [device-selection]
 
 OPTIONS:
@@ -738,10 +741,29 @@ PARTITION INFO:
     Print the device's partition table.
 
 SYNOPSIS:
-    picotool partition info -m <family_id> [device-selection]
+    picotool partition info [-m <family_id>] [device-selection]
 
 OPTIONS:
-        -m <family_id> [device-selection]
+        -m <family_id>
+            family ID (will show target partition for said family)
+    Target device selection
+        --bus <bus>
+            Filter devices by USB bus number
+        --address <addr>
+            Filter devices by USB device address
+        --vid <vid>
+            Filter by vendor id
+        --pid <pid>
+            Filter by product id
+        --ser <ser>
+            Filter by serial number
+        -f, --force
+            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
+            command (unless the command itself is a 'reboot') the device will be rebooted back to application mode
+        -F, --force-no-reboot
+            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
+            command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
+            RPI-RP2 drive mounted
 ```
 
 ```text
@@ -899,7 +921,6 @@ OPTIONS:
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
             RPI-RP2 drive mounted
-
 ```
 
 ## otp
@@ -933,7 +954,6 @@ SUB COMMANDS:
     dump          Dump entire OTP (RP2350 only)
     permissions   Set the OTP access permissions (RP2350 only)
     white-label   Set the white labelling values in OTP (RP2350 only)
-
 ```
 
 ### set/get
@@ -988,7 +1008,6 @@ OPTIONS:
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
             RPI-RP2 drive mounted
-
 ```
 
 ```text
