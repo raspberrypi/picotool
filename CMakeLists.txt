@@ -293,6 +293,10 @@ else()
         ${LIBUSB_LIBRARIES})
 endif()
 
+if (GENERATE_FIXED_DOCS_WIDTH)
+    target_compile_definitions(picotool PRIVATE DOCS_WIDTH=140)
+endif()
+
 # allow `make install`
 install(TARGETS picotool
     EXPORT picotool-targets

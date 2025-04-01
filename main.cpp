@@ -7874,7 +7874,10 @@ static void sleep_ms(int ms) {
 }
 
 void get_terminal_size(int& width, int& height) {
-#if defined(_WIN32)
+#if defined(DOCS_WIDTH)
+    width = DOCS_WIDTH;
+    height = 24;
+#elif defined(_WIN32)
     CONSOLE_SCREEN_BUFFER_INFO csbi;
     GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
     width = (int)(csbi.dwSize.X);
