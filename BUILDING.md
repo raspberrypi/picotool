@@ -8,7 +8,7 @@ git submodule update --init lib/mbedtls
 
 You also need to install `libusb-1.0` if you want to use the USB functionality.
 
-> If libusb-1.0 is not installed, picotool still builds, but it omits all options that deal with managing a pico via USB (load, save, erase, verify, reboot). Builds that do not include USB support can be recognized because these commands also do not appear in the help command. The build output message 'libUSB is not found - no USB support will be built' also appears in the build logs.
+> If libusb-1.0 is not installed, picotool still builds, but it omits all options that deal with managing a pico via USB (load, save, erase, verify, reboot). Builds that do not include USB support can be recognized because these commands won't appear in the output of the help command. The build output message 'libUSB is not found - no USB support will be built' also appears in the build logs.
 
 ### Linux / macOS
 
