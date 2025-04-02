@@ -576,7 +576,7 @@ OPTIONS:
 
 ## encrypt
 
-`encrypt` allows you to encrypt and sign a binary for use on the RP2350. By default, it will sign the encrypted binary, but that can be configured similarly to `picotool sign`.
+`encrypt` allows you to encrypt and sign a binary for use on the RP2350. By default, it will sign the encrypted binary, but that can be configured similarly to `picotool seal`.
 
 The encrypted binary will have the following structure:
 
@@ -850,10 +850,10 @@ These commands will set/get specific rows of OTP. By default, they will write/re
 
 ### load
 
-This command allows loading of a range of OTP rows onto the device. The source can be a binary file, or a JSON file such as the one output by `picotool sign`. The schema for this JSON file is [here](json/schemas/otp-schema.json)
+This command allows loading of a range of OTP rows onto the device. The source can be a binary file, or a JSON file such as the one output by `picotool seal`. The schema for this JSON file is [here](json/schemas/otp-schema.json)
 For example, if you wish to sign a binary and then test secure boot with it, you can run the following set of commands:
 ```text
-$ picotool sign hello_world.elf hello_world.signed.elf private.pem otp.json
+$ picotool seal --sign hello_world.elf hello_world.signed.elf private.pem otp.json
 $ picotool load hello_world.signed.elf
 $ picotool otp load otp.json
 $ picotool reboot
