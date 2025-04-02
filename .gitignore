@@ -3,3 +3,8 @@ bazel-*
 
 # Ignore until https://github.com/bazelbuild/bazel/issues/20369 is fixed.
 MODULE.bazel.lock
+
+# Pico SDK expects ${PICOTOOL_FETCH_FROM_GIT_PATH}/picotool and
+#    cmake -DCMAKE_INSTALL_PREFIX=. -DPICOTOOL_FLAT_INSTALL=1 ...
+# i.e. the files get installed under ./picotool/.
+/picotool/*
