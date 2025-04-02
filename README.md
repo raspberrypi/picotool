@@ -59,7 +59,7 @@ Note commands that aren't acting on files require a device in BOOTSEL mode to be
 
 ## Building & Installing
 
-If you don't want to build picotool yourself, you can find pre-built executables for Windows, macOS, and Linux in the [pico-sdk-tools](https://github.com/raspberrypi/pico-sdk-tools/releases) repository. Assuming you've extracted that archive to `$EXTRACT_LOCATION` (with the actual picotool executable at `$EXTRACT_LOCATION/picotool/picotool`), you can point the Pico SDK at this binary by setting the `picotool_DIR` environment variable to `$EXTRACT_LOCATION/picotool`, or by passing `-Dpicotool_DIR=$EXTRACT_LOCATION/picotool` to your `cmake` command or setting it in your `CMakeLists.txt` file.
+If you don't want to build picotool yourself, you can find pre-built executables for Windows, macOS, and Linux in the [pico-sdk-tools](https://github.com/raspberrypi/pico-sdk-tools/releases) repository. Assuming you've extracted that archive to `<extract_location>` (with the actual picotool executable at `<extract_location>/picotool/picotool`), you can point the Pico SDK at this binary by setting the `picotool_DIR` environment variable to `<extract_location>/picotool`, or by passing `-Dpicotool_DIR=<extract_location>/picotool` to your `cmake` command or setting it in your `CMakeLists.txt` file.
 
 If you do wish to build picotool yourself, then see [Building](BUILDING.md#building) for build instructions. For the Pico SDK to find your picotool you will need to install it, the simplest way being to run `cmake --install .` - see [Installing](BUILDING.md#installing-so-the-pico-sdk-can-find-it) for more details and alternatives. **You cannot just copy the binary into your `PATH`, else the Pico SDK will not be able to locate it.**
 
