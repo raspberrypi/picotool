@@ -1,103 +1,3 @@
-## Building
-
-> If you don't need to build picotool yourself, you can find pre-built binaries for Windows, macOS, and Linux in the [pico-sdk-tools](https://github.com/raspberrypi/pico-sdk-tools/releases) repository
-
-You need to set PICO_SDK_PATH in the environment, or pass it to cmake with `-DPICO_SDK_PATH=/path/to/pico-sdk`. To use features such as signing or hashing, you will need to make sure the mbedtls submodule in the SDK is checked out - this can be done by running this from your SDK directory.
-
-```console
-git submodule update --init lib/mbedtls
-```
-
-You also need to install `libusb-1.0`.
-
-### Linux / macOS
-
-Use your favorite package tool to install dependencies. For example, on Ubuntu:
-
-```console
-sudo apt install build-essential pkg-config libusb-1.0-0-dev cmake
-```
-
-> If libusb-1.0-0-dev is not installed, picotool still builds, but it omits all options that deal with managing a pico via USB (load, save, erase, verify, reboot). Builds that do not include USB support can be recognized because these commands also do not appear in the help command. The build output message 'libUSB is not found - no USB support will be built' also appears in the build logs.
-
-Then simply build like a normal CMake project:
-
-```console
-mkdir build
-cd build
-cmake ..
-make
-```
-
-On Linux you can add udev rules in order to run picotool without sudo:
-
-```console
-sudo cp udev/99-picotool.rules /etc/udev/rules.d/
-```
-
-### Windows
-
-##### For Windows without MinGW
-
-Download libUSB from here https://libusb.info/
-
-set LIBUSB_ROOT environment variable to the install directory.
-```console
-mkdir build
-cd build
-cmake -G "NMake Makefiles" ..
-nmake
-```
-
-##### For Windows with MinGW in WSL
-
-Download libUSB from here https://libusb.info/
-
-set LIBUSB_ROOT environment variable to the install directory.
-
-```console
-mkdir build
-cd build
-cmake ..
-make
-```
-
-##### For Windows with MinGW in MSYS2:
-
-No need to download libusb separately or set `LIBUSB_ROOT`.
-
-```console
-pacman -S $MINGW_PACKAGE_PREFIX-{toolchain,cmake,libusb}
-mkdir build
-cd build
-cmake .. -DCMAKE_INSTALL_PREFIX=$MINGW_PREFIX
-cmake --build .
-```
-
-## Usage by the Raspberry Pi Pico SDK
-
-The Raspberry Pi Pico SDK ([pico-sdk](https://github.com/raspberrypi/pico-sdk)) version 2.0.0 and above uses `picotool` to do the ELF-to-UF2 conversion previously handled by the `elf2uf2` tool in the SDK. The SDK also uses `picotool` to hash and sign binaries.
-
-Whilst the SDK can download picotool on its own per project, if you have multiple projects or build configurations, it is preferable to install a single copy of `picotool` locally. This can be done most simply with `make install` or `cmake --install .`, using `sudo` if required; the SDK will use this installed version by default.
-
-> On some Linux systems, the `~/.local` prefix may be used for an install without `sudo`; from your build directory simply run
-> ```console
-> cmake -DCMAKE_INSTALL_PREFIX=~/.local ..
-> make install
-> ```
-> This will only work if `~/.local/bin` is included in your `PATH`
-
-Alternatively, you can install to a custom path via:
-
-```console
-cmake -DCMAKE_INSTALL_PREFIX=$MY_INSTALL_DIR -DPICOTOOL_FLAT_INSTALL=1 ..
-make install
-```
-
-In order for the SDK to find `picotool` in this custom folder, you will usually need to set the `picotool_DIR` variable in your project. This can be achieved either by setting the `picotool_DIR` environment variable to `$MY_INSTALL_DIR/picotool`, by passing `-Dpicotool_DIR=$MY_INSTALL_DIR/picotool` to your `cmake` command, or by adding `set(picotool_DIR $MY_INSTALL_DIR/picotool)` to your CMakeLists.txt file.
-
-> See the [find_package documentation](https://cmake.org/cmake/help/latest/command/find_package.html#config-mode-search-procedure) for more details
-
 ## Overview
 
 `picotool` is a tool for working with RP2040/RP2350 binaries, and interacting with RP2040/RP2350 devices when they are in BOOTSEL mode. (As of version 1.1 of `picotool` it is also possible to interact with devices that are not in BOOTSEL mode, but are using USB stdio support from the Raspberry Pi Pico SDK by using the `-f` argument of `picotool`).
@@ -156,6 +56,12 @@ Use "picotool help <cmd>" for more info
 ```
 
 Note commands that aren't acting on files require a device in BOOTSEL mode to be connected.
+
+## Building & Installing
+
+If you don't want to build picotool yourself, you can find pre-built executables for Windows, macOS, and Linux in the [pico-sdk-tools](https://github.com/raspberrypi/pico-sdk-tools/releases) repository. Assuming you've unzipped that directory to `$PICOTOOL_LOC` (with the actual picotool executable at `$PICOTOOL_LOC/picotool/picotool`), you can point the Pico SDK at this binary by setting the `picotool_DIR` environment variable to `$PICOTOOL_LOC/picotool`, or by passing `-Dpicotool_DIR=$PICOTOOL_LOC/picotool` to your `cmake` command or setting it in your `CMakeLists.txt` file.
+
+If you do wish to build picotool yourself, then see [Building](BUILDING.md#building) for build instructions. For the Pico SDK to find your picotool you will need to install it, the simplest way being to run `cmake --install .` - see [Installing](BUILDING.md#installing-so-the-pico-sdk-can-find-it) for more details and alternatives. **You cannot just copy the binary into your `PATH`, else the Pico SDK will not be able to locate it.**
 
 ## info
 
