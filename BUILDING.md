@@ -8,6 +8,8 @@ git submodule update --init lib/mbedtls
 
 You also need to install `libusb-1.0` if you want to use the USB functionality.
 
+> If libusb-1.0 is not installed, picotool still builds, but it omits all options that deal with managing a pico via USB (load, save, erase, verify, reboot). Builds that do not include USB support can be recognized because these commands also do not appear in the help command. The build output message 'libUSB is not found - no USB support will be built' also appears in the build logs.
+
 ### Linux / macOS
 
 Use your favorite package tool to install dependencies. For example, on Ubuntu:
@@ -15,8 +17,6 @@ Use your favorite package tool to install dependencies. For example, on Ubuntu:
 ```console
 sudo apt install build-essential pkg-config libusb-1.0-0-dev cmake
 ```
-
-> If libusb-1.0-0-dev is not installed, picotool still builds, but it omits all options that deal with managing a pico via USB (load, save, erase, verify, reboot). Builds that do not include USB support can be recognized because these commands also do not appear in the help command. The build output message 'libUSB is not found - no USB support will be built' also appears in the build logs.
 
 Then simply build like a normal CMake project:
 
@@ -39,7 +39,7 @@ sudo cp udev/99-picotool.rules /etc/udev/rules.d/
 
 Download libUSB from here https://libusb.info/
 
-set LIBUSB_ROOT environment variable to the install directory.
+Set LIBUSB_ROOT environment variable to the install directory.
 ```console
 mkdir build
 cd build
@@ -51,7 +51,7 @@ nmake
 
 Download libUSB from here https://libusb.info/
 
-set LIBUSB_ROOT environment variable to the install directory.
+Set LIBUSB_ROOT environment variable to the install directory.
 
 ```console
 mkdir build
