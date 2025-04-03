@@ -14,7 +14,7 @@ jobs:
 
       - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt install cmake ninja-build python3 build-essential gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib libusb-1.0-0-dev
+        run: sudo apt install cmake ninja-build python3 build-essential libusb-1.0-0-dev
 
       - name: Checkout Pico SDK
         uses: actions/checkout@v4
