@@ -43,6 +43,7 @@ public:
     const std::string section_name(uint32_t sh_name) const;
     const elf32_ph_entry* segment_from_physical_address(uint32_t paddr);
     const elf32_ph_entry* segment_from_virtual_address(uint32_t vaddr);
+    const elf32_ph_entry* segment_from_section(const elf32_sh_entry &sh);
     void dump(void) const;
 
     void move_all(int dist);
