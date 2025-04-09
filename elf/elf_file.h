@@ -47,6 +47,7 @@ public:
     void dump(void) const;
 
     void move_all(int dist);
+    void remove_sh_holes(void);
 
     static std::vector<uint8_t> read_binfile(std::shared_ptr<std::iostream> file);
 
@@ -55,7 +56,6 @@ private:
     int read_header(void);
     void read_ph(void);
     void read_sh(void);
-    void remove_sh_holes(void);
     void read_sh_data(void);
     void read_bytes(unsigned offset, unsigned length, void *dest);
     uint32_t append_section_name(const std::string &sh_name_str);

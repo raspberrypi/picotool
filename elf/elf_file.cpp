@@ -399,8 +399,6 @@ int elf_file::read_file(std::shared_ptr<std::iostream> file) {
             read_sh();
         }
         read_sh_data();
-        // Remove any holes in the ELF file, as these cause issues when signing/hashing/encrypting
-        remove_sh_holes();
     }
     catch (const std::ios_base::failure &e) {
         std::cerr << "Failed to read elf file" << std::endl;
