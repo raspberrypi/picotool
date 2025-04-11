@@ -131,6 +131,10 @@ if(EXISTS "${PICO_SDK_PATH}/lib/mbedtls/CMakeLists.txt")
     # Create library
     add_library(mbedtls STATIC ${src_crypto})
 
+    if(WIN32)
+        target_link_libraries(mbedtls ws2_32 bcrypt)
+    endif(WIN32)
+
     target_compile_definitions(mbedtls PUBLIC MBEDTLS_CONFIG_FILE="picotool_mbedtls_config.h")
     target_include_directories(mbedtls SYSTEM PUBLIC ${PICO_MBEDTLS_PATH}/include)
     target_include_directories(mbedtls PUBLIC ${CMAKE_CURRENT_LIST_DIR}/include)
