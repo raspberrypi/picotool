@@ -4199,19 +4199,6 @@
 
 /** \} name SECTION: Module configuration options */
 
-/* Target and application specific configurations
- *
- * Allow user to override any previous default.
- *
- */
-#if defined(MBEDTLS_USER_CONFIG_FILE)
-#include MBEDTLS_USER_CONFIG_FILE
-#endif
-
-#if defined(MBEDTLS_PSA_CRYPTO_CONFIG)
-#include "mbedtls/config_psa.h"
-#endif
-
-#include "mbedtls/check_config.h"
+#include <limits.h>
 
 #endif /* MBEDTLS_CONFIG_H */

@@ -203,11 +203,6 @@ add_subdirectory(picoboot_connection)
 add_subdirectory(elf)
 add_subdirectory(elf2uf2)
 
-# To configure mbedtls
-# todo make the configuration better
-set(MBEDTLS_CONFIG_FILE "mbedtls_config.h")
-add_compile_options(-I${CMAKE_SOURCE_DIR}/lib/include)
-
 add_subdirectory(lib)
 
 add_subdirectory(bintool)
