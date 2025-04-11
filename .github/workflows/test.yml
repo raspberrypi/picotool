@@ -48,8 +48,8 @@ jobs:
       - name: Checkout Pico SDK
         uses: actions/checkout@v4
         with:
-          repository: raspberrypi/pico-sdk
-          ref: develop
+          repository: peterharperuk/pico-sdk
+          ref: update_stuff
           path: pico-sdk
           submodules: ${{ !(!matrix.mbedtls) }}
 
