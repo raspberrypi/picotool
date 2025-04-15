@@ -524,7 +524,7 @@ auto device_selection =
         (option("--pid") & integer("pid").set(settings.pid)) % "Filter by product id" +
         (option("--ser") & value("ser").set(settings.ser)) % "Filter by serial number"
         + option('f', "--force").set(settings.force) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode" +
-                option('F', "--force-no-reboot").set(settings.force_no_reboot) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the RPI-RP2 drive mounted"
+                option('F', "--force-no-reboot").set(settings.force_no_reboot) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the USB drive mounted"
     ).min(0).doc_non_optional(true).collapse_synopsys("device-selection");
 
 #define file_types_x(i)\
@@ -668,7 +668,6 @@ struct verify_command : public cmd {
 
     group get_cli() override {
         return (
-            device_selection % "Target device selection" +
             file_selection % "The file to compare against" +
             (
                 (option('r', "--range").set(settings.range_set) % "Compare a sub range of memory only" &
@@ -676,7 +675,8 @@ struct verify_command : public cmd {
                     hex("to").set(settings.to) % "The upper address bound in hex").force_expand_help(true) +
                 (option('o', "--offset").set(settings.offset_set) % "Specify the load address when comparing with a BIN file" &
                     hex("offset").set(settings.offset) % "Load offset (memory address; default 0x10000000)").force_expand_help(true)
-           ).min(0).doc_non_optional(true) % "Address options"
+            ).min(0).doc_non_optional(true) % "Address options" +
+            device_selection % "Target device selection"
         );
     }
 
@@ -704,8 +704,8 @@ struct save_command : public cmd {
             (option("--family") % "Specify the family ID to save the file as" &
                 family_id("family_id").set(settings.family_id) % "family ID to save file as").force_expand_help(true) +
             ( // note this parenthesis seems to help with error messages for say save --foo
-                device_selection % "Source device selection" +
-                file_selection % "File to save to"
+                file_selection % "File to save to" +
+                device_selection % "Source device selection"
             )
         );
     }
@@ -965,12 +965,12 @@ struct otp_list_command : public cmd {
                         "ROW_NAME to select a whole row by name.\n" \
                         "ROW_NUMBER to select a whole row by number.\n" \
                         "PAGE:PAGE_ROW_NUMBER to select a whole row by page and number within page.\n\n" \
-                        "... or can select a single field/subset of a row (where REG_SEL is one of the above row selectors):\n\n"
-                         "REG_SEL.FIELD_NAME to select a field within a row by name.\n" \
-                        "REG_SEL.n-m to select a range of bits within a row.\n" \
-                        "REG_SEL.n to select a single bit within a row.\n" \
+                        "... or can select a single field/subset of a row (where ROW_SEL is one of the above row selectors):\n\n"
+                         "ROW_SEL.FIELD_NAME to select a field within a row by name.\n" \
+                        "ROW_SEL.n-m to select a range of bits within a row.\n" \
+                        "ROW_SEL.n to select a single bit within a row.\n" \
                         ".FIELD_NAME to select any row's field by name.\n\n" \
-                        ".. or can selected multiple rows by using blank or '*' for PAGE or PAGE_ROW_NUMBER").repeatable().min(0)
+                        ".. or can select multiple rows by using blank or '*' for PAGE or PAGE_ROW_NUMBER").repeatable().min(0)
                 ) % "Row/Field Selection"
         );
     }
@@ -989,7 +989,7 @@ struct otp_get_command : public cmd {
         return (
                 (
                         (option('c', "--copies") & integer("copies").min(1).set(settings.otp.redundancy)) % "Read multiple redundant values" +
-                        option('r', "--raw").set(settings.otp.raw) % "Get raw 24 bit values" +
+                        option('r', "--raw").set(settings.otp.raw) % "Get raw 24-bit values" +
                         option('e', "--ecc").set(settings.otp.ecc) % "Use error correction" +
                         option('n', "--no-descriptions").set(settings.otp.list_no_descriptions) % "Don't show descriptions" +
                         (option('i', "--include") & value("filename").add_to(settings.otp.extra_files)).min(0).max(1) % "Include extra otp definition" // todo more than 1
@@ -1004,12 +1004,12 @@ struct otp_get_command : public cmd {
                         "ROW_NAME to select a whole row by name.\n" \
                         "ROW_NUMBER to select a whole row by number.\n" \
                         "PAGE:PAGE_ROW_NUMBER to select a whole row by page and number within page.\n\n" \
-                        "... or can select a single field/subset of a row (where REG_SEL is one of the above row selectors):\n\n"
-                         "REG_SEL.FIELD_NAME to select a field within a row by name.\n" \
-                        "REG_SEL.n-m to select a range of bits within a row.\n" \
-                        "REG_SEL.n to select a single bit within a row.\n" \
+                        "... or can select a single field/subset of a row (where ROW_SEL is one of the above row selectors):\n\n"
+                         "ROW_SEL.FIELD_NAME to select a field within a row by name.\n" \
+                        "ROW_SEL.n-m to select a range of bits within a row.\n" \
+                        "ROW_SEL.n to select a single bit within a row.\n" \
                         ".FIELD_NAME to select any row's field by name.\n\n" \
-                        ".. or can selected multiple rows by using blank or '*' for PAGE or PAGE_ROW_NUMBER").repeatable().min(0)
+                        ".. or can select multiple rows by using blank or '*' for PAGE or PAGE_ROW_NUMBER").repeatable().min(0)
                 ) % "Row/Field Selection"
         );
     }
@@ -1028,7 +1028,7 @@ struct otp_dump_command : public cmd {
     group get_cli() override {
         return (
                 (
-                        option('r', "--raw").set(settings.otp.raw) % "Get raw 24 bit values" +
+                        option('r', "--raw").set(settings.otp.raw) % "Get raw 24-bit values. This is the default" +
                         option('e', "--ecc").set(settings.otp.ecc) % "Use error correction"
                 ).min(0).doc_non_optional(true) % "Row/field options" +
                 (
@@ -1050,7 +1050,7 @@ struct otp_load_command : public cmd {
     group get_cli() override {
         return (
                 (
-                        option('r', "--raw").set(settings.otp.raw) % "Get raw 24 bit values" +
+                        option('r', "--raw").set(settings.otp.raw) % "Set raw 24-bit values. This is the default for BIN files" +
                         option('e', "--ecc").set(settings.otp.ecc) % "Use error correction" +
                         (option('s', "--start_row") & integer("row").set(settings.otp.row)) % "Start row to load at (note use 0x for hex)" +
                         (option('i', "--include") & value("filename").add_to(settings.otp.extra_files)).min(0).max(1) % "Include extra otp definition" // todo more than 1
@@ -1061,7 +1061,7 @@ struct otp_load_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Load the row range stored in a file into OTP and verify. Data is 2 bytes/row for ECC, 4 bytes/row for raw.";
+        return "Load the row range stored in a file into OTP and verify. Data is 2 bytes/row for ECC, 4 bytes/row for raw (MSB is ignored).";
     }
 };
 
@@ -1075,7 +1075,7 @@ struct otp_set_command : public cmd {
         return (
                 (
                         (option('c', "--copies") & integer("copies").min(1).set(settings.otp.redundancy)) % "Read multiple redundant values" +
-                        option('r', "--raw").set(settings.otp.raw) % "Set raw 24 bit values" +
+                        option('r', "--raw").set(settings.otp.raw) % "Set raw 24-bit values" +
                         option('e', "--ecc").set(settings.otp.ecc) % "Use error correction" +
                         option('s', "--set-bits").set(settings.otp.ignore_set) % "Set bits only" +
                         (option('i', "--include") & value("filename").add_to(settings.otp.extra_files)).min(0).max(1) % "Include extra otp definition" // todo more than 1
@@ -1083,10 +1083,15 @@ struct otp_set_command : public cmd {
                 (
                         option('z', "--fuzzy").set(settings.otp.fuzzy) % "Allow fuzzy name searches in selector vs exact match" +
                         (value("selector").add_to(settings.otp.selectors) %
-                        "The row/field selector, which can be:\nROW_NAME or ROW_NUMBER or PAGE:PAGE_ROW_NUMBER to select a whole row.\n"
-                        "FIELD, REG.FIELD, REG.n-m, PAGE:PAGE_ROW_NUMBER.FIELD or PAGE:PAGE_ROW_NUMBER.n-m to select a row field.\n\n"
-                        "where:\n\nREG and FIELD are names (or parts of names with fuzzy searches).\nPAGE and PAGE_ROW_NUMBER are page numbers and row within a page, "
-                        "ROW_NUMBER is an absolute row number offset, and n-m are the inclusive bit ranges of a field.")
+                        "The row/field selector, which can select a whole row:\n\n" \
+                        "ROW_NAME to select a whole row by name.\n" \
+                        "ROW_NUMBER to select a whole row by number.\n" \
+                        "PAGE:PAGE_ROW_NUMBER to select a whole row by page and number within page.\n\n" \
+                        "... or can select a single field/subset of a row (where ROW_SEL is one of the above row selectors):\n\n"
+                         "ROW_SEL.FIELD_NAME to select a field within a row by name.\n" \
+                        "ROW_SEL.n-m to select a range of bits within a row.\n" \
+                        "ROW_SEL.n to select a single bit within a row.\n" \
+                        ".FIELD_NAME to select any row's field by name.")
                 ) % "Row/Field Selection" +
                 integer("value").set(settings.otp.value) % "The value to set" +
                 (

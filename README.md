@@ -119,13 +119,13 @@ SYNOPSIS:
     picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] [<key>] [-t
                 <type>] [<otp>] [-t <type>] [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
     picotool link [--quiet] [--verbose] <outfile> [-t <type>] <infile1> [-t <type>] <infile2> [-t <type>] [<infile3>] [-t <type>] [-p] <pad>
-    picotool save [-p] [-v] [--family <family_id>] [device-selection]
-    picotool save -a [-v] [--family <family_id>] [device-selection]
-    picotool save -r <from> <to> [-v] [--family <family_id>] [device-selection]
+    picotool save [-p] [-v] [--family <family_id>] <filename> [-t <type>] [device-selection]
+    picotool save -a [-v] [--family <family_id>] <filename> [-t <type>] [device-selection]
+    picotool save -r <from> <to> [-v] [--family <family_id>] <filename> [-t <type>] [device-selection]
     picotool erase [-a] [device-selection]
     picotool erase -p <partition> [device-selection]
     picotool erase -r <from> <to> [device-selection]
-    picotool verify [device-selection]
+    picotool verify <filename> [-t <type>] [device-selection] [-r <from> <to>] [-o <offset>] [device-selection]
     picotool reboot [-a] [-u] [-g <partition>] [-c <cpu>] [device-selection]
     picotool otp list|get|set|load|dump|permissions|white-label
     picotool partition info|create
@@ -211,7 +211,7 @@ TARGET SELECTION:
         -F, --force-no-reboot
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
-            RPI-RP2 drive mounted
+            USB drive mounted
     To target a file
         <filename>
             The file name
@@ -319,7 +319,7 @@ TARGET SELECTION:
         -F, --force-no-reboot
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
-            RPI-RP2 drive mounted
+            USB drive mounted
     To target a file
         <filename>
             The file name
@@ -420,7 +420,7 @@ OPTIONS:
         -F, --force-no-reboot
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
-            RPI-RP2 drive mounted
+            USB drive mounted
 ```
 
 e.g.
@@ -440,9 +440,9 @@ SAVE:
     Save the program / memory stored in flash on the device to a file.
 
 SYNOPSIS:
-    picotool save [-p] [-v] [--family <family_id>] [device-selection]
-    picotool save -a [-v] [--family <family_id>] [device-selection]
-    picotool save -r <from> <to> [-v] [--family <family_id>] [device-selection]
+    picotool save [-p] [-v] [--family <family_id>] <filename> [-t <type>] [device-selection]
+    picotool save -a [-v] [--family <family_id>] <filename> [-t <type>] [device-selection]
+    picotool save -r <from> <to> [-v] [--family <family_id>] <filename> [-t <type>] [device-selection]
 
 OPTIONS:
     Selection of data to save
@@ -464,6 +464,11 @@ OPTIONS:
             Specify the family ID to save the file as
         <family_id>
             family ID to save file as
+    File to save to
+        <filename>
+            The file name
+        -t <type>
+            Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
     Source device selection
         --bus <bus>
             Filter devices by USB bus number
@@ -481,12 +486,7 @@ OPTIONS:
         -F, --force-no-reboot
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
-            RPI-RP2 drive mounted
-    File to save to
-        <filename>
-            The file name
-        -t <type>
-            Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
+            USB drive mounted
 ```
 
 e.g. first looking at what is on the device...
@@ -516,7 +516,7 @@ web site:  https://github.com/raspberrypi/pico-examples/tree/HEAD/i2c/lcd_1602_i
 
 ## verify
 
-This command allows you to verify the contents of Flash/SRAM on the device matches a file, similar to the `--verify` option for `save` and `load`.
+This command allows you to verify that the contents of Flash/SRAM on the device matches a file, similar to the `--verify` option for `save` and `load`.
 
 ```text
 $ picotool help verify
@@ -524,9 +524,25 @@ VERIFY:
     Check that the device contents match those in the file.
 
 SYNOPSIS:
-    picotool verify [device-selection]
+    picotool verify <filename> [-t <type>] [-r <from> <to>] [-o <offset>] [device-selection]
 
 OPTIONS:
+    The file to compare against
+        <filename>
+            The file name
+        -t <type>
+            Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
+    Address options
+        -r, --range
+            Compare a sub range of memory only
+        <from>
+            The lower address bound in hex
+        <to>
+            The upper address bound in hex
+        -o, --offset
+            Specify the load address when comparing with a BIN file
+        <offset>
+            Load offset (memory address; default 0x10000000)
     Target device selection
         --bus <bus>
             Filter devices by USB bus number
@@ -544,23 +560,7 @@ OPTIONS:
         -F, --force-no-reboot
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
-            RPI-RP2 drive mounted
-    The file to compare against
-        <filename>
-            The file name
-        -t <type>
-            Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
-    Address options
-        -r, --range
-            Compare a sub range of memory only
-        <from>
-            The lower address bound in hex
-        <to>
-            The upper address bound in hex
-        -o, --offset
-            Specify the load address when comparing with a BIN file
-        <offset>
-            Load offset (memory address; default 0x10000000)
+            USB drive mounted
 ```
 
 ## erase
@@ -609,7 +609,7 @@ OPTIONS:
         -F, --force-no-reboot
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
-            RPI-RP2 drive mounted
+            USB drive mounted
 ```
 
 e.g. first looking at what is on the device...
@@ -812,7 +812,7 @@ OPTIONS:
         -F, --force-no-reboot
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
-            RPI-RP2 drive mounted
+            USB drive mounted
 ```
 
 ```text
@@ -969,7 +969,7 @@ OPTIONS:
         -F, --force-no-reboot
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
-            RPI-RP2 drive mounted
+            USB drive mounted
 ```
 
 ## otp
@@ -999,7 +999,8 @@ SUB COMMANDS:
     list          List matching known registers/fields
     get           Get the value of one or more OTP registers/fields (RP2350 only)
     set           Set the value of an OTP row/field (RP2350 only)
-    load          Load the row range stored in a file into OTP and verify. Data is 2 bytes/row for ECC, 4 bytes/row for raw. (RP2350 only)
+    load          Load the row range stored in a file into OTP and verify. Data is 2 bytes/row for ECC, 4 bytes/row for raw (MSB is
+                  ignored). (RP2350 only)
     dump          Dump entire OTP (RP2350 only)
     permissions   Set the OTP access permissions (RP2350 only)
     white-label   Set the white labelling values in OTP (RP2350 only)
@@ -1022,7 +1023,7 @@ OPTIONS:
         -c <copies>
             Read multiple redundant values
         -r, --raw
-            Get raw 24 bit values
+            Get raw 24-bit values
         -e, --ecc
             Use error correction
         -n, --no-descriptions
@@ -1039,14 +1040,14 @@ OPTIONS:
             ROW_NUMBER to select a whole row by number.
             PAGE:PAGE_ROW_NUMBER to select a whole row by page and number within page.
 
-            ... or can select a single field/subset of a row (where REG_SEL is one of the above row selectors):
+            ... or can select a single field/subset of a row (where ROW_SEL is one of the above row selectors):
 
-            REG_SEL.FIELD_NAME to select a field within a row by name.
-            REG_SEL.n-m to select a range of bits within a row.
-            REG_SEL.n to select a single bit within a row.
+            ROW_SEL.FIELD_NAME to select a field within a row by name.
+            ROW_SEL.n-m to select a range of bits within a row.
+            ROW_SEL.n to select a single bit within a row.
             .FIELD_NAME to select any row's field by name.
 
-            .. or can selected multiple rows by using blank or '*' for PAGE or PAGE_ROW_NUMBER
+            .. or can select multiple rows by using blank or '*' for PAGE or PAGE_ROW_NUMBER
 
 TARGET SELECTION:
     Target device selection
@@ -1066,7 +1067,7 @@ TARGET SELECTION:
         -F, --force-no-reboot
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
-            RPI-RP2 drive mounted
+            USB drive mounted
 ```
 
 ```text
@@ -1082,7 +1083,7 @@ OPTIONS:
         -c <copies>
             Read multiple redundant values
         -r, --raw
-            Set raw 24 bit values
+            Set raw 24-bit values
         -e, --ecc
             Use error correction
         -s, --set-bits
@@ -1095,15 +1096,18 @@ OPTIONS:
         -z, --fuzzy
             Allow fuzzy name searches in selector vs exact match
         <selector>
-            The row/field selector, which can be:
-            ROW_NAME or ROW_NUMBER or PAGE:PAGE_ROW_NUMBER to select a whole row.
-            FIELD, REG.FIELD, REG.n-m, PAGE:PAGE_ROW_NUMBER.FIELD or PAGE:PAGE_ROW_NUMBER.n-m to select a row field.
+            The row/field selector, which can select a whole row:
 
-            where:
+            ROW_NAME to select a whole row by name.
+            ROW_NUMBER to select a whole row by number.
+            PAGE:PAGE_ROW_NUMBER to select a whole row by page and number within page.
 
-            REG and FIELD are names (or parts of names with fuzzy searches).
-            PAGE and PAGE_ROW_NUMBER are page numbers and row within a page, ROW_NUMBER is an absolute row number offset, and n-m are the
-            inclusive bit ranges of a field.
+            ... or can select a single field/subset of a row (where ROW_SEL is one of the above row selectors):
+
+            ROW_SEL.FIELD_NAME to select a field within a row by name.
+            ROW_SEL.n-m to select a range of bits within a row.
+            ROW_SEL.n to select a single bit within a row.
+            .FIELD_NAME to select any row's field by name.
 
 TARGET SELECTION:
     Target device selection
@@ -1123,7 +1127,7 @@ TARGET SELECTION:
         -F, --force-no-reboot
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
-            RPI-RP2 drive mounted
+            USB drive mounted
 ```
 
 ### load
@@ -1133,7 +1137,7 @@ This command allows loading of a range of OTP rows onto the device. The source c
 ```text
 $ picotool help otp load
 OTP LOAD:
-    Load the row range stored in a file into OTP and verify. Data is 2 bytes/row for ECC, 4 bytes/row for raw.
+    Load the row range stored in a file into OTP and verify. Data is 2 bytes/row for ECC, 4 bytes/row for raw (MSB is ignored).
 
 SYNOPSIS:
     picotool otp load [-r] [-e] [-s <row>] [-i <filename>] <filename> [-t <type>] [device-selection]
@@ -1141,7 +1145,7 @@ SYNOPSIS:
 OPTIONS:
     Row options
         -r, --raw
-            Get raw 24 bit values
+            Set raw 24-bit values. This is the default for BIN files
         -e, --ecc
             Use error correction
         -s <row>
@@ -1170,7 +1174,7 @@ OPTIONS:
         -F, --force-no-reboot
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
-            RPI-RP2 drive mounted
+            USB drive mounted
 ```
 
 For example, if you wish to sign a binary and then test secure boot with it, you can run the following set of commands:
@@ -1217,7 +1221,7 @@ OPTIONS:
         -F, --force-no-reboot
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
-            RPI-RP2 drive mounted
+            USB drive mounted
 ```
 
 ```text
@@ -1308,7 +1312,7 @@ OPTIONS:
         -F, --force-no-reboot
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
-            RPI-RP2 drive mounted
+            USB drive mounted
 ```
 
 ```text
@@ -1346,7 +1350,7 @@ SYNOPSIS:
 OPTIONS:
     Row/field options
         -r, --raw
-            Get raw 24 bit values
+            Get raw 24-bit values. This is the default
         -e, --ecc
             Use error correction
 
@@ -1368,7 +1372,7 @@ TARGET SELECTION:
         -F, --force-no-reboot
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
-            RPI-RP2 drive mounted
+            USB drive mounted
 ```
 
 ### list
@@ -1400,14 +1404,14 @@ OPTIONS:
             ROW_NUMBER to select a whole row by number.
             PAGE:PAGE_ROW_NUMBER to select a whole row by page and number within page.
 
-            ... or can select a single field/subset of a row (where REG_SEL is one of the above row selectors):
+            ... or can select a single field/subset of a row (where ROW_SEL is one of the above row selectors):
 
-            REG_SEL.FIELD_NAME to select a field within a row by name.
-            REG_SEL.n-m to select a range of bits within a row.
-            REG_SEL.n to select a single bit within a row.
+            ROW_SEL.FIELD_NAME to select a field within a row by name.
+            ROW_SEL.n-m to select a range of bits within a row.
+            ROW_SEL.n to select a single bit within a row.
             .FIELD_NAME to select any row's field by name.
 
-            .. or can selected multiple rows by using blank or '*' for PAGE or PAGE_ROW_NUMBER
+            .. or can select multiple rows by using blank or '*' for PAGE or PAGE_ROW_NUMBER
 ```
 
 ## coprodis
@@ -1441,7 +1445,7 @@ OPTIONS:
 
 ## link
 
-This command is used to link multiple binaries with block loops into a single larger block loop. It can currently link up to 3 files into a block loop. It will add the required Rolling Window Delta items to the new block loop, to ensure that everyting is rolled correctly when being executed. For examples of it's usage, see the universal examples in pico-examples.
+This command is used to link multiple binaries with block loops into a single larger block loop. It can currently link up to 3 files into a block loop. It will add the required Rolling Window Delta items to the new block loop, to ensure that everyting is rolled correctly when being executed. For examples of its usage, see the universal examples in [pico-examples](https://github.com/raspberrypi/pico-examples?tab=readme-ov-file#universal).
 
 ```text
 $ picotool help link
