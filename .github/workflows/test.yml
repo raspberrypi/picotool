@@ -51,7 +51,7 @@ jobs:
           repository: raspberrypi/pico-sdk
           ref: develop
           path: pico-sdk
-          submodules: ${{ !(!matrix.mbedtls) }}
+          submodules: ${{ matrix.mbedtls && 'recursive' || 'false' }}
 
       - name: Build and Install
         run: |
@@ -85,7 +85,7 @@ jobs:
           repository: raspberrypi/pico-sdk
           ref: develop
           path: pico-sdk
-          submodules: 'true'
+          submodules: 'recursive'
       - name: Build and Install
         run: |
           cmake -S . -B build -G "Ninja" -D PICO_SDK_PATH="${{ github.workspace }}/pico-sdk"
