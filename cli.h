@@ -19,6 +19,7 @@
 #include <numeric>
 #include <sstream>
 #include <limits>
+#include <cstdint>
 
 /**
  * Note this is a hastily hacked together command line parser.
