@@ -30,7 +30,7 @@ make
 On Linux you can add udev rules in order to run picotool without sudo:
 
 ```console
-sudo cp udev/99-picotool.rules /etc/udev/rules.d/
+sudo cp udev/60-picotool.rules /etc/udev/rules.d/
 ```
 
 ### Windows
