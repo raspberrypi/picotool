@@ -20,10 +20,20 @@ add_subdirectory(nlohmann_json EXCLUDE_FROM_ALL)
 
 add_subdirectory(whereami EXCLUDE_FROM_ALL)
 
-if(EXISTS "${PICO_SDK_PATH}/lib/mbedtls/CMakeLists.txt")
-    set(PICO_MBEDTLS_PATH ${PICO_SDK_PATH}/lib/mbedtls)
+# Taken from pico-sdk/src/rp2_common/pico_mbedtls/CMakeLists.txt
+if (DEFINED ENV{PICO_MBEDTLS_PATH} AND (NOT PICO_MBEDTLS_PATH))
+    set(PICO_MBEDTLS_PATH $ENV{PICO_MBEDTLS_PATH})
+    message("Using PICO_MBEDTLS_PATH from environment ('${PICO_MBEDTLS_PATH}')")
+endif()
 
-    # Taken from pico-sdk/src/rp2_common/pico_mbedtls/CMakeLists.txt
+set(MBEDTLS_TEST_PATH "library/aes.c")
+if (NOT PICO_MBEDTLS_PATH)
+    set(PICO_MBEDTLS_PATH ${PICO_SDK_PATH}/lib/mbedtls)
+elseif (NOT EXISTS "${PICO_MBEDTLS_PATH}/${MBEDTLS_TEST_PATH}")
+    message(WARNING "PICO_MBEDTLS_PATH specified but content not present.")
+endif()
+
+if(EXISTS "${PICO_MBEDTLS_PATH}/${MBEDTLS_TEST_PATH}")
     # Support version 2.28.8 or 3.6.2
     if (EXISTS ${PICO_MBEDTLS_PATH}/library/ssl_cli.c)
         set(MBEDTLS_VERSION_MAJOR 2)
