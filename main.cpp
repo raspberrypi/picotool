@@ -3125,6 +3125,10 @@ void info_guts(memory_access &raw_access, void *con) {
                 } else if (image_def->image_type() == type_data) {
                     info_pair("image type", "data");
                 }
+                
+                if (image_def->tbyb()) {
+                    info_pair("tbyb", "not bought");
+                }
             }
 
             // Partition Table
