@@ -20,7 +20,7 @@ SYNOPSIS:
                 [<signing_key>] [-t <type>]
     picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] [<key>] [-t
                 <type>] [<otp>] [-t <type>] [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
-    picotool link [--quiet] [--verbose] <outfile> [-t <type>] <infile1> [-t <type>] <infile2> [-t <type>] [<infile3>] [-t <type>] [-p] <pad>
+    picotool link [--quiet] [--verbose] <outfile> [-t <type>] <infile1> [-t <type>] <infile2> [-t <type>] [<infile3>] [-t <type>] [-p <pad>]
     picotool save [-p] [-v] [--family <family_id>] <filename> [-t <type>] [device-selection]
     picotool save -a [-v] [--family <family_id>] <filename> [-t <type>] [device-selection]
     picotool save -r <from> <to> [-v] [--family <family_id>] <filename> [-t <type>] [device-selection]
@@ -989,7 +989,7 @@ SYNOPSIS:
 OPTIONS:
     Redundancy/Error Correction Overrides
         -c <copies>
-            Read multiple redundant values
+            Write multiple redundant values
         -r, --raw
             Set raw 24-bit values
         -e, --ecc
@@ -1361,14 +1361,14 @@ LINK:
     Link multiple binaries into one block loop.
 
 SYNOPSIS:
-    picotool link [--quiet] [--verbose] <outfile> [-t <type>] <infile1> [-t <type>] <infile2> [-t <type>] [<infile3>] [-t <type>] [-p] <pad>
+    picotool link [--quiet] [--verbose] <outfile> [-t <type>] <infile1> [-t <type>] <infile2> [-t <type>] [<infile3>] [-t <type>] [-p <pad>]
 
 OPTIONS:
         --quiet
             Don't print any output
         --verbose
             Print verbose output
-        <pad>
+        -p <pad>
             Specify alignment to pad to, defaults to 0x1000
     File to write to
         <outfile>

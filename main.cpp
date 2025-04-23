@@ -862,7 +862,7 @@ struct link_command : public cmd {
             named_file_selection_x("infile1", 1) % "Files to link" +
             named_file_selection_x("infile2", 2) % "Files to link" +
             optional_file_selection_x("infile3", 3) % "Files to link" +
-            option('p', "--pad") & hex("pad").set(settings.link.align) % "Specify alignment to pad to, defaults to 0x1000"
+            (option('p', "--pad") & hex("pad").set(settings.link.align)) % "Specify alignment to pad to, defaults to 0x1000"
         );
     }
 
@@ -1074,7 +1074,7 @@ struct otp_set_command : public cmd {
     group get_cli() override {
         return (
                 (
-                        (option('c', "--copies") & integer("copies").min(1).set(settings.otp.redundancy)) % "Read multiple redundant values" +
+                        (option('c', "--copies") & integer("copies").min(1).set(settings.otp.redundancy)) % "Write multiple redundant values" +
                         option('r', "--raw").set(settings.otp.raw) % "Set raw 24-bit values" +
                         option('e', "--ecc").set(settings.otp.ecc) % "Use error correction" +
                         option('s', "--set-bits").set(settings.otp.ignore_set) % "Set bits only" +
