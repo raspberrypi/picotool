@@ -22,7 +22,7 @@ jobs:
           repository: raspberrypi/pico-sdk
           ref: develop
           path: pico-sdk
-          submodules: 'recursive'
+          submodules: 'true'
 
       - name: Build and Install
         run: |
