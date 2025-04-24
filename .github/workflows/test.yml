@@ -71,3 +71,33 @@ jobs:
           picotool info -a blink.uf2
           picotool info -a hello_world.uf2
           picotool info -a flash_nuke.uf2
+
+  test-examples:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install dependencies
+        run: sudo apt install cmake ninja-build python3 build-essential gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib libusb-1.0-0-dev
+      - name: Checkout Pico SDK
+        uses: actions/checkout@v4
+        with:
+          repository: raspberrypi/pico-sdk
+          ref: develop
+          path: pico-sdk
+          submodules: 'recursive'
+      - name: Build and Install
+        run: |
+          cmake -S . -B build -G "Ninja" -D PICO_SDK_PATH="${{ github.workspace }}/pico-sdk"
+          cmake --build build
+          sudo cmake --install build
+      - name: Checkout Pico Examples
+        uses: actions/checkout@v4
+        with:
+          repository: raspberrypi/pico-examples
+          ref: develop
+          path: pico-examples
+      - name: Build Pico Examples
+        run: |
+          cmake -S pico-examples -B build-examples -G "Ninja" -D PICO_SDK_PATH="${{ github.workspace }}/pico-sdk" -D PICO_BOARD=pico2_w
+          cmake --build build-examples
