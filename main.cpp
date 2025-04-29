@@ -6142,7 +6142,13 @@ bool partition_create_command::execute(device_map &devices) {
             }
             new_p.flags |= (link_value << PICOBIN_PARTITION_FLAGS_LINK_VALUE_LSB) & PICOBIN_PARTITION_FLAGS_LINK_VALUE_BITS;
         }
-        if (p.contains("name")) { new_p.name = p["name"]; new_p.flags |= PICOBIN_PARTITION_FLAGS_HAS_NAME_BITS; }
+        if (p.contains("name")) {
+            new_p.name = p["name"];
+            new_p.flags |= PICOBIN_PARTITION_FLAGS_HAS_NAME_BITS;
+            if (new_p.name.size() > 127) {
+                fail(ERROR_INCOMPATIBLE, "Partition name \"%s\" is %d characters long - max length is 127 characters\n", new_p.name.c_str(), new_p.name.size());
+            }
+        }
         if (p.contains("id")) {
             if (get_json_int(p["id"], new_p.id)) {new_p.flags |= PICOBIN_PARTITION_FLAGS_HAS_ID_BITS;}
             else {string p_id = p["id"]; fail(ERROR_INCOMPATIBLE, "Partition ID \"%s\" is not a valid 64bit integer\n", p_id.c_str());}

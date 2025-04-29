@@ -208,6 +208,7 @@ struct partition_table_item : public single_byte_size_item {
             }
             if (name.size() > 0) {
                 char size = name.size();
+                assert(size & 0x7f == size);
                 std::vector<char> name_vec = {size};
                 for (char c : name) {
                     name_vec.push_back(c);
