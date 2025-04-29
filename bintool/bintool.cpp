@@ -546,6 +546,11 @@ uint32_t calc_checksum(std::vector<uint8_t> bin) {
 
 #if HAS_MBEDTLS
 void hash_andor_sign_block(block *new_block, const public_t public_key, const private_t private_key, bool hash_value, bool sign, std::vector<uint8_t> to_hash) {
+    if (!(hash_value || sign)) {
+        // Don't need to add anything if not actually hashing or signing
+        return;
+    }
+
     std::shared_ptr<hash_def_item> hash_def = std::make_shared<hash_def_item>(PICOBIN_HASH_SHA256);
     new_block->items.push_back(hash_def);
 
