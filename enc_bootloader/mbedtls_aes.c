@@ -49,10 +49,11 @@ void decrypt(uint8_t* key4way, uint8_t* IV_OTPsalt, uint8_t* IV_public, uint8_t(
     uint32_t* key4waywords = (uint32_t*)key4way;
     // Key is stored as a 4-way share of each word, ie X[0] = A[0] ^ B[0] ^ C[0] ^ D[0], stored as A[0], B[0], C[0], D[0]
     for (int i=0; i < count_of(aes_key); i++) {
-        aes_key[i] = key4waywords[i*4]
-                         ^ key4waywords[i*4 + 1]
-                         ^ key4waywords[i*4 + 2]
-                         ^ key4waywords[i*4 + 3];
+        int skip = (i/4)*16;    // skip every other 16 words (64 bytes), due to the FIB workaround
+        aes_key[i] = key4waywords[i*4 + skip]
+                   ^ key4waywords[i*4 + 1 + skip]
+                   ^ key4waywords[i*4 + 2 + skip]
+                   ^ key4waywords[i*4 + 3 + skip];
     }
 
     uint8_t iv[16];
