@@ -4911,7 +4911,13 @@ uint32_t __noinline otp_calculate_ecc(uint16_t x) {
 void sign_guts_elf(elf_file* elf, private_t private_key, public_t public_key) {
     std::unique_ptr<block> first_block = find_first_block(elf);
     if (!first_block) {
-        fail(ERROR_FORMAT, "No first block found");
+        // Throw a clearer error for RP2040 binaries with no block loop
+        auto family_id = get_family_id(0);
+        if (family_id == RP2040_FAMILY_ID) {
+            fail(ERROR_FORMAT, "No metadata block found in RP2040 binary");
+        } else {
+            fail(ERROR_FORMAT, "No metadata block found");
+        }
     }
 
     block new_block = place_new_block(elf, first_block);
@@ -4991,7 +4997,13 @@ vector<uint8_t> sign_guts_bin(iostream_memory_access in, private_t private_key, 
 
     std::unique_ptr<block> first_block = find_first_block(bin, bin_start);
     if (!first_block) {
-        fail(ERROR_FORMAT, "No first block found");
+        // Throw a clearer error for RP2040 binaries with no block loop
+        auto family_id = get_family_id(0);
+        if (family_id == RP2040_FAMILY_ID) {
+            fail(ERROR_FORMAT, "No metadata block found in RP2040 binary");
+        } else {
+            fail(ERROR_FORMAT, "No metadata block found");
+        }
     }
 
     block new_block = place_new_block(bin, bin_start, first_block);
