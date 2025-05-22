@@ -4914,7 +4914,7 @@ void sign_guts_elf(elf_file* elf, private_t private_key, public_t public_key) {
         // Throw a clearer error for RP2040 binaries with no block loop
         auto family_id = get_family_id(0);
         if (family_id == RP2040_FAMILY_ID) {
-            fail(ERROR_FORMAT, "No metadata block found in RP2040 binary");
+            fail(ERROR_FORMAT, "No metadata block found when sealing RP2040 binary - either use RP2350, or set PICO_CRT0_INCLUDE_PICOBIN_BLOCK=1");
         } else {
             fail(ERROR_FORMAT, "No metadata block found");
         }
@@ -5000,7 +5000,7 @@ vector<uint8_t> sign_guts_bin(iostream_memory_access in, private_t private_key, 
         // Throw a clearer error for RP2040 binaries with no block loop
         auto family_id = get_family_id(0);
         if (family_id == RP2040_FAMILY_ID) {
-            fail(ERROR_FORMAT, "No metadata block found in RP2040 binary");
+            fail(ERROR_FORMAT, "No metadata block found when sealing RP2040 binary - either use RP2350, or set PICO_CRT0_INCLUDE_PICOBIN_BLOCK");
         } else {
             fail(ERROR_FORMAT, "No metadata block found");
         }
