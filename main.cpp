@@ -1730,10 +1730,9 @@ struct memory_access {
     }
 
     template <typename T> void read_into_vector(uint32_t addr, unsigned int count, vector<T> &v, bool zero_fill = false) {
-        // vector<typename raw_type_mapping<T>::access_type> buffer(count);
+        v.clear();
+        v.resize(count);
         if (count) {
-            v.clear();
-            v.resize(count);
             read(addr, (uint8_t *)v.data(), count * sizeof(typename raw_type_mapping<T>::access_type), zero_fill);
         }
     }
