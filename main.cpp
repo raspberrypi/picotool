@@ -5095,6 +5095,10 @@ bool encrypt_command::execute(device_map &devices) {
     if (string_to_hex_array(settings.filenames[3], iv_salt.data(), iv_salt.size(), "IV OTP salt")) {
         ivFromFile = false;
     } else if (get_file_type_idx(3) != filetype::bin) {
+        if (get_file_type_idx(3) == filetype::pem) {
+            // picotool encrypt <=2.1.1 would take PEM key file in the location of the IV OTP salt
+            fail(ERROR_ARGS, "This picotool version (%s) is not compatible with SDK versions <=2.1.1 - you must manually build & install picotool version 2.1.1 to use those SDK versions with encryption", PICOTOOL_VERSION);
+        }
         fail(ERROR_ARGS, "Can only read IV OTP salt from BIN file");
     }
 
