@@ -646,6 +646,21 @@ auto device_selection =
     file_types_x(i)\
 )
 
+#define option_typed_file_selection_x(option, i, types)\
+(\
+    option & value("filename").with_exclusion_filter([](const string &value) {\
+            return value.find_first_of('-') == 0;\
+        }).set(settings.filenames[i]) % "The file name" +\
+    named_file_types_x(types, i)\
+)
+
+#define option_untyped_file_selection_x(option, i)\
+(\
+    option & value("filename").with_exclusion_filter([](const string &value) {\
+            return value.find_first_of('-') == 0;\
+        }).set(settings.filenames[i]) % "The file name"\
+)
+
 auto file_types = (option ('t', "--type") & value("type").set(settings.file_types[0]))
             % "Specify file type (uf2 | elf | bin) explicitly, ignoring file extension";
 
@@ -1107,7 +1122,8 @@ struct otp_dump_command : public cmd {
                 (
                         option('r', "--raw").set(settings.otp.raw) % "Get raw 24-bit values. This is the default" +
                         option('e', "--ecc").set(settings.otp.ecc) % "Use error correction" +
-                        option('p', "--pages").set(settings.otp.dump_pages) % "Index by page number & row number"
+                        option('p', "--pages").set(settings.otp.dump_pages) % "Index by page number & row number" +
+                        option_untyped_file_selection_x(option("--output"), 1) % "Output BIN file to dump to (optional)"
                 ).min(0).doc_non_optional(true) % "Row/field options" +
                 (
                         device_selection % "To dump the contents of a target device" |
@@ -7619,6 +7635,9 @@ bool otp_dump_command::execute(device_map &devices) {
         }
         hack_init_otp_regs();
         json otp_json = json::parse(*file);
+
+        // Prevent outputting to the console
+        fos_ptr = fos_null_ptr;
         process_otp_json(otp_json,
             [&](uint8_t *buffer, uint32_t len, picoboot_otp_cmd &otp_cmd) {
                 memset(buffer, 0, len);
@@ -7641,6 +7660,7 @@ bool otp_dump_command::execute(device_map &devices) {
                 }
             }
         );
+        fos_ptr = fos_base_ptr;
     } else {
         auto con = get_single_rp2350_bootsel_device_connection(devices, false);
         struct picoboot_otp_cmd otp_cmd;
@@ -7677,27 +7697,35 @@ bool otp_dump_command::execute(device_map &devices) {
     }
 
     fos.first_column(0);
-    char buf[256];
-    for(int i=0;i<OTP_ROW_COUNT;i+=8) {
-        if (settings.otp.dump_pages) {
-            snprintf(buf, sizeof(buf), "%02d:%02d: ", i / OTP_PAGE_ROWS, i % OTP_PAGE_ROWS);
-            fos << buf;
-        } else {
-            snprintf(buf, sizeof(buf), "%04x: ", i);
-            fos << buf;
-        }
 
-        for (int j = i; j < i + 8; j++) {
-            if (row_errors.find(j) != row_errors.end() || page_errors.find(j / OTP_PAGE_ROWS) != page_errors.end()) {
-                snprintf(buf, sizeof(buf), "%s, ", do_ecc ? "XXXX" : "XXXXXXXX");
-            } else if (do_ecc) {
-                snprintf(buf, sizeof(buf), "%04x, ", ((uint16_t *) raw_buffer.data())[j]);
+    if (!settings.filenames[1].empty()) {
+        fos << "Outputting to " << settings.filenames[1] << "\n";
+        std::shared_ptr<std::fstream> file = get_file_idx(ios::out|ios::binary, 1);
+        file->write((char*)raw_buffer.data(), raw_buffer.size());
+        file->close();
+    } else {
+        char buf[256];
+        for(int i=0;i<OTP_ROW_COUNT;i+=8) {
+            if (settings.otp.dump_pages) {
+                snprintf(buf, sizeof(buf), "%02d:%02d: ", i / OTP_PAGE_ROWS, i % OTP_PAGE_ROWS);
+                fos << buf;
             } else {
-                snprintf(buf, sizeof(buf), "%08x, ", ((uint32_t *) raw_buffer.data())[j]);
+                snprintf(buf, sizeof(buf), "%04x: ", i);
+                fos << buf;
             }
-            fos << buf;
+
+            for (int j = i; j < i + 8; j++) {
+                if (row_errors.find(j) != row_errors.end() || page_errors.find(j / OTP_PAGE_ROWS) != page_errors.end()) {
+                    snprintf(buf, sizeof(buf), "%s, ", do_ecc ? "XXXX" : "XXXXXXXX");
+                } else if (do_ecc) {
+                    snprintf(buf, sizeof(buf), "%04x, ", ((uint16_t *) raw_buffer.data())[j]);
+                } else {
+                    snprintf(buf, sizeof(buf), "%08x, ", ((uint32_t *) raw_buffer.data())[j]);
+                }
+                fos << buf;
+            }
+            fos << "\n";
         }
-        fos << "\n";
     }
     return false;
 }
