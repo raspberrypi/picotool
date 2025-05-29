@@ -906,7 +906,8 @@ SYNOPSIS:
     picotool otp get [-c <copies>] [-r] [-e] [-n] [-i <filename>] [device-selection] [-z] [<selector>..]
     picotool otp set [-c <copies>] [-r] [-e] [-s] [-i <filename>] [-z] <selector> <value> [device-selection]
     picotool otp load [-r] [-e] [-s <row>] [-i <filename>] <filename> [-t <type>] [device-selection]
-    picotool otp dump [-r] [-e] [-p] [device-selection]
+    picotool otp dump [-r] [-e] [-p] [--output <filename>] [device-selection]
+    picotool otp dump [-r] [-e] [-p] [--output <filename>] <input> [-t <type>]
     picotool otp permissions <filename> [--led <pin>] [--hash] [--sign] <key> [device-selection]
     picotool otp white-label -s <row> <filename> [device-selection]
 
@@ -1251,7 +1252,8 @@ OTP DUMP:
     Dump entire OTP
 
 SYNOPSIS:
-    picotool otp dump [-r] [-e] [-p] [device-selection]
+    picotool otp dump [-r] [-e] [-p] [--output <filename>] [device-selection]
+    picotool otp dump [-r] [-e] [-p] [--output <filename>] <input> [-t <type>]
 
 OPTIONS:
     Row/field options
@@ -1261,9 +1263,11 @@ OPTIONS:
             Use error correction
         -p, --pages
             Index by page number & row number
+        --output <filename>
+            Output BIN file to dump to (optional)
 
 TARGET SELECTION:
-    Target device selection
+    To dump the contents of a target device
         --bus <bus>
             Filter devices by USB bus number
         --address <addr>
@@ -1281,6 +1285,11 @@ TARGET SELECTION:
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
             USB drive mounted
+    To dump the contents of an OTP JSON file
+        <input>
+            The file name
+        -t <type>
+            Specify file type (json) explicitly, ignoring file extension
 ```
 
 ### list
