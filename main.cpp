@@ -1095,6 +1095,12 @@ struct otp_dump_command : public cmd {
     otp_dump_command() : cmd("dump") {}
     bool execute(device_map& devices) override;
     virtual bool requires_rp2350() const override { return true; }
+    device_support get_device_support() override {
+        if (settings.filenames[0].empty())
+            return one;
+        else
+            return none;
+    }
 
     group get_cli() override {
         return (
@@ -1104,7 +1110,8 @@ struct otp_dump_command : public cmd {
                         option('p', "--pages").set(settings.otp.dump_pages) % "Index by page number & row number"
                 ).min(0).doc_non_optional(true) % "Row/field options" +
                 (
-                        device_selection % "Target device selection"
+                        device_selection % "To dump the contents of a target device" |
+                        named_typed_file_selection_x("input", 0, "json") % "To dump the contents of an OTP JSON file"
                 ).major_group("TARGET SELECTION").min(0).doc_non_optional(true)
         );
     }
@@ -7597,43 +7604,74 @@ bool otp_get_command::execute(device_map &devices) {
 }
 
 bool otp_dump_command::execute(device_map &devices) {
-    auto con = get_single_rp2350_bootsel_device_connection(devices, false);
     // todo pre-check page lock
-    struct picoboot_otp_cmd otp_cmd;
-    otp_cmd.bEcc = settings.otp.ecc && !settings.otp.raw;
+    bool do_ecc = settings.otp.ecc && !settings.otp.raw;
     vector<uint8_t> raw_buffer;
-    uint8_t row_size = otp_cmd.bEcc ? 2 : 4;
+    uint8_t row_size = do_ecc ? 2 : 4;
     raw_buffer.resize(OTP_ROW_COUNT * row_size);
-    picoboot_memory_access raw_access(con);
     std::map<int, string> page_errors;
     std::map<int, string> row_errors;
 
-    // Read most pages by page, as permissions are per page
-    otp_cmd.wRowCount = OTP_PAGE_ROWS;
-    for (int i=0; i < OTP_PAGE_COUNT - OTP_SPECIAL_PAGES; i++) {
-        otp_cmd.wRow = i * OTP_PAGE_ROWS;
-        try {
-            con.otp_read(&otp_cmd, raw_buffer.data() + i*(raw_buffer.size() / OTP_PAGE_COUNT), raw_buffer.size() / OTP_PAGE_COUNT);
-        } catch (picoboot::command_failure& e) {
-            if (e.get_code() == PICOBOOT_NOT_PERMITTED) {
-                page_errors[i] = e.what();
-            } else {
-                throw e;
+    if (!settings.filenames[0].empty()) {
+        std::shared_ptr<std::fstream> file = get_file(ios::in|ios::binary);
+        if (get_file_type() != filetype::json) {
+            fail(ERROR_ARGS, "Input file must be a JSON file");
+        }
+        hack_init_otp_regs();
+        json otp_json = json::parse(*file);
+        process_otp_json(otp_json,
+            [&](uint8_t *buffer, uint32_t len, picoboot_otp_cmd &otp_cmd) {
+                memset(buffer, 0, len);
+            }, [&](uint8_t *buffer, uint32_t len, picoboot_otp_cmd &otp_cmd) {
+                uint32_t offset = otp_cmd.wRow * row_size;
+                uint8_t write_row_size = len / otp_cmd.wRowCount;
+                if (otp_cmd.wRowCount * row_size == len) {
+                    memcpy(raw_buffer.data() + offset, buffer, len);
+                } else {
+                    for (int i=0; i < otp_cmd.wRowCount; i++) {
+                        if (do_ecc) {
+                            // only copy row_size bytes from the buffer, as we're ignoring the ECC bits
+                            memcpy(raw_buffer.data() + offset + i * row_size, buffer + i * write_row_size, row_size);
+                        } else {
+                            // calculate the ECC for the row and write it to the raw buffer
+                            uint32_t val = otp_calculate_ecc(*(uint16_t*)(buffer + i * write_row_size));
+                            memcpy(raw_buffer.data() + offset + i * row_size, &val, row_size);
+                        }
+                    }
+                }
+            }
+        );
+    } else {
+        auto con = get_single_rp2350_bootsel_device_connection(devices, false);
+        struct picoboot_otp_cmd otp_cmd;
+        otp_cmd.bEcc = do_ecc;
+        // Read most pages by page, as permissions are per page
+        otp_cmd.wRowCount = OTP_PAGE_ROWS;
+        for (int i=0; i < OTP_PAGE_COUNT - OTP_SPECIAL_PAGES; i++) {
+            otp_cmd.wRow = i * OTP_PAGE_ROWS;
+            try {
+                con.otp_read(&otp_cmd, raw_buffer.data() + i*(raw_buffer.size() / OTP_PAGE_COUNT), raw_buffer.size() / OTP_PAGE_COUNT);
+            } catch (picoboot::command_failure& e) {
+                if (e.get_code() == PICOBOOT_NOT_PERMITTED) {
+                    page_errors[i] = e.what();
+                } else {
+                    throw e;
+                }
             }
         }
-    }
 
-    // Read special pages by row, as permissions are special
-    otp_cmd.wRowCount = 1;
-    for (int i=(OTP_PAGE_COUNT - OTP_SPECIAL_PAGES) * OTP_PAGE_ROWS; i < OTP_PAGE_COUNT * OTP_PAGE_ROWS; i++) {
-        otp_cmd.wRow = i;
-        try {
-            con.otp_read(&otp_cmd, raw_buffer.data() + i * row_size, row_size);
-        } catch (picoboot::command_failure& e) {
-            if (e.get_code() == PICOBOOT_NOT_PERMITTED) {
-                row_errors[i] = e.what();
-            } else {
-                throw e;
+        // Read special pages by row, as permissions are special
+        otp_cmd.wRowCount = 1;
+        for (int i=(OTP_PAGE_COUNT - OTP_SPECIAL_PAGES) * OTP_PAGE_ROWS; i < OTP_PAGE_COUNT * OTP_PAGE_ROWS; i++) {
+            otp_cmd.wRow = i;
+            try {
+                con.otp_read(&otp_cmd, raw_buffer.data() + i * row_size, row_size);
+            } catch (picoboot::command_failure& e) {
+                if (e.get_code() == PICOBOOT_NOT_PERMITTED) {
+                    row_errors[i] = e.what();
+                } else {
+                    throw e;
+                }
             }
         }
     }
@@ -7651,8 +7689,8 @@ bool otp_dump_command::execute(device_map &devices) {
 
         for (int j = i; j < i + 8; j++) {
             if (row_errors.find(j) != row_errors.end() || page_errors.find(j / OTP_PAGE_ROWS) != page_errors.end()) {
-                snprintf(buf, sizeof(buf), "%s, ", otp_cmd.bEcc ? "XXXX" : "XXXXXXXX");
-            } else if (otp_cmd.bEcc) {
+                snprintf(buf, sizeof(buf), "%s, ", do_ecc ? "XXXX" : "XXXXXXXX");
+            } else if (do_ecc) {
                 snprintf(buf, sizeof(buf), "%04x, ", ((uint16_t *) raw_buffer.data())[j]);
             } else {
                 snprintf(buf, sizeof(buf), "%08x, ", ((uint32_t *) raw_buffer.data())[j]);
