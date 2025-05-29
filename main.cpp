@@ -7515,6 +7515,157 @@ static void check_otp_write_error(picoboot::command_failure &e, bool ecc) {
     }
 }
 
+typedef std::function<void(uint8_t *buffer, uint32_t len, picoboot_otp_cmd &otp_cmd)> otp_read_func_t;
+typedef std::function<void(uint8_t *buffer, uint32_t len, picoboot_otp_cmd &otp_cmd)> otp_write_func_t;
+void process_otp_json(json &otp_json, otp_read_func_t read_func, otp_write_func_t write_func) {
+    for (auto row : otp_json.items()) {
+        fos.first_column(0);
+        string row_key = row.key();
+        auto row_value = row.value();
+        fos << row_key << ":\n";
+
+        // Find matching OTP row
+        bool is_sequence = false;
+        auto row_matches = filter_otp({row_key}, 24, true);
+        if (row_matches.size() == 0) {
+            fail(ERROR_INCOMPATIBLE, "%s does not match an otp row", row_key.c_str());
+        } else if (row_matches.size() != 1) {
+            // Check if it is a sequence
+            auto row_seq0_matches = filter_otp({row_key + "0"}, 24, false);
+            auto row_seq_0_matches = filter_otp({row_key + "_0"}, 24, false);
+            if (row_seq0_matches.size() == 1) {
+                row_matches = row_seq0_matches;
+            } else if (row_seq_0_matches.size() == 1) {
+                row_matches = row_seq_0_matches;
+            }
+            else if (row_matches.size() != (*row_matches.begin()).second.reg->seq_length) {
+                for (auto x : row_matches) {
+                    DEBUG_LOG("Matches %s\n", x.second.reg->name.c_str());
+                }
+                fail(ERROR_INCOMPATIBLE, "%s matches multiple otp rows or sequences", row_key.c_str());
+            }
+            is_sequence = true;
+        }
+        auto row_match = *row_matches.begin();
+        auto reg = row_match.second.reg;
+        vector<uint8_t> data;
+        struct picoboot_otp_cmd otp_cmd;
+        int hex_val = 0;
+        unsigned int row_size = 0;
+
+        fos.first_column(2);
+
+        if (reg != nullptr) {
+            otp_cmd.wRow = row_match.second.reg_row;
+            otp_cmd.wRowCount = is_sequence ? reg->seq_length : (reg->redundancy ? reg->redundancy : 1);
+            otp_cmd.bEcc = reg->ecc;
+            row_size = otp_cmd.bEcc ? 2 : 4;
+
+            // Calculate row value
+            if (row_value.is_object()) {
+                // Specified fields
+                struct picoboot_otp_cmd tmp_otp_cmd = otp_cmd;
+                tmp_otp_cmd.wRowCount = 1;
+                tmp_otp_cmd.bEcc = 0;
+                uint32_t old_raw_value;
+                read_func((uint8_t*)&old_raw_value, sizeof(old_raw_value), tmp_otp_cmd);
+
+                uint32_t reg_value = 0;
+                uint32_t full_mask = 0;
+                for (auto field_val : row_value.items()) {
+                    string key = field_val.key();
+                    auto value = field_val.value();
+                    if (!get_json_int(value, hex_val)) {
+                        fail(ERROR_FORMAT, "Values must be integers");
+                    }
+
+                    // Find matching OTP field
+                    auto field_matches = filter_otp({row_key + "." + key}, 24, false);
+                    if (field_matches.size() != 1) {
+                        fail(ERROR_INCOMPATIBLE, "%s is not a single otp field", key.c_str());
+                    }
+                    auto field_match = *field_matches.begin();
+                    auto field = field_match.second.field;
+
+                    fos << key << ": " << hex_string(hex_val) << "\n";
+
+                    int low = __builtin_ctz(field->mask);
+
+                    if (hex_val & (~field->mask >> low)) {
+                        fail(ERROR_NOT_POSSIBLE, "Value to set does not fit in field: value %06x, mask %06x\n", hex_val, field->mask >> low);
+                    }
+
+                    hex_val <<= low;
+                    hex_val &= field->mask;
+                    full_mask |= field->mask;
+                    reg_value |= hex_val;
+                }
+                reg_value |= old_raw_value & ~full_mask;
+                vector<uint8_t> tmp((uint8_t*)(&reg_value), (uint8_t*)(&reg_value) + row_size);
+                data.insert(data.begin(), tmp.begin(), tmp.end());
+            } else if (row_value.is_array()) {
+                for (auto val : row_value)  {
+                    if (!get_json_int(val, hex_val)) {
+                        fail(ERROR_FORMAT, "Values must be integers");
+                    }
+                    fos << hex_string(hex_val, 2) << ", ";
+                    data.push_back(hex_val);
+                }
+                fos << "\n";
+            } else {
+                if (!get_json_int(row_value, hex_val)) {
+                    fail(ERROR_FORMAT, "Values must be integers");
+                }
+                fos << hex_string(hex_val) << "\n";
+                vector<uint8_t> tmp((uint8_t*)(&hex_val), (uint8_t*)(&hex_val) + row_size);
+                data.insert(data.begin(), tmp.begin(), tmp.end());
+            }
+        } else {
+            // Must be a raw address
+            otp_cmd.wRow = row_match.second.reg_row;
+            otp_cmd.wRowCount = 1;
+            otp_cmd.bEcc = row_value["ecc"].is_boolean() ? (bool)row_value["ecc"] : false;
+            row_size = otp_cmd.bEcc ? 2 : 4;
+
+            auto val = row_value["value"];
+            if (val.is_array()) {
+                for (auto v : val)  {
+                    if (!get_json_int(v, hex_val)) {
+                        fail(ERROR_FORMAT, "Values must be integers");
+                    }
+                    fos << hex_string(hex_val, 2) << ", ";
+                    data.push_back(hex_val);
+                }
+                fos << "\n";
+                otp_cmd.wRowCount = data.size() / row_size;
+            } else {
+                if (!get_json_int(val, hex_val)) {
+                    fail(ERROR_FORMAT, "Values must be integers");
+                }
+                fos << hex_string(hex_val) << "\n";
+                vector<uint8_t> tmp((uint8_t*)(&hex_val), (uint8_t*)(&hex_val) + row_size);
+                data.insert(data.begin(), tmp.begin(), tmp.end());
+                if (get_json_int(row_value["redundancy"], hex_val)) otp_cmd.wRowCount = hex_val;
+            }
+        }
+
+        if (data.size() % row_size) {
+            fail(ERROR_FORMAT, "Data size must be a multiple of selected row data size (%d)", row_size);
+        }
+        if (data.size() == row_size && otp_cmd.wRowCount > 1) {
+            // Repeat the data for each redundant row
+            data.resize(otp_cmd.wRowCount * row_size);
+            for (int i=1; i < otp_cmd.wRowCount; i++) std::copy_n(data.begin(), row_size, data.begin() + row_size*i);
+        }
+
+        if (data.size() != row_size * otp_cmd.wRowCount) {
+            fail(ERROR_FORMAT, "Data size must be selected row data size * row count (%d*%d)", row_size, otp_cmd.wRowCount);
+        }
+
+        write_func(data.data(), data.size(), otp_cmd);
+    }
+}
+
 bool otp_load_command::execute(device_map &devices) {
     auto con = get_single_rp2350_bootsel_device_connection(devices, false);
     // todo pre-check page lock
@@ -7523,158 +7674,19 @@ bool otp_load_command::execute(device_map &devices) {
     if (get_file_type() == filetype::json) {
         hack_init_otp_regs(con);
         json otp_json = json::parse(*file);
-        int hex_val = 0;
         // todo validation on json
-        for (auto row : otp_json.items()) {
-            fos.first_column(0);
-            string row_key = row.key();
-            auto row_value = row.value();
-            fos << row_key << ":\n";
-
-            // Find matching OTP row
-            bool is_sequence = false;
-            auto row_matches = filter_otp({row_key}, 24, true);
-            if (row_matches.size() == 0) {
-                fail(ERROR_INCOMPATIBLE, "%s does not match an otp row", row_key.c_str());
-            } else if (row_matches.size() != 1) {
-                // Check if it is a sequence
-                auto row_seq0_matches = filter_otp({row_key + "0"}, 24, false);
-                auto row_seq_0_matches = filter_otp({row_key + "_0"}, 24, false);
-                if (row_seq0_matches.size() == 1) {
-                    row_matches = row_seq0_matches;
-                } else if (row_seq_0_matches.size() == 1) {
-                    row_matches = row_seq_0_matches;
+        process_otp_json(otp_json,
+            [&](uint8_t *buffer, uint32_t len, picoboot_otp_cmd &otp_cmd) {
+                picoboot_memory_access raw_access(con);
+                con.otp_read(&otp_cmd, buffer, len);
+            }, [&](uint8_t *buffer, uint32_t len, picoboot_otp_cmd &otp_cmd) {
+                try {
+                    con.otp_write(&otp_cmd, buffer, len);
+                } catch (picoboot::command_failure &e) {
+                    check_otp_write_error(e, otp_cmd.bEcc);
+                    throw e;
                 }
-                else if (row_matches.size() != (*row_matches.begin()).second.reg->seq_length) {
-                    for (auto x : row_matches) {
-                        DEBUG_LOG("Matches %s\n", x.second.reg->name.c_str());
-                    }
-                    fail(ERROR_INCOMPATIBLE, "%s matches multiple otp rows or sequences", row_key.c_str());
-                }
-                is_sequence = true;
-            }
-            auto row_match = *row_matches.begin();
-            auto reg = row_match.second.reg;
-            vector<uint8_t> data;
-            unsigned int row_size = 0;
-
-            fos.first_column(2);
-
-            if (reg != nullptr) {
-                otp_cmd.wRow = row_match.second.reg_row;
-                otp_cmd.wRowCount = is_sequence ? reg->seq_length : (reg->redundancy ? reg->redundancy : 1);
-                otp_cmd.bEcc = reg->ecc;
-                row_size = otp_cmd.bEcc ? 2 : 4;
-
-                // Calculate row value
-                if (row_value.is_object()) {
-                    // Specified fields
-                    struct picoboot_otp_cmd tmp_otp_cmd = otp_cmd;
-                    tmp_otp_cmd.wRowCount = 1;
-                    tmp_otp_cmd.bEcc = 0;
-                    uint32_t old_raw_value;
-                    picoboot_memory_access raw_access(con);
-                    con.otp_read(&tmp_otp_cmd, (uint8_t *)&old_raw_value, sizeof(old_raw_value));
-
-                    uint32_t reg_value = 0;
-                    uint32_t full_mask = 0;
-                    for (auto field_val : row_value.items()) {
-                        string key = field_val.key();
-                        auto value = field_val.value();
-                        if (!get_json_int(value, hex_val)) {
-                            fail(ERROR_FORMAT, "Values must be integers");
-                        }
-
-                        // Find matching OTP field
-                        auto field_matches = filter_otp({row_key + "." + key}, 24, false);
-                        if (field_matches.size() != 1) {
-                            fail(ERROR_INCOMPATIBLE, "%s is not a single otp field", key.c_str());
-                        }
-                        auto field_match = *field_matches.begin();
-                        auto field = field_match.second.field;
-
-                        fos << key << ": " << hex_string(hex_val) << "\n";
-
-                        int low = __builtin_ctz(field->mask);
-
-                        if (hex_val & (~field->mask >> low)) {
-                            fail(ERROR_NOT_POSSIBLE, "Value to set does not fit in field: value %06x, mask %06x\n", hex_val, field->mask >> low);
-                        }
-
-                        hex_val <<= low;
-                        hex_val &= field->mask;
-                        full_mask |= field->mask;
-                        reg_value |= hex_val;
-                    }
-                    reg_value |= old_raw_value & ~full_mask;
-                    vector<uint8_t> tmp((uint8_t*)(&reg_value), (uint8_t*)(&reg_value) + row_size);
-                    data.insert(data.begin(), tmp.begin(), tmp.end());
-                } else if (row_value.is_array()) {
-                    for (auto val : row_value)  {
-                        if (!get_json_int(val, hex_val)) {
-                            fail(ERROR_FORMAT, "Values must be integers");
-                        }
-                        fos << hex_string(hex_val, 2) << ", ";
-                        data.push_back(hex_val);
-                    }
-                    fos << "\n";
-                } else {
-                    if (!get_json_int(row_value, hex_val)) {
-                        fail(ERROR_FORMAT, "Values must be integers");
-                    }
-                    fos << hex_string(hex_val) << "\n";
-                    vector<uint8_t> tmp((uint8_t*)(&hex_val), (uint8_t*)(&hex_val) + row_size);
-                    data.insert(data.begin(), tmp.begin(), tmp.end());
-                }
-            } else {
-                // Must be a raw address
-                otp_cmd.wRow = row_match.second.reg_row;
-                otp_cmd.wRowCount = 1;
-                otp_cmd.bEcc = row_value["ecc"].is_boolean() ? (bool)row_value["ecc"] : false;
-                row_size = otp_cmd.bEcc ? 2 : 4;
-
-                auto val = row_value["value"];
-                if (val.is_array()) {
-                    for (auto v : val)  {
-                        if (!get_json_int(v, hex_val)) {
-                            fail(ERROR_FORMAT, "Values must be integers");
-                        }
-                        fos << hex_string(hex_val, 2) << ", ";
-                        data.push_back(hex_val);
-                    }
-                    fos << "\n";
-                    otp_cmd.wRowCount = data.size() / row_size;
-                } else {
-                    if (!get_json_int(val, hex_val)) {
-                        fail(ERROR_FORMAT, "Values must be integers");
-                    }
-                    fos << hex_string(hex_val) << "\n";
-                    vector<uint8_t> tmp((uint8_t*)(&hex_val), (uint8_t*)(&hex_val) + row_size);
-                    data.insert(data.begin(), tmp.begin(), tmp.end());
-                    if (get_json_int(row_value["redundancy"], hex_val)) otp_cmd.wRowCount = hex_val;
-                }
-            }
-
-            if (data.size() % row_size) {
-                fail(ERROR_FORMAT, "Data size must be a multiple of selected row data size (%d)", row_size);
-            }
-            if (data.size() == row_size && otp_cmd.wRowCount > 1) {
-                // Repeat the data for each redundant row
-                data.resize(otp_cmd.wRowCount * row_size);
-                for (int i=1; i < otp_cmd.wRowCount; i++) std::copy_n(data.begin(), row_size, data.begin() + row_size*i);
-            }
-
-            if (data.size() != row_size * otp_cmd.wRowCount) {
-                fail(ERROR_FORMAT, "Data size must be selected row data size * row count (%d*%d)", row_size, otp_cmd.wRowCount);
-            }
-
-            try {
-                con.otp_write(&otp_cmd, data.data(), data.size());
-            } catch (picoboot::command_failure &e) {
-                check_otp_write_error(e, otp_cmd.bEcc);
-                throw e;
-            }
-        }
+        });
 
         // Return now, don't do rest of function
         return false;
