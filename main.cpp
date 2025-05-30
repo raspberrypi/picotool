@@ -4914,7 +4914,8 @@ void sign_guts_elf(elf_file* elf, private_t private_key, public_t public_key) {
         }
     }
 
-    block new_block = place_new_block(elf, first_block);
+    // Workaround RP2350-E13, which means when using rollback versions, first block must be ignored
+    block new_block = place_new_block(elf, first_block, settings.seal.rollback_version);
 
     if (settings.seal.set_tbyb) {
         // Set the TBYB bit on the image_type_item
@@ -5000,7 +5001,8 @@ vector<uint8_t> sign_guts_bin(iostream_memory_access in, private_t private_key, 
         }
     }
 
-    block new_block = place_new_block(bin, bin_start, first_block);
+    // Workaround RP2350-E13, which means when using rollback versions, first block must be ignored
+    block new_block = place_new_block(bin, bin_start, first_block, settings.seal.rollback_version);
 
     if (settings.seal.major_version || settings.seal.minor_version || settings.seal.rollback_version) {
         std::shared_ptr<version_item> version = new_block.get_item<version_item>();
