@@ -22,7 +22,7 @@ typedef enum verified_t {
 
 // Elfs
 std::unique_ptr<block> find_first_block(elf_file *elf);
-block place_new_block(elf_file *elf, std::unique_ptr<block> &first_block, bool ignore_first=false);
+block place_new_block(elf_file *elf, std::unique_ptr<block> &first_block, bool ignore_others=false);
 #if HAS_MBEDTLS
     int hash_andor_sign(elf_file *elf, block *new_block, const public_t public_key, const private_t private_key, bool hash_value, bool sign, bool clear_sram = false);
     void encrypt_guts(elf_file *elf, block *new_block, const aes_key_t aes_key, std::vector<uint8_t> &iv_data, std::vector<uint8_t> &enc_data);
@@ -34,7 +34,7 @@ typedef std::function<void(std::vector<uint8_t> &bin, uint32_t offset, uint32_t 
 std::unique_ptr<block> find_first_block(std::vector<uint8_t> bin, uint32_t storage_addr);
 std::unique_ptr<block> get_last_block(std::vector<uint8_t> &bin, uint32_t storage_addr, std::unique_ptr<block> &first_block, get_more_bin_cb more_cb = nullptr);
 std::vector<std::unique_ptr<block>> get_all_blocks(std::vector<uint8_t> &bin, uint32_t storage_addr, std::unique_ptr<block> &first_block, get_more_bin_cb more_cb = nullptr);
-block place_new_block(std::vector<uint8_t> &bin, uint32_t storage_addr, std::unique_ptr<block> &first_block, bool ignore_first=false);
+block place_new_block(std::vector<uint8_t> &bin, uint32_t storage_addr, std::unique_ptr<block> &first_block, bool ignore_others=false);
 uint32_t calc_checksum(std::vector<uint8_t> bin);
 #if HAS_MBEDTLS
     std::vector<uint8_t> hash_andor_sign(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *new_block, const public_t public_key, const private_t private_key, bool hash_value, bool sign, bool clear_sram = false);
