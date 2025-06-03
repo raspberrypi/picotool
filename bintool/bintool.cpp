@@ -254,7 +254,7 @@ void set_next_block(std::vector<uint8_t> &bin, uint32_t storage_addr, std::uniqu
 }
 
 
-block place_new_block(elf_file *elf, std::unique_ptr<block> &first_block, bool ignore_others) {
+block place_new_block(elf_file *elf, std::unique_ptr<block> &first_block, bool set_others_ignored) {
     uint32_t highest_ram_address = 0;
     uint32_t highest_flash_address = 0;
     bool no_flash = false;
@@ -289,10 +289,10 @@ block place_new_block(elf_file *elf, std::unique_ptr<block> &first_block, bool i
         set_next_block(elf, first_block, highest_address);
         loop_start_rel = -first_block->next_block_rel;
         new_block_addr = first_block->physical_addr + first_block->next_block_rel;
-        if (ignore_others) set_block_ignored(elf, first_block->physical_addr);
+        if (set_others_ignored) set_block_ignored(elf, first_block->physical_addr);
     } else {
         DEBUG_LOG("There is already a block loop\n");
-        if (ignore_others) set_block_ignored(elf, first_block->physical_addr);
+        if (set_others_ignored) set_block_ignored(elf, first_block->physical_addr);
         uint32_t next_block_addr = first_block->physical_addr + first_block->next_block_rel;
         while (true) {
             auto segment = elf->segment_from_physical_address(next_block_addr);
@@ -326,7 +326,7 @@ block place_new_block(elf_file *elf, std::unique_ptr<block> &first_block, bool i
                 break;
             } else {
                 DEBUG_LOG("Continue looping\n");
-                if (ignore_others) set_block_ignored(elf, new_first_block->physical_addr);
+                if (set_others_ignored) set_block_ignored(elf, new_first_block->physical_addr);
                 next_block_addr = new_first_block->physical_addr + new_first_block->next_block_rel;
                 new_first_block.reset();
             }
@@ -426,7 +426,7 @@ std::unique_ptr<block> get_last_block(std::vector<uint8_t> &bin, uint32_t storag
 }
 
 
-block place_new_block(std::vector<uint8_t> &bin, uint32_t storage_addr, std::unique_ptr<block> &first_block, bool ignore_others) {
+block place_new_block(std::vector<uint8_t> &bin, uint32_t storage_addr, std::unique_ptr<block> &first_block, bool set_others_ignored) {
     uint32_t highest_ram_address = 0;
     uint32_t highest_flash_address = 0;
     bool no_flash = false;
@@ -458,12 +458,12 @@ block place_new_block(std::vector<uint8_t> &bin, uint32_t storage_addr, std::uni
         set_next_block(bin, storage_addr, first_block, highest_address);
         loop_start_rel = -first_block->next_block_rel;
         new_block_addr = first_block->physical_addr + first_block->next_block_rel;
-        if (ignore_others) set_block_ignored(bin, storage_addr, first_block->physical_addr);
+        if (set_others_ignored) set_block_ignored(bin, storage_addr, first_block->physical_addr);
     } else {
         DEBUG_LOG("Ooh, there is already a block loop - lets find it's end\n");
         auto all_blocks = get_all_blocks(bin, storage_addr, first_block);
         for (auto &block : all_blocks) {
-            if (ignore_others) set_block_ignored(bin, storage_addr, block->physical_addr);
+            if (set_others_ignored) set_block_ignored(bin, storage_addr, block->physical_addr);
         }
         new_first_block = std::move(all_blocks.back());
         set_next_block(bin, storage_addr, new_first_block, highest_address);

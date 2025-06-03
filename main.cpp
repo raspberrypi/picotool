@@ -4914,7 +4914,7 @@ void sign_guts_elf(elf_file* elf, private_t private_key, public_t public_key) {
         }
     }
 
-    // Workaround RP2350-E13, which means when using rollback versions, all other blocks must be ignored
+    // Workaround RP2350-E13, which means when using rollback versions, all other blocks must be set as ignored
     block new_block = place_new_block(elf, first_block, settings.seal.rollback_version);
 
     if (settings.seal.set_tbyb) {
@@ -5001,7 +5001,7 @@ vector<uint8_t> sign_guts_bin(iostream_memory_access in, private_t private_key, 
         }
     }
 
-    // Workaround RP2350-E13, which means when using rollback versions, all other blocks must be ignored
+    // Workaround RP2350-E13, which means when using rollback versions, all other blocks must be set as ignored
     block new_block = place_new_block(bin, bin_start, first_block, settings.seal.rollback_version);
 
     if (settings.seal.major_version || settings.seal.minor_version || settings.seal.rollback_version) {
