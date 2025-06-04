@@ -46,6 +46,10 @@ if (NOT USE_PRECOMPILED)
 
         target_compile_definitions(enc_bootloader PRIVATE
             PICO_STACK_SIZE=0x800
+            # we cannot unreset clk_peri clocked h/w as we don't configure clk_peri
+            PICO_RUNTIME_SKIP_INIT_POST_CLOCK_RESETS=1
+            RC_COUNT=0 # don't use rcp_count
+
             # 0x20080000 -> 0x20081000 doesn't overlap the stack
             ROM_CHAIN_WORKSPACE=0x20080000)
 
@@ -53,7 +57,7 @@ if (NOT USE_PRECOMPILED)
 
         pico_set_linker_script(enc_bootloader ${CMAKE_CURRENT_LIST_DIR}/memmap_mbedtls.ld)
     else()
-        target_sources(enc_bootloader PRIVATE aes.S)
+        target_sources(enc_bootloader PRIVATE aes.S hard_entry_point.S)
 
         target_compile_definitions(enc_bootloader PRIVATE
             PICO_STACK_SIZE=0x180
@@ -61,25 +65,44 @@ if (NOT USE_PRECOMPILED)
             ROM_CHAIN_WORKSPACE=0x20080200)
 
         pico_set_linker_script(enc_bootloader ${CMAKE_CURRENT_LIST_DIR}/memmap_enc_bootloader.ld)
+
+        target_compile_definitions(enc_bootloader PRIVATE
+                # The following are to reduce the size of the binary
+                PICO_NO_PROGRAM_INFO=1
+                PICO_CRT0_NO_RESET_SECTION=1
+
+                HARDENING=1
+                DOUBLE_HARDENING=1
+
+                INLINE_REF_ROUNDKEY_SHARES_S=1 # avoid need for canaries/calling check
+                INLINE_REF_ROUNDKEY_HVPERMS_S=1  # avoid need for canaries/calling check
+                INLINE_SHIFT_ROWS_S=1  # avoid need for canaries/calling check
+                INLINE_MAP_SBOX_S=1  # avoid need for canaries/calling check
+
+                CALLER_INIT_RCP_COUNT=1
+        )
     endif()
 
     target_compile_definitions(enc_bootloader PRIVATE
+        #ALLOW_DEBUGGING=1
+
+        # The following are to reduce the size of the binary
         # use stack guards, as AES variables are written near the stack
         PICO_USE_STACK_GUARDS=1
-        # The following are to reduce the size of the binary
-        PICO_NO_PROGRAM_INFO=1
         # No spinlocks used
         PICO_USE_SW_SPIN_LOCKS=0
         # No heap is used
         PICO_HEAP_SIZE=0
-        # These inits are not required
-        PICO_RUNTIME_SKIP_INIT_SPIN_LOCKS_RESET=1
-        PICO_RUNTIME_SKIP_INIT_PER_CORE_IRQ_PRIORITIES=1
+        # Note all runtime init is skipped via the linker script
+
         PICO_BOOTROM_LOCKING_ENABLED=0
         # Don't need any vtor irqs
         PICO_MINIMAL_STORED_VECTOR_TABLE=1
         PICO_NO_RAM_VECTOR_TABLE=1
-        )
+
+        PICO_USE_GPIO_COPROCESSOR=0
+        FIB_WORKAROUND=1
+    )
 
     # print memory usage
     target_link_options(enc_bootloader PUBLIC -Wl,--print-memory-usage)

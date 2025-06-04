@@ -201,7 +201,7 @@ void set_block_ignored(elf_file *elf, uint32_t block_addr) {
     uint32_t offset = block_addr + 4 - seg->physical_address();
     if ((content[offset] & 0x7f) != PICOBIN_BLOCK_ITEM_PARTITION_TABLE) {
         DEBUG_LOG("setting block at %08x to ignored\n", block_addr);
-        content[offset] = 0x7e;   
+        content[offset] = 0x7e;
     }
     elf->content(*seg, content);
 }
@@ -233,7 +233,7 @@ void set_block_ignored(std::vector<uint8_t> &bin, uint32_t storage_addr, uint32_
     uint32_t offset = block_addr + 4 - storage_addr;
     if ((bin[offset] & 0x7f) != PICOBIN_BLOCK_ITEM_PARTITION_TABLE) {
         DEBUG_LOG("setting block at %08x to ignored\n", block_addr);
-        bin[offset] = 0x7e;   
+        bin[offset] = 0x7e;
     }
 }
 

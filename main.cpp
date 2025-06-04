@@ -897,7 +897,7 @@ struct seal_command : public cmd {
             ).force_expand_help(true) % "BIN file options" +
             named_file_selection_x("outfile", 1) % "File to save to" +
             optional_untyped_file_selection_x("key", 2) % "Key file (.pem)" +
-            optional_untyped_file_selection_x("otp", 3) % "JSON file to save OTP to (will edit existing file if it exists)" + 
+            optional_untyped_file_selection_x("otp", 3) % "JSON file to save OTP to (will edit existing file if it exists)" +
             (
                 option("--major") &
                     integer("major").set(settings.seal.major_version)
@@ -4923,6 +4923,12 @@ void sign_guts_elf(elf_file* elf, private_t private_key, public_t public_key) {
         image_type->flags |= PICOBIN_IMAGE_TYPE_EXE_TBYB_BITS;
     }
 
+    if (settings.seal.set_tbyb) {
+        // Set the TBYB bit on the image_type_item
+        std::shared_ptr<image_type_item> image_type = new_block.get_item<image_type_item>();
+        image_type->flags |= PICOBIN_IMAGE_TYPE_EXE_TBYB_BITS;
+    }
+
     if (settings.seal.major_version || settings.seal.minor_version || settings.seal.rollback_version) {
         std::shared_ptr<version_item> version = new_block.get_item<version_item>();
         if (version != nullptr) {
@@ -5283,7 +5289,7 @@ bool encrypt_command::execute(device_map &devices) {
             // Sign the final thing
             settings.seal.clear_sram = true;
             sign_guts_elf(enc_elf, private_key, public_key);
-            
+
             auto out = get_file_idx(ios::out|ios::binary, 1);
             enc_elf->write(out);
             out->close();

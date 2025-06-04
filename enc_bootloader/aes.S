@@ -22,6 +22,16 @@ scratch RAM and the stack pointer is overwritten.
 #include "hardware/regs/trng.h"
 #include "hardware/rcp.h"
 
+#if HARDENING
+@                                             Number of calls to gen_rand_sha[_nonpres]
+#define RND_COUNT_decrypt                     394                           // From decrypt up to call to ctr_crypt_s
+#define RND_COUNT_ctr_crypt_s_init            (17 + 32 * CT_BPERM)          // Init phase of ctr_crypt_s
+#define RND_COUNT_ctr_crypt_mainloop_A        (4 + ST_VPERM + ST_SHAREC)
+#define RND_COUNT_refreshchaff_and_lfsr       2
+#define RND_COUNT_remap                       2
+#define RND_COUNT_decryption_end              3
+#endif
+
 .global decrypt
 .global chaff
 
@@ -39,19 +49,70 @@ scratch RAM and the stack pointer is overwritten.
 #define CTAG7  0x32
 #define CTAG8  0x33
 #define CTAG9  0x34
-#define CTAG10 0x35 @ not used
-#define CTAG11 0x36 @ not used
+#define CTAG10 0x35
+#define CTAG11 0x36
 #define CTAG12 0x37
 #define CTAG13 0x38
 #define CTAG14 0x39
 #define CTAG15 0x3a
 #define CTAG16 0x3b
 #define CTAG17 0x3c
-#define CTAG18 0x3d @ not used
+#define CTAG18 0x3d
+#define CTAG19 0x3e
+#define CTAG20 0x3f
+#define CTAG21 0x29
 
 @ number of blocks from the TRNG processed to initialise rstate_sha
 #define TRNG_BLOCKS 25
 
+@ if GEN_RAND_SHA==0 then we don't call the counting version
+#if HARDENING && GEN_RAND_SHA
+.macro check_rnd_count count
+.if !(\count & 0xffffff00)
+movs r1, #\count
+.else
+ldr r1, =\count
+.endif
+movs r0, #(\count & 1) ^ 1
+bl check_rnd_count_func
+rcp_iequal_nodelay r1, r0
+#if DOUBLE_HARDENING
+rcp_iequal_nodelay r0, r1
+#endif
+.endm
+
+@ r1 has the expected count
+@ Trashes r0
+.macro check_rnd_count_dynamic
+mov r0, sp
+bl check_rnd_count_func
+rcp_iequal_nodelay r1, r0
+#if DOUBLE_HARDENING
+rcp_iequal_nodelay r0, r1
+#endif
+.endm
+
+.macro reset_rnd_count
+bl reset_rnd_count_func
+.endm
+
+.macro reset_rnd_count_checked
+@ This version verifies that the count was actually reset
+uxtb r0, r1
+bl reset_rnd_count_func
+ldr r0, [r0]
+bics r1, #0xff00ff
+rcp_iequal_nodelay r1, r0
+.endm
+
+#else
+.macro check_rnd_count count
+.endm
+.macro reset_rnd_count
+.endm
+.macro reset_rnd_count_checked
+.endm
+#endif
 @ The lower jitterpriorty is, the more the jitter
 .macro SET_COUNT n,jitterpriority
 .if RC_COUNT
@@ -119,11 +180,12 @@ scratch RAM and the stack pointer is overwritten.
 workspace_start:
 
 @ chaff has to be at the start of scratch_y = 0x20081000 because this is assumed by the following macro, getchaffaddress
-@ (It seems ADR does not work, nor is it possible to assert that chaff==0x20081000)
-@ getchaffaddress is used by clear03 and clear01 and other sensitive cases which require the first load to be a random one
-@ chaff has to be 0 mod 16 for other reasons
+@ We need to set the chaff address directly with MOVs, rather than setting it with a load as normal, because at the point
+@ the macro is called we have just done a load of a sensitive value at a known memory offset mod 16, and the idea is that
+@ the next load is going to be of a random number (in the "chaff" memory) at that same offset mod 16, so we can't afford
+@ to do a ldr \rx, =0x20081000 + \offset first, as this will load a non-random value from an uncontrolled memory location mod 16.
+@ Ideally we'd avoid the magic number 0x2008100 by using, ADR \rx, chaff+\offset, but the linker does not support this.
 .macro getchaffaddress rx,offset=0
-@ ldr \rx,=(chaff+\offset)
  mov \rx,#(0x1000+\offset)
  movt \rx,#0x2008
 .endm
@@ -158,7 +220,7 @@ statevperm:                  @ 12 mod 16
 .space 4                     @ vperm state rotation: only last two bits are operational; other bits random
 RKshareC:                    @ Round key common share C; see comment at init_key_4way for explanation
 .space 4
-RKshareCchange:              @ Temporary used by ref_roundkey_share_s
+RKshareCchange:              @ Temporary used by ref_roundkey_shares_s
 .space 4
 IV0:                         @ 2-way share of IV for block 0
 .space 36                    @ Considering IV0 as a word pointer, the format is IV = IV0[0,1,2,3] ^ (IV0[5,6,7,8],ror#16)
@@ -216,6 +278,8 @@ jstate:                      @ 32-bit jitter state
 rstate_lfsr:                 @ 32-bit LFSR random state and constant used to step it
 .space 4
 .word 0x1d872b41             @ constant that defines a maximal-length LFSR
+rstate_count:
+.space 4
 rstate_all_end:              @ Mark end of RNG data to allow selective memory wipe
 
 .if CT_BPERM
@@ -248,6 +312,9 @@ init_rstate:
  movw r1,#SHA256_CSR_RESET|SHA256_CSR_START_BITS                     @ initialise SHA internal state by writing START bit
  str r1,[r5,#SHA256_CSR_OFFSET]
  str r6,[r4,#TRNG_SAMPLE_CNT1_OFFSET       -TRNG_RNG_IMR_OFFSET]
+#if HARDENING
+ movs r3, #0
+#endif
  movs r6,#TRNG_BLOCKS*2+1                                            @ odd so that we break out of the loop half-way through loading the SHA hardware, giving
                                                                      @ time for previous SHA computation to complete
 2:
@@ -256,9 +323,8 @@ init_rstate:
  str r1,[r4,#TRNG_RND_SOURCE_ENABLE_OFFSET -TRNG_RNG_IMR_OFFSET]     @ start ROSC if it is not already started
  str r1,[r4,#TRNG_RNG_ICR_OFFSET           -TRNG_RNG_IMR_OFFSET]     @ clear all interrupts (including EHR_VLD)
  adds r0,r4,#TRNG_EHR_DATA0_OFFSET         -TRNG_RNG_IMR_OFFSET
- movs r2,#TRNG_TRNG_BUSY_OFFSET            -TRNG_RNG_IMR_OFFSET
 1:
- ldr r1,[r4,r2]                                                      @ wait for 192 ROSC samples to fill EHR,should take constant time
+ ldr r1,[r4,#TRNG_TRNG_BUSY_OFFSET         -TRNG_RNG_IMR_OFFSET]                                                      @ wait for 192 ROSC samples to fill EHR,should take constant time
  cmp r1,#0
  bne 1b
  subs r6,#1                                                          @ done?
@@ -267,13 +333,31 @@ init_rstate:
 1:
  ldmia r0!,{r2}                                                      @ copy 6 EHR words to SHA-256, plus garbage (RND_SOURCE_ENABLE and SAMPLE_CNT1)
  str r2,[r5,#SHA256_WDATA_OFFSET]                                    @ for a total of half a SHA-256 block
+#if HARDENING
+ adds r3,#1
+#endif
  subs r1,#1
  bne 1b
+#if HARDENING
+ ldr r1, =TRNG_BASE+TRNG_EHR_DATA0_OFFSET+32
+ rcp_iequal_nodelay r0, r1
+#endif
  ldr r2,[r5,#SHA256_SUM0_OFFSET]                                     @ TRNG is now sampling again; use some SHA bits to modulate the chain length
  str r2,[r4,#TRNG_TRNG_CONFIG_OFFSET       -TRNG_RNG_IMR_OFFSET]
  b.n 2b
 
 3:
+#if HARDENING
+ movs r2, #(TRNG_BLOCKS*2) * 8
+ rcp_iequal_nodelay r2, r3
+#endif
+#if HARDENING
+@ good test that we are dealing with real hardware
+ ldr r2,[r5,#SHA256_CSR_OFFSET]
+ movw r1,#SHA256_CSR_RESET
+ rcp_iequal_nodelay r1, r2
+ rcp_iequal_nodelay r2, r1
+#endif
  CHK_COUNT 25,6
  str r1,[r4,#TRNG_TRNG_CONFIG_OFFSET       -TRNG_RNG_IMR_OFFSET]     @ turn off rand source and wipe SHA bits left in TRNG config; r1=0
  str r1,[r4,#TRNG_RND_SOURCE_ENABLE_OFFSET -TRNG_RNG_IMR_OFFSET]
@@ -285,7 +369,11 @@ init_rstate:
  stmia r6,{r0-r3}
  CHK_COUNT 26,6
  movs r0,#0
+#if !HARDENING
  strb r0,[r6]      @ make sure rstate_sha[0] has byte 0 set to 0, representing "out of data"
+#else
+ str  r0,[r6]      @ make sure rstate_sha[0] has word 0 set to 0, representing "out of data" (24-31) and 0 numbers generated (0-23)
+#endif
 
 @ try to find a non-zero initialiser to create a non-degenerate LFSR random state
  ldr r1,[r5,#16]   @ SHA SUM4
@@ -295,7 +383,7 @@ init_rstate:
  mov r1,r6         @ give up and use the address of rstate_sha (which is non-zero); this can't really happen (2^{-64} probability)
 1:
  str r1,[r6,#rstate_lfsr-rstate_sha]
- 
+
 @ try to find a non-zero initialiser to create a non-degenerate ROSC random state
  ldr r1,[r5,#24]   @ SHA SUM6
  cbnz r1,1f        @ is word 6 non-zero? then use it
@@ -306,7 +394,15 @@ init_rstate:
  ldr r2,=ROSC_RANDOM_OFFSET+ROSC_BASE
  str r1,[r2,#0]    @ Initialise ROSC LFSR
  CHK_COUNT 27,6
- 
+#if HARDENING
+ ldr r3,=ROSC_RANDOM_OFFSET+ROSC_BASE
+ cbnz r1, 1f
+ rcp_panic
+1:
+ ldr r3, [r3]
+ rcp_iequal_nodelay r1, r3
+#endif
+
 .if GEN_RAND_SHA
 .if SH_JITTER
  movs r2,#0
@@ -317,8 +413,101 @@ init_rstate:
  CHK_COUNT 28,6
  bx r14
 
+.thumb_func
+decrypt:
+@ r0=4-way key, r1=IV_shareA, r2=IV_shareB, r3=message buffer, [sp]=number of blocks
+ ldr r12,[sp]               @ Pop 5th argument in r12 (which we are allowed to treat as scratch according to AAPCS)
+ push {r14}
+ GET_CANARY r14,CTAG3,6
+#if !CALLER_INIT_RCP_COUNT
+ SET_COUNT 23,6
+#endif
+ push {r4-r11,r14}
+ push {r0-r3,r12}            @ Save the five arguments
+ bl reset_sha_trng
+ bl init_rstate
+@ randomly re-share the LUT contents
+ ldr r4,=lut_a
+ mov r5,#64                  @ 64 words = 256 bytes
+1:
+ bl gen_rand_sha_nonpres
+ ldr r6,[r4,#lut_b-lut_a]    @ EOR a random word into both shares
+ eors r6,r6,r0
+@if r0 is not EORed into only one share, then the LUT won't be right
+ str r6,[r4,#lut_b-lut_a]
+ ldr r6,[r4]
+#if HARDENING
+ eors r7,r6,r0
+ eors r8,r7,r6
+ rcp_iequal_nodelay r8, r0
+ stmia r4!,{r7}
+#else
+ eors r6,r6,r0
+ stmia r4!,{r6}
+#endif
+ subs r5,r5,#1
+ bne 1b
+#if HARDENING
+ ldr r5,=lut_a + 256
+ rcp_iequal_nodelay r4, r5
+#endif
+ CHK_COUNT 29,6
+#if HARDENING
+@check again as this is quite important
+ rcp_iequal_nodelay r5, r4
+#endif
+ bl remap                    @ scramble the LUTs
+ pop {r0}                    @ pointer to 4way key data
+ bl init_key_4way
+ // todo alex this may trash r12; is that ok?
+ bl lock_key
+ CHK_COUNT 32,6
+ pop {r0-r3}                 @ r0=IV_shareA, r1=IV_shareB, r2=message, r3=num blocks
+ bl ctr_crypt_s
+ bl randomisechaff
+ clear03
+ pop {r4-r11,r14}
+ CHK_CANARY r14,CTAG3,6
+ pop {r15}
+
+.thumb_func
+reset_sha_trng:
+ GET_CANARY r0,CTAG19,0
+ ldr r1,=RESETS_BASE+RESETS_RESET_OFFSET
+ ldr r2,[r1]
+ ldr r3,=#RESETS_RESET_SHA256_BITS|RESETS_RESET_TRNG_BITS
+ orrs r2,r2,r3
+ str r2,[r1]       @ reset the SHA hardware and the TRNG hardware
+ CHK_COUNT 23,6
+ bics r2,r2,r3
+ str r2,[r1]       @ release the reset
+ CHK_CANARY r0,CTAG19,0
+ bx r14
+
 @ Put AES core code in first scratch area
 .section .scratch_x.aes,"ax",%progbits
+
+@ if GEN_RAND_SHA==0 then we don't call the counting version
+#if HARDENING && GEN_RAND_SHA
+check_rnd_count_func:
+@ NOTE: we don't bother with a canary here as we don't write anything
+ ldr r0,=rstate_sha
+ ldr r0, [r0]
+ rsbs r0,r0,#0   @ Negate bottom 24 bits to get the number of calls to gen_rand_sha[_nonpres] since the last reset
+ bfc r0,#24,#8   @
+ bx r14
+
+reset_rnd_count_func:
+ push {lr}
+ GET_CANARY lr,CTAG11,0
+ ldr r0,=rstate_sha
+ ldrb r1, [r0, #3]
+ orrs r1, #1
+ lsls r1, #24
+ str r1, [r0]
+ CHK_CANARY lr,CTAG11,0
+ pop {pc}
+#endif
 
 .if GEN_RAND_SHA
 @ we need SHA256_SUM0_OFFSET==8 (see note below)
@@ -330,74 +519,119 @@ init_rstate:
 @ Preserves r1-r13
 .balign 4
 gen_rand_sha:
- push {r14}
- GET_CANARY r14,CTAG1,2
- push {r1-r3,r14}
+ push {r1-r3,lr}
+ GET_CANARY r1,CTAG1,2
+ push {r1}
 .if SH_JITTER
  ldr r2,=rstate_sha
  ldr r0,[r2,#jstate-rstate_sha]
+ lsls r3,r0,#30
+ lsrs r3,#28
  movs r1,#1
- ands r3,r0,#3
- movs r3,r3,lsl#2
- movs r3,r1,lsl r3       @ 1<<(4*(r0&3))
+ lsls r3,r1,r3           @ 1<<(4*(r0&3))
  udiv r3,r3,r1           @ Takes constant + (r0&3) cycles
  lsrs r0,r0,#2
  bne 1f
  bl gen_rand_sha_nonpres
  ldr r2,=rstate_sha
+#if HARDENING
+ ldr r1,[r2]             @ Make this (SH_JITTER) not affect rnd_count
+ adds r1,r1,#1           @ (compensating for call to gen_rand_sha_nonpres which decrements the count by 1)
+ str r1,[r2]             @ The purpose is to simplify check_rnd_count calls, and to avoid having to reset jstate frequently
+#endif
 1:
  str r0,[r2,#jstate-rstate_sha]
 .endif
  bl gen_rand_sha_nonpres
- pop {r1-r3,r14}
- CHK_CANARY r14,CTAG1,0
- pop {r15}
+ pop {r1}
+ CHK_CANARY r1,CTAG1,0
+ pop {r1-r3,pc}
 
 @ Return single random word in r0
 @ Trashes r1-r3
 .balign 4
 gen_rand_sha_nonpres:
- ldr r0,=SHA256_BASE
+ push {lr}
+ GET_CANARY lr,CTAG18,0
  ldr r2,=rstate_sha
+#if !HARDENING
+ ldr r3,=SHA256_BASE
  ldrb r1,[r2]                @ get word counter from bottom byte of rstate_sha[] (offset into SUM registers)
- subs r3,r1,#4               @ decrement it to previous SUM register
+ subs r0,r1,#4               @ decrement it to previous SUM register
  ble 1f                      @ if the offset was 4 or less we have run out of SUM register values
- ldr r0,[r0,r1]              @ read value from SUM register: note that this relies on SHA256_SUM0_OFFSET==8
- strb r3,[r2]                @ save updated SUM register offset in bottom byte of rstate_sha[]
- bx r14
+ strb r0,[r2]                @ save updated SUM register offset in bottom byte of rstate_sha[]
+ ldr r0,[r3,r1]              @ read value from SUM register: note that this relies on SHA256_SUM0_OFFSET==8
+#else
+ ldr r3,=SHA256_BASE
+ ldr r1,[r2]                 @ get word counter (8) : rand counter (24) from first word of rstate_sha[] (offset into SUM registers)
+ lsls r0, r1, #1             @ clear C (also set N which may force us down BLE path on skip of the sub below)
+ sbcs r0,r1,#0x04000000      @ decrement word counter for previous SUM register (and decrement rand counter due to C == 0)
+ str r0,[r2]                 @ save updated worder counter / rand_counter in bottom word of rstate_sha[]
+ asrs r1, r0, #24
+ ble 1f                      @ if the offset was 4 or less we have run out of SUM register values
+
+ ldr r2,=SHA256_BASE + 4
+ adds r2, r1
+ adds r1, r3, r0, asr #24
+ ldr r0, [r2], #-4
+ rcp_iequal_nodelay r1, r2
+#endif
+ b gen_rand_sha_nonpres_exit
 1:
 @ [CK_JITTER code was here]
- movs r3,#SHA256_SUM6_OFFSET+1
- strb r3,[r2]                @ reset word counter: the +1 is compensated for later
+ movs r0,#SHA256_SUM6_OFFSET+1
+#if !HARDENING
+ strb r0,[r2]                @ reset word counter: the +1 is compensated for later
+#else
+ strb r0,[r2,#3]             @ reset word counter: the +1 is compensated for later
+#endif
  movw r1,#(1<<SHA256_CSR_BSWAP_LSB)+(1<<SHA256_CSR_START_LSB)
- str r1,[r0,#SHA256_CSR_OFFSET]        @ start SHA256 hardware
- movs r3,#3                  @ take four words from rstate_sha, incrementing as we go
+ str r1,[r3,#SHA256_CSR_OFFSET]        @ start SHA256 hardware
+ movs r0,#3                  @ take four words from rstate_sha, incrementing as we go
  ldr r1,[r2]
+#if !HARDENING
  adds r1,r1,#255             @ overall this adds 256 to the value in rstate_sha and resets the bottom byte to SHA256_SUM6_OFFSET
+#else
+ adds r1,r1,#0xff000000      @ overall this adds 256 to the value in rstate_sha and resets the bottom byte to SHA256_SUM6_OFFSET
+#endif
 1:
  str r1,[r2],#4
- str r1,[r0,#SHA256_WDATA_OFFSET]
- cbz r3,3f
+ str r1,[r3,#SHA256_WDATA_OFFSET]
+ cbz r0,3f
  ldr r1,[r2]
  adcs r1,r1,#0
- sub r3,r3,#1                @ preserve the carry
+ sub r0,r0,#1                @ preserve the carry
  b 1b
 3:
  movs r1,#0x80               @ End of message bit (with byte-swapped endianity) = start of message padding
- str r1,[r0,#SHA256_WDATA_OFFSET]
- movs r1,#10
+ str r1,[r3,#SHA256_WDATA_OFFSET]
+ movs r1,#9
 1:
- str r3,[r0,#SHA256_WDATA_OFFSET]
+ str r0,[r3,#SHA256_WDATA_OFFSET]
  subs r1,r1,#1
- bne 1b
- mov r1,#0x80000000          @ Specifies message length = 128 bits (with byte-swapped endianity)
- str r1,[r0,#SHA256_WDATA_OFFSET]
+ bpl 1b
+
+ lsls r2, r1, #31             @ Specifies message length = 128 bits (with byte-swapped endianity) (i.e. 0x80000000)
+ str r2,[r3,#SHA256_WDATA_OFFSET]
 1:
- ldr r3,[r0,#SHA256_CSR_OFFSET]
- lsrs r3,r3,#SHA256_CSR_SUM_VLD_LSB+1
+ ldr r0,[r3,#SHA256_CSR_OFFSET]
+#if HARDENING
+ asrs r2, #1
+#endif
+ lsrs r0,r0,#SHA256_CSR_SUM_VLD_LSB+1
  bcc 1b                      @ wait for hardware to finish
- ldr r0,[r0,#SHA256_SUM7_OFFSET]
- bx r14
+#if HARDENING
+ @ r1 is -1 from loop above
+ @ r2 is asr-ed right from 0x8000000. emperically it takes more than 6 loops, so we should have multiple 1s in the high bits
+ @    note also that if 0x80000000 was not set above correctly, r2 might not be negative
+ asrs r2, #26
+ @ BEWARE this will fail if you step thru the above loop in the debugger as it will finish too quickly!
+ rcp_iequal_nodelay r1, r2
+#endif
+ ldr r0,[r3,#SHA256_SUM7_OFFSET]
+gen_rand_sha_nonpres_exit:
+ CHK_CANARY lr,CTAG18,0
+ pop {pc}
 .endif
 
 @ simple LFSR rand versions
@@ -412,25 +646,34 @@ gen_rand_sha:
 gen_rand_lfsr:               @ Not used
  push {r14}
  GET_CANARY r14,CTAG2,2
- push {r1,r2,r14}
+ push {r1-r3,r14}
  bl gen_rand_lfsr_nonpres
- pop {r1,r2,r14}
+ pop {r1,r3,r14}
  CHK_CANARY r14,CTAG2,0
  pop {r15}
 .endif
 
-@ Trashes r1,r2
+@ Trashes r1,r2,r3
 @ 12 cycles including branch = 12 cycles/word
 .balign 4
 .if !GEN_RAND_SHA
 gen_rand_sha_nonpres:
 .endif
 gen_rand_lfsr_nonpres:
+ GET_CANARY r3,CTAG10,0
  ldr r2,=rstate_lfsr
  ldmia r2,{r0-r1}           @ r0=state_in, r1=0x1d872b41=constant for a maximum-length sequence
  and r1,r1,r0,asr#31        @ will we be shifting out a 1? keep the constant, otherwise 0
- eor r0,r1,r0,lsl#1
+ eors r0,r1,r0,lsl#1
+#if HARDENING
+@ Basically r3 &= (r0 ? 0xfffffffff : 0) but still potentially perturbing r3 unless the and is skipped
+ clz r1, r0
+ subs r1, #32
+ asrs r1, #5
+ ands r3, r1
+#endif
  str r0,[r2]
+ CHK_CANARY r3,CTAG10,0
  bx r14
 
 .macro loadlfsr
@@ -443,64 +686,18 @@ gen_rand_lfsr_nonpres:
  eors r0,r3,r0,lsl#1
 .endm
 
+.macro steplfsr_check
+ steplfsr
+ bne steplfsr_check\@
+ rcp_panic
+ steplfsr_check\@:
+.endm
+
 .macro savelfsr
  str r0,[r2]
 .endm
 
 .ltorg
-
-.balign 4
-.thumb_func
-decrypt:
-@ r0=4-way key, r1=IV_shareA, r2=IV_shareB, r3=message buffer, [r13]=number of blocks
- ldr r12,[r13]               @ Pop 5th argument in r12 (which we are allowed to treat as scratch according to AAPCS)
- push {r14}
- GET_CANARY r14,CTAG3,6
- SET_COUNT 23,6
- push {r4-r11,r14}
- push {r0-r3,r12}            @ Save the five arguments
- bl reset_sha_trng
- bl init_rstate
-@ randomly re-share the LUT contents
- ldr r4,=lut_a
- mov r5,#64                  @ 64 words = 256 bytes
-1:
- bl gen_rand_sha_nonpres
- ldr r6,[r4,#lut_b-lut_a]    @ EOR a random word into both shares
- eors r6,r6,r0
- str r6,[r4,#lut_b-lut_a]
- ldr r6,[r4]
- eors r6,r6,r0
- stmia r4!,{r6}
- subs r5,r5,#1
- bne 1b
- CHK_COUNT 29,6
- bl remap                    @ scramble the LUTs
- pop {r0}                    @ pointer to 4way key data
- CHK_COUNT 30,6
- bl init_key_4way
- CHK_COUNT 31,6
- bl lock_key
- pop {r0-r3}                 @ r0=IV_shareA, r1=IV_shareB, r2=message, r3=num blocks
- bl ctr_crypt_s
- bl randomisechaff
- clear03
- pop {r4-r11,r14}
- CHK_CANARY r14,CTAG3,6
- pop {r15}
-
-.balign 4
-.thumb_func
-reset_sha_trng:
- ldr r1,=RESETS_BASE+RESETS_RESET_OFFSET
- ldr r2,[r1]
- ldr r3,=#RESETS_RESET_SHA256_BITS|RESETS_RESET_TRNG_BITS
- orrs r2,r2,r3
- str r2,[r1]       @ reset the SHA hardware and the TRNG hardware
- CHK_COUNT 23,6
- bics r2,r2,r3
- str r2,[r1]       @ release the reset
- bx r14
 
 .balign 4
 .thumb_func
@@ -653,6 +850,7 @@ remap_1:
  ldr r2,[r1,#0x100]          @ old map
  eors r2,r2,r0
  str r2,[r1,#0x100]          @ updated map
+ // todo graham; what is the effect of not doing the whole loop - is it broken if you just do some?
  mov r2,#252                 @ loop over entries
 1:
  ldr r4,[r1,r2]
@@ -693,14 +891,11 @@ remap_1:
 @ vpermA=Aptr[4]>>30, vpermB=Bptr[4]>>30, and
 @ roundkey shareA(i) = Aptr[i+vpermA mod 4] ror ((i+vpermA mod 4)^th byte of Aptr[4])
 @ roundkey shareB(i) = Bptr[i+vpermB mod 4] ror ((i+vpermB mod 4)^th byte of Bptr[4])+16
-.balign 4
-.thumb_func
-ref_roundkey_shares_s:
- mov r11,#15                 @ there are 15 expanded keys
-ref_roundkey_shares_s_test:  @ entry point for test code to do fewer than 15 rounds
+
+.macro ref_roundkey_shares_s_impl
  ldr r4,=rkey_s
  loadlfsr
- steplfsr                    @ r0=change in RKshareC
+ steplfsr_check              @ r0=change in RKshareC
  ldr r2,=RKshareCchange
  str r0,[r2]
  ldr r3,=RKshareC
@@ -723,7 +918,7 @@ ref_roundkey_shares_s_loop:
  steplfsr; eors r5,r5,r0; ands r9,r9,#3; ldr r3,[r4,r9,lsl#2]; ror r2,r0,r12; eors r3,r3,r2,ror#16; mov r12,r12,ror#8; str r3,[r4,r9,lsl#2]; adds r9,r9,#1
  steplfsr; eors r6,r6,r0; ands r9,r9,#3; ldr r3,[r4,r9,lsl#2]; ror r2,r0,r12; eors r3,r3,r2,ror#16; mov r12,r12,ror#8; str r3,[r4,r9,lsl#2]; adds r9,r9,#1
  steplfsr; eors r7,r7,r0; ands r9,r9,#3; ldr r3,[r4,r9,lsl#2]; ror r2,r0,r12; eors r3,r3,r2,ror#16; mov r12,r12,ror#8; str r3,[r4,r9,lsl#2]; adds r9,r9,#1
- steplfsr; eors r8,r8,r0; ands r9,r9,#3; ldr r3,[r4,r9,lsl#2]; ror r2,r0,r12; eors r3,r3,r2,ror#16;                    str r3,[r4,r9,lsl#2]
+ steplfsr_check; eors r8,r8,r0; ands r9,r9,#3; ldr r3,[r4,r9,lsl#2]; ror r2,r0,r12; eors r3,r3,r2,ror#16;                    str r3,[r4,r9,lsl#2]
 
  ldr r3,=RKshareCchange
  ldr r3,[r3]
@@ -740,63 +935,23 @@ ref_roundkey_shares_s_loop:
  subs r11,r11,#1
 
  bne ref_roundkey_shares_s_loop
+#if HARDENING
+ ldr r5,=rkey_s + 40 * 15
+ rcp_iequal_nodelay r4, r5
+#endif
  ldr r2,=rstate_lfsr         @ restore rstate_lfsr
  savelfsr                    @ Save lfsr_state
  clear03 24
-ref_roundkey_shares_s_exit:
- bx r14
+.endm
 
-.balign 4
-.thumb_func
-@ Rotates roundkey vperms and RK_ROR rotations by random amounts
-@ Trashes r0-r10
-@ If i = word number 0..3,
-@ Aptr=memory word pointer to block of 20 bytes containing H&V-rotated share A roundkey (similarly B), then
-@ vpermA=Aptr[4]>>30, vpermB=Bptr[4]>>30, and
-@ roundkey shareA(i) = Aptr[i+vpermA mod 4] ror ((i+vpermA mod 4)^th byte of Aptr[4])
-@ roundkey shareB(i) = Bptr[i+vpermB mod 4] ror ((i+vpermB mod 4)^th byte of Bptr[4])+16
-ref_roundkey_hvperms_s:
- movs r7,#30
-ref_roundkey_hvperms_s_test:  @ entry point for test code to do fewer than 30 key shares
- GET_CANARY r10,CTAG9,6
- push {r10,r14}
- ldr r10,=rkey_s
-ref_roundkey_hvperms_s_loop:
- bl gen_rand_lfsr_nonpres     @ r0=new vperm high|rotations
- ldmia r10,{r2-r5,r9}         @ r2-r5=roundkey share A/B, r9=old vperm high|rotations
- str r0,[r10,#16]
- mov r8,r0,lsr#30             @ r8=new vperm low
- sub r6,r8,r9,lsr#30          @ r6=(new vperm low)-(old vperm low) | junk
- mov r8,r6,lsl#3              @ r8=8*((new vperm low)-(old vperm low)) mod 32
- mov r0,r0,ror r8
- usub8 r0,r9,r0               @ i^th byte of r0 = (i^th byte of old rotations) - ((i+newvperm-oldvperm)^th byte of new rotations)
- movs r2,r2,ror r0; ands r6,r6,#3; str r2,[r10,r6,lsl#2]; movs r0,r0,ror#8; adds r6,r6,#1
- movs r3,r3,ror r0; ands r6,r6,#3; str r3,[r10,r6,lsl#2]; movs r0,r0,ror#8; adds r6,r6,#1
- movs r4,r4,ror r0; ands r6,r6,#3; str r4,[r10,r6,lsl#2]; movs r0,r0,ror#8; adds r6,r6,#1
- movs r5,r5,ror r0; ands r6,r6,#3; str r5,[r10,r6,lsl#2]
- adds r10,r10,#20
- subs r7,r7,#1
- bne ref_roundkey_hvperms_s_loop
- clear03 28
-ref_roundkey_hvperms_s_exit:  @ label exit point to be to able to specify to analysis code
- pop {r10,r14}
- CHK_CANARY r10,CTAG9,6
- bx r14
-
-.else
+.else // RK_ROR
 
 @ "refresh" shares of rkeys by random eor into both shares of each word, and also randomise the single word RKshareC
 @ Trashes r0-r11
-.balign 4
-.thumb_func
-ref_roundkey_shares_s:
- mov r11,#15                 @ there are 15 expanded keys
-ref_roundkey_shares_s_test:  @ entry point for test code to do fewer than 15 rounds
- GET_CANARY r4,CTAG8,6
- push {r4,r14}
+.macro ref_roundkey_shares_s_impl
  ldr r4,=rkey_s
  loadlfsr
- steplfsr                    @ r0=change in RKshareC
+ steplfsr_check              @ r0=change in RKshareC
  ldr r3,=RKshareC
  ldr r5,[r3]
  eors r5,r5,r0
@@ -815,7 +970,7 @@ ref_roundkey_shares_s_loop:
  steplfsr; eors r5,r5,r0; and r9,r9,#3; eors r5,r5,r10; ldr r3,[r4,r9,lsl#2]; eors r3,r3,r0,ror#16; str r3,[r4,r9,lsl#2]; adds r9,r9,#1
  steplfsr; eors r6,r6,r0; and r9,r9,#3; eors r6,r6,r10; ldr r3,[r4,r9,lsl#2]; eors r3,r3,r0,ror#16; str r3,[r4,r9,lsl#2]; adds r9,r9,#1
  steplfsr; eors r7,r7,r0; and r9,r9,#3; eors r7,r7,r10; ldr r3,[r4,r9,lsl#2]; eors r3,r3,r0,ror#16; str r3,[r4,r9,lsl#2]; adds r9,r9,#1
- steplfsr; eors r8,r8,r0; and r9,r9,#3; eors r8,r8,r10; ldr r3,[r4,r9,lsl#2]; eors r3,r3,r0,ror#16; str r3,[r4,r9,lsl#2]
+ steplfsr_check; eors r8,r8,r0; and r9,r9,#3; eors r8,r8,r10; ldr r3,[r4,r9,lsl#2]; eors r3,r3,r0,ror#16; str r3,[r4,r9,lsl#2]
 
  subs r4,r4,#20
  stmia r4,{r5-r8}
@@ -827,20 +982,69 @@ ref_roundkey_shares_s_loop:
  bne ref_roundkey_shares_s_loop
  savelfsr
  clear03 24
-ref_roundkey_shares_s_exit:
- pop {r4,r14}
- CHK_CANARY r4,CTAG8,6
- bx r14
+#if HARDENING
+ ldr r5,=rkey_s + 40 * 15
+ rcp_iequal_nodelay r4, r5
+#endif
+.endm
+.endif
 
+.if INLINE_REF_ROUNDKEY_SHARES_S
+.macro inline_ref_roundkey_shares_s
+ref_roundkey_shares_s_starts:
+ mov r11,#15                 @ there are 15 expanded keys
+ ref_roundkey_shares_s_impl
+ref_roundkey_shares_s_end:
+.endm
+.else
 .balign 4
 .thumb_func
+ref_roundkey_shares_s:
+ mov r11,#15                 @ there are 15 expanded keys
+ref_roundkey_shares_s_test:  @ entry point for test code to do fewer than 15 rounds
+ push {lr}
+ GET_CANARY lr,CTAG8,6
+ ref_roundkey_shares_s_impl
+ CHK_CANARY lr,CTAG8,6
+ pop {pc}
+.endif
+
+.if RK_ROR
+
+@ Rotates roundkey vperms and RK_ROR rotations by random amounts
+@ Trashes r0-r10
+@ If i = word number 0..3,
+@ Aptr=memory word pointer to block of 20 bytes containing H&V-rotated share A roundkey (similarly B), then
+@ vpermA=Aptr[4]>>30, vpermB=Bptr[4]>>30, and
+@ roundkey shareA(i) = Aptr[i+vpermA mod 4] ror ((i+vpermA mod 4)^th byte of Aptr[4])
+@ roundkey shareB(i) = Bptr[i+vpermB mod 4] ror ((i+vpermB mod 4)^th byte of Bptr[4])+16
+.macro ref_roundkey_hvperms_s_impl
+ ldr r10,=rkey_s
+ref_roundkey_hvperms_s_loop:
+ bl gen_rand_lfsr_nonpres     @ r0=new vperm high|rotations
+ ldmia r10,{r2-r5,r9}         @ r2-r5=roundkey share A/B, r9=old vperm high|rotations
+ str r0,[r10,#16]
+ mov r8,r0,lsr#30             @ r8=new vperm low
+ sub r6,r8,r9,lsr#30          @ r6=(new vperm low)-(old vperm low) | junk
+ mov r8,r6,lsl#3              @ r8=8*((new vperm low)-(old vperm low)) mod 32
+ mov r0,r0,ror r8
+ usub8 r0,r9,r0               @ i^th byte of r0 = (i^th byte of old rotations) - ((i+newvperm-oldvperm)^th byte of new rotations)
+ movs r2,r2,ror r0; ands r6,r6,#3; str r2,[r10,r6,lsl#2]; movs r0,r0,ror#8; adds r6,r6,#1
+ movs r3,r3,ror r0; ands r6,r6,#3; str r3,[r10,r6,lsl#2]; movs r0,r0,ror#8; adds r6,r6,#1
+ movs r4,r4,ror r0; ands r6,r6,#3; str r4,[r10,r6,lsl#2]; movs r0,r0,ror#8; adds r6,r6,#1
+ movs r5,r5,ror r0; ands r6,r6,#3; str r5,[r10,r6,lsl#2]
+ adds r10,r10,#20
+ adds r7,r7,#1
+ cmp r7, #30
+ bne ref_roundkey_hvperms_s_loop
+ clear03 28
+.endm
+
+.else
+
 @ Rotates roundkey vperms by random amounts
 @ Trashes r0-r9
-ref_roundkey_hvperms_s:
- movs r7,#30
-ref_roundkey_hvperms_s_test:  @ entry point for test code to do fewer than 30 key shares
- GET_CANARY r0,CTAG9,6
- push {r0,r14}
+.macro ref_roundkey_hvperms_s_impl
  bl gen_rand_lfsr_nonpres
  ldr r1,=rkey_s
 ref_roundkey_hvperms_s_loop:
@@ -862,14 +1066,32 @@ ref_roundkey_hvperms_s_loop:
  ands r6,r6,#3; str r5,[r1,r6,lsl#2]
  adds r1,r1,#20
  movs r0,r0,ror#2
- subs r7,r7,#1
+ adds r7,r7,#1
+ cmp r7, #30
  bne ref_roundkey_hvperms_s_loop
  clear03 28
-ref_roundkey_hvperms_s_exit:  @ label exit point to be to able to specify to analysis code
- pop {r0,r14}
- CHK_CANARY r0,CTAG9,6
- bx r14
+.endm
+.endif
 
+.if INLINE_REF_ROUNDKEY_HVPERMS_S
+.macro inline_ref_roundkey_hvperms_s
+ref_roundkey_hvperms_s_starts:
+ movs r7,#0
+ ref_roundkey_hvperms_s_impl
+ref_roundkey_hvperms_s_end:
+.endm
+.else
+.balign 4
+.thumb_func
+ref_roundkey_hvperms_s:
+ movs r7,#0
+ref_roundkey_hvperms_s_test:  @ entry point for test code to do fewer than 15 rounds
+ GET_CANARY r0,CTAG9,6
+ push {r0, lr}
+ ref_roundkey_hvperms_s_impl
+ pop {r0}
+ CHK_CANARY r0,CTAG9,6
+ pop {pc}
 .endif
 
 .ltorg
@@ -885,6 +1107,8 @@ ref_roundkey_hvperms_s_exit:  @ label exit point to be to able to specify to ana
 @           r8=rorig(8+(-!r1)%4), r9=rorig(8+(1-!r1)%4), ...
 @ Note: only low 2 bits of !r1 are used. The rest are random to add to the noise.
 addstatevperm:
+ push {r14}
+ GET_CANARY r14,CTAG20,0
  ldr r2,[r1]
  adds r2,r2,r0
  str r2,[r1]
@@ -916,7 +1140,8 @@ addstatevperm:
  stmia r1!,{r2,r3}
 
 addstatevperm_exit:           @ label exit point to be to able to specify to analysis code
- bx r14
+ CHK_CANARY r14,CTAG20,0
+ pop {pc}
 .endif
 
 @ Conjugate lut_a, lut_b with (state) shareC
@@ -925,9 +1150,11 @@ addstatevperm_exit:           @ label exit point to be to able to specify to ana
 @ Arbitrarily choosing a0, b1 and d0
 .balign 4
 conjshareC:
+ push {r14}
+ GET_CANARY r14,CTAG21,0
 .if ST_SHAREC
- ldr r1,=shareC
- ldr r0,[r1]                   @ Get shareC as a word (all bytes the same)
+ ldr r1,=shareA
+ ldr r0,[r1, #shareC-shareA]   @ Get shareC as a word (all bytes the same)
  ldr r1,=lut_a                 @ Need to EOR share C into inputs of both lut_a and lut_b, and one of their outputs...
  ldr r2,[r1,#0x100]
  eors r2,r2,r0,lsr#24
@@ -938,11 +1165,10 @@ conjshareC:
  eors r2,r2,r0,lsl#8
  str r2,[r1,#0x100]
 .endif
- bx r14
+ CHK_CANARY r14,CTAG21,0
+ pop {pc}
 
-.balign 4
-.thumb_func
-shift_rows_s:
+.macro shift_rows_s_impl
 @ First "rotate" the two most-significant bytes of the state by two registers
 @ Trashes r0-r3
 @ Slightly faster (but not shorter?) with ubfx/bfi
@@ -996,7 +1222,22 @@ shift_rows_s:
  eors r11,r11,r1             @                                       state[3]^=tb;
 
  clear01                     @ barrier
+.endm
+
+.if INLINE_SHIFT_ROWS_S
+.macro inline_shift_rows_s
+shift_rows_s_starts:
+ shift_rows_s_impl
+shift_rows_s_end:
+.endm
+.else
+.balign 4
+.thumb_func
+@ Not going to use canaries here as it doesn't write anything - could be use to perturb register values, but not super worried about that yet
+shift_rows_s:
+ shift_rows_s_impl
  bx r14
+.endif
 
 @ multiply polynomial over GF(2⁸) by c(x) = 0x03x³ + 0x01x² + 0x01x + 0x02 modulo x⁴+1
 @ r0x00 is a register holding 0x00000000;  r0x1b is a register holding 0x1b1b1b1b
@@ -1036,6 +1277,7 @@ shift_rows_s:
 
 .balign 4
 .thumb_func
+@ Not going to use canaries here as it doesn't write anything - could be use to perturb register values, but not super worried about that yet
 @ Trashes r0-r3,r12
 mix_cols_s:
  mov r2,#0x00000000
@@ -1071,12 +1313,7 @@ mix_cols_s:
 
 @ map all bytes of the state through the split LUT, lut_a and lut_b
 @ Trashes r0-r3,r12
-.balign 4
-.thumb_func
-map_sbox_s:
- GET_CANARY r12,CTAG12,3
- push {r12,r14}
-
+.macro map_sbox_s_impl
  ldr r0,=shareA                 @ Write out state share A to memory
 @ stmia r0,{r4-r7}              @ Used to do a STM
  getchaffaddress r1
@@ -1160,10 +1397,29 @@ map_sbox_s:
 @ steplfsr; eors r6,r6,r0; mov r12,#0; eor r10,r10,r0,ror#16
 @ steplfsr; eors r7,r7,r0; mov r12,#0; eor r11,r11,r0,ror#16
 @ savelfsr
+.endm
+
+.if INLINE_MAP_SBOX_S
+.macro inline_map_sbox_s
+map_sbox_s_starts:
+ // push {lr}
+ map_sbox_s_impl
+ // pop {lr}
+map_sbox_s_end:
+.endm
+.else
+.balign 4
+.thumb_func
+map_sbox_s:
+ GET_CANARY r12,CTAG12,3
+ push {r12,r14}
+
+ map_sbox_s_impl
 
  pop {r12,r14}
  CHK_CANARY r12,CTAG12,5
  bx r14
+.endif
 
 .ltorg
 
@@ -1206,16 +1462,22 @@ refreshchaff_and_lfsr:
  bl gen_rand_sha_nonpres
  ldr r1,=rstate_lfsr
  ldr r2,[r1]
- adds r2,r2,r0
- beq 1f           @ Don't update LFSR state to 0
- str r2,[r1]
 1:
+ adds r2,r2,r0
+@ note that r2 should not be 0 on entry, so both
+@ r2 + r0, and r2 + r0 + r0 on the next loop should not both be 0
+@ if they are, we will loop
+ beq 1b           @ Don't update LFSR state to 0
+#if HARDENING
+ beq 1b
+#endif
+ str r2,[r1]
 
 @ Choose a random order to update chaff words to make 2nd order attacks harder
  movs r0,#12
  ldr r1,=permscratch
  bl makesmallperm
- 
+
  movs r1,#11
 1:
  push {r1}
@@ -1458,24 +1720,24 @@ init_key_4way:
 
  GET_CANARY r12,CTAG17,6
  push {r0-r12,r14}
- 
+
 @ Transfer 4-way key into local workspace, rerandomising the shares
  mov r5,r0                   @ r5=4-way key input
  bl randomisechaff
  ldr r6,=rkey4way
  movs r7,#8
- b 1f
-2:
- adds r5,#64                @ Skip 64 byte gap for FIB workaround
- subs r7,r7,#1
 1:
+#if FIB_WORKAROUND
+ cmp r7,#4
+ bne 2f
+ adds r5,#64                @ Skip 64 byte gap for FIB workaround
+2:
+#endif
  ldmia r5!,{r1-r4}
  bl gen_rand_sha; eors r1,r1,r0; eors r4,r4,r0
  bl gen_rand_sha; eors r2,r2,r0; eors r4,r4,r0
  bl gen_rand_sha; eors r3,r3,r0; eors r4,r4,r0
  stmia r6!,{r1-r4}
- cmp r7,#5
- beq 2b
  subs r7,r7,#1
  bne 1b
 
@@ -1554,6 +1816,7 @@ init_key_expandloop:
  cmp r2,#52
  bne init_key_expandloop
 
+ CHK_COUNT 30,6
  pop {r0-r12,r14}
  CHK_CANARY r12,CTAG17,6
  bx r14
@@ -1596,7 +1859,7 @@ addrkey_s:
  clear03_preserve_r3
  add r12,r12,#20
  @ r0=chaff+16, r3=statevperm, r4-r11=state, r12=roundkeyBptr
- 
+
  bfi r0,r12,#0,#4            @ match chaff pointer (r0) to roundkey ptr (r12) mod 16
  ldr r1,[r12,#16]            @ r1=vperm key rotation in top two bits
  ldr r2,[r0,#16]             @ barrier load
@@ -1605,7 +1868,7 @@ addrkey_s:
  bfi r0,r3,#0,#4
  ldr r3,[r3]
  ldr r0,[r0]                 @ barrier load
- 
+
 @ Read shareB of roundkey, offset by vpermkeyrot-vpermstaterot, and eor it into shareB of state, offset by -vpermstaterot
 @ r1=rkeyBrotdata, r2=vpermkeyrot-vpermstaterot, r3=RKshareC, r4-r11=state, r12=roundkeyB ptr
 .if RK_ROR
@@ -1643,8 +1906,10 @@ ctr_crypt_s:
  push {r0-r12,r14}           @ save all registers so that when we restore we overwrite any secrets
 
  push {r0-r3}
- 
- SET_COUNT 93,6
+
+#if !CALLER_INIT_RCP_COUNT
+ SET_COUNT 33,6
+#endif
 
 .if CT_BPERM
 @ Initialise 32 random numbers (which fit in half-words)
@@ -1674,10 +1939,25 @@ ctr_crypt_s:
  bl gen_rand_sha_nonpres; eors r6,r6,r0; movs r1,#0; mov r10,r10,ror#16; eor r10,r10,r0,ror#16
  bl gen_rand_sha_nonpres; eors r7,r7,r0; movs r1,#0; mov r11,r11,ror#16; eor r11,r11,r0,ror#16
  ldr r0,=IV0
- stmia r0,{r4-r7}
- adds r0,r0,#20
- stmia r0,{r8-r11}
+ stmia r0!,{r4-r7}
+ adds r1,r0,#4
+ stmia r1,{r8-r11}
 @ "Decommission" IV0 so that it doesn't get stacked
+#if 1 // approved by Alex - no side channel leakage it seems
+#if HARDENING
+ // if this is skipped, r4 is likely random, so more 1 in 4 chance that ldmia will trap
+ // in any case very unlikely to load useful data below (and presuambly the faulting address is uninteresting
+ // since it is already XORed with random data above)
+ movs r0, #32
+ // note if r1 is unset, then we are reading from lut_a
+ movs r1, #0
+ ldmia r1!, {r4, r5, r6, r7, r8, r9, r10, r11}
+ rcp_iequal_nodelay r0, r1
+#else
+ movs r0, #0
+ ldmia r0, {r4, r5, r6, r7, r8, r9, r10, r11}
+#endif
+#else
  bl gen_rand_sha_nonpres; movs r4,r0
  bl gen_rand_sha_nonpres; movs r5,r0
  bl gen_rand_sha_nonpres; movs r6,r0
@@ -1686,11 +1966,14 @@ ctr_crypt_s:
  bl gen_rand_sha_nonpres; mov  r9,r0
  bl gen_rand_sha_nonpres; mov r10,r0
  bl gen_rand_sha_nonpres; mov r11,r0
+#endif
+@ Trashes r0, r1
+ check_rnd_count (RND_COUNT_decrypt+RND_COUNT_ctr_crypt_s_init)
  pop {r1,r2}
 @ r1=cipher/plaintext buffer, r2=number of blocks
 
  movs r3,#0
- CHK_COUNT 93,6
+ CHK_COUNT 33,6
 
 ctr_crypt_mainloop:
  SET_COUNT 80,6
@@ -1700,31 +1983,98 @@ ctr_crypt_mainloop:
  push {r1-r3}
 @ It's OK for execution time to depend on the block counter r3 ("public"), but not the block number (secret)
 
+@ Trashes r0, r1
+ reset_rnd_count_checked
+
+ // no point in having a branch if we should never take it (hardening/size fail)
+#if REFCHAFF_PERIOD != 1
  tst r3,#(REFCHAFF_PERIOD-1)
  bne 1f
+#endif
  bl refreshchaff_and_lfsr
 1:
-
- ldr r3,[r13,#8]             @ get block count off the stack
+ ldr r3,[sp,#8]             @ get block count off the stack
+ // no point in having a branch if we should never take it (hardening/size fail)
+#if REMAP_PERIOD != 1
  tst r3,#(REMAP_PERIOD-1)
  bne 1f
+#endif
  bl remap                    @ shuffle the LUTs; this preserves R3
 1:
+
  CHK_COUNT 80,6
+ ldr r0,[sp,#8]             @ get block count off the stack
+#if HARDENING
+@ We check the random counts here. Note we start with the combined count and subtract, just because
+@ it might make it marginally more difficult to get the right answer if skipping multiple instructions
+ movs r1, #(RND_COUNT_remap + RND_COUNT_refreshchaff_and_lfsr)
+#if REMAP_PERIOD != 1
+ tst r0, #(REMAP_PERIOD-1)
+ it ne
+ subne r1, #RND_COUNT_remap
+#endif
+#if REFCHAFF_PERIOD != 1
+ tst r0, #(REFCHAFF_PERIOD-1)
+ it ne
+ subne r1, #RND_COUNT_refreshchaff_and_lfsr
+#endif
+@ r0=block count, r1=expected sha rand count, r3=block count
+ rcp_iequal_nodelay r0, r3
+@ r1=expected sha rand count, r3=block count
+ check_rnd_count_dynamic
+#endif // HARDENING
+@ r3=block count
 
+@ No point in having a branch if we should never take it (hardening/size fail)
+#if REFROUNDKEYSHARES_PERIOD != 1
+#if HARDENING
+// we want to check that we are calling enough
+#warning REFROUNDKEYSHARES_PERIOD check needs hardening
+#endif
  tst r3,#(REFROUNDKEYSHARES_PERIOD-1)
- bne 1f
+ bne skip_ref_roundkey_shares_s
+#endif
+#if INLINE_REF_ROUNDKEY_SHARES_S
+ inline_ref_roundkey_shares_s
+#else
+#if HARDENING
+ // todo graham we could remove this for space, as I don't think r4 and r5 are equal
+@ Make sure r4 != r5 on entry to ref_roundkey_shares_s
+ subs r4, r5, #1
+#endif
  bl ref_roundkey_shares_s    @ refresh the round key shares
-1:
+#if HARDENING
+@ r4 and r5 are set equal by ref_roundkey_shares (note we don't do a rnd_check as no sha random numbers are generated)
+ rcp_iequal_nodelay r4, r5
+#endif
+#endif
+skip_ref_roundkey_shares_s:
 
- ldr r3,[r13,#8]             @ get block count off the stack
+#if REFROUNDKEYHVPERMS_PERIOD != 1
+#if HARDENING
+// we want to check that we are calling enough
+#warning REFROUNDKEYHVPERMS_PERIOD check needs hardening
+#endif
+ ldr r3,[sp,#8]             @ get block count off the stack
  tst r3,#(REFROUNDKEYHVPERMS_PERIOD-1)
- bne 1f
+ bne skip_ref_roundkey_hvperm_s
+#endif
+#if INLINE_REF_ROUNDKEY_HVPERMS_S
+ inline_ref_roundkey_hvperms_s
+#else
  bl ref_roundkey_hvperms_s   @ refresh the round key vperms
-1:
+#if HARDENING
+ movs r0, #30
+@ r7 should be 30 on exit from ref_roundkey_hvperms_s
+ rcp_iequal_nodelay r0, r7
+#endif
+#endif
+skip_ref_roundkey_hvperms_s:
 
  CHK_COUNT 81,6
 
+@ Trashes r0, r1
+ reset_rnd_count
  pop {r1-r3}
 @ r1=cipher/plaintext buffer, r2=number of blocks, r3=block counter
 
@@ -1767,6 +2117,7 @@ ctr_crypt_mainloop:
  adds r4,r4,r7               @ r4=j if top bit of r6, else i
  subs r1,r1,#1
  bpl 1b
+ // tooo loop check
  pop {r1}
  mov r12,r4
 .else
@@ -1812,29 +2163,59 @@ processIV:                   @ non-target label to assist power analysis
  movs r2,#0
  str r2,[r1]
  bl addstatevperm            @ Initialise state vperm (use SHA RNG to start with, later refreshes are with LFSR RNG)
+#if HARDENING
+ // r1 is set to lut_b by addstatevperm
+ ldr r0, =shareB + 0x10
+ rcp_iequal_nodelay r0, r1
+#endif
 .endif
 
+@ Trashes r0, r1
+ check_rnd_count RND_COUNT_ctr_crypt_mainloop_A
  CHK_COUNT 84,6
+.if ST_SHAREC                @ Avoid func call if the func is empty
  bl conjshareC               @ Add the effect of shareC to lut_a, lut_b
+#if HARDENING
+ // r1 is set to lut_b by conjshare
+ ldr r2,=lut_b
+ rcp_iequal_nodelay r1, r2
+#endif
+.endif
+ // todo graham remove this count
  CHK_COUNT 85,6
 @ now perform the 15 encryption rounds on (key, state=IV+x)
 @ here r4-r7, r8-r11: state
  mov r2,#0                   @ round counter
 rounds_s_mainloop:
+@ Trashes r0, r1
+ reset_rnd_count_checked
  ldr r12,=rkey_s
  add r12,r12,r2,lsl#5        @ pointer to key shares for this round
  add r12,r12,r2,lsl#3
  push {r2}                   @ save round count
  bl addrkey_s
+.if INLINE_MAP_SBOX_S
+ inline_map_sbox_s
+.else
  bl map_sbox_s
+.endif
+.if INLINE_SHIFT_ROWS_S
+ inline_shift_rows_s
+.else
  bl shift_rows_s
+.endif
 .if ST_VPERM
- ldr r2,[r13]                @ peek at stack to get round count
+ ldr r2,[sp]                @ peek at stack to get round count
  cmp r2,#NUMREFSTATEVPERM
  bcs 1f
  bl gen_rand_lfsr_nonpres
  ldr r1,=statevperm
  bl addstatevperm            @ V shuffle of r4-r11
+#if HARDENING
+ // r1 is set to lut_b by addstatevperm
+ ldr r2, =shareB + 0x10
+ rcp_iequal_nodelay r1, r2
+#endif
 1:
 .endif
  pop {r2}
@@ -1846,22 +2227,32 @@ rounds_s_mainloop:
  pop {r2}
  b rounds_s_mainloop
 2:
+#if HARDENING
+ movs r1, #14
+ rcp_iequal_nodelay r1, r2
+#endif
  CHK_COUNT 86,6
  ldr r12,=rkey_s+14*40       @ final round key shares
+ // todo graham check this is called
  bl addrkey_s
  CHK_COUNT 87,6
+.if ST_SHAREC                @ Avoid func call if the func is empty
+ // todo alex, i assume that skipping this will cause bad things to happen anyway?
  bl conjshareC               @ Undo the effect of shareC from lut_a, lut_b
+.endif
  CHK_COUNT 88,6
 .if ST_VPERM
 @ Undo the effects of vperm rotation recorded in statevperm
  ldr r1,=statevperm
  ldr r2,[r1]
  rsbs r0,r2,#0
+@ We don't check this is called since failing to undo this is probably going to break decryption
+// todo alex is this fair?
  bl addstatevperm
 .endif
 
  pop {r1-r3,r12}
- push {r3}
+ push {r1,r3}
 @ r1=cipher/plaintext buffer, r2=number of blocks, r3=block counter, r12=block to be deciphered
 
 decryption_start:
@@ -1901,10 +2292,13 @@ decryption_start:
  eors r3,r3,r0
  str r3,[r1,#12]
 
- sub r1,r1,r12,lsl#4         @ Restore r1 to point to start of buffer
  CHK_COUNT 90,6
 
- pop {r3}                    @ Restore block counter
+@ Trashes r0, r1
+ check_rnd_count RND_COUNT_decryption_end
+
+ pop {r1,r3}                  @ Restore r1 to point to start of buffer
+                              @ Restore block counter
 @ r1=cipher/plaintext buffer, r2=number of blocks, r3=block counter
 decryption_end:
 
@@ -1912,33 +2306,61 @@ decryption_end:
  cmp r3,r2
  CHK_COUNT 91,6
  bne ctr_crypt_mainloop
+ // todo alex, is this necessary - if you don't do the right number of loops, you ain't gonna get far?
+#if HARDENING
+ rcp_iequal_nodelay r2, r3
+#endif
 
 #if WIPE_MEMORY
 @ Wipe memory from workspace_start up to the stack pointer
 @ First fill everything (except the RNG state itself) with random numbers to avoid any possibly useful power signals
  ldr r4,=workspace_start
- ldr r5,=rstate_all_start
+ add r5, r4, #rstate_all_start - workspace_start
+#if HARDENING
+ ldr r7,=workspace_start
+ add r6, r4, #rstate_all_start - workspace_start
+ rcp_iequal_nodelay r4, r7
+#endif
+#if HARDENING
+ // todo alex, is this necessary - if you don't do the right number of loops, you ain't gonna get far?
+@ Recheck of above
+ rcp_iequal_nodelay r3, r2
+#endif
 1:
  bl gen_rand_sha_nonpres
  stmia r4!,{r0}
  cmp r4,r5
  bcc 1b
+#if HARDENING
+ rcp_iequal_nodelay r4, r6
+ mov r6,sp
+#endif
+ // not if this load is skpped, then we are just erasing from where we left off before
+.if rstate_all_end <= rstate_all_start
+.err
+.endif
  ldr r4,=rstate_all_end
- mov r5,r13                  @ gcc arm assembler says cmp r4,r13 is deprecated, so use another register
+ mov r5,sp                  @ gcc arm assembler says cmp r4,sp is deprecated, so use another register
 1:
  bl gen_rand_sha_nonpres
  stmia r4!,{r0}
  cmp r4,r5
  bcc 1b
+#if HARDENING
+ rcp_iequal_nodelay r4, r6
+#endif
 
 @ Then fill everything with zeros so as not to leave behind clues about the RNG state
  ldr r4,=workspace_start
  movs r0,#0
- mov r5,r13
+ mov r5,sp
 1:
  stmia r4!,{r0}
  cmp r4,r5
  bcc 1b
+#if HARDENING
+ rcp_iequal_nodelay r4, r6
+#endif
 #endif
 
 .if GEN_RAND_SHA

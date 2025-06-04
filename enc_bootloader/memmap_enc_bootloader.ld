@@ -24,7 +24,7 @@
 MEMORY
 {
     RAM_START(rwx) : ORIGIN = 0x20080000, LENGTH = 0x44
-    SCRATCH_X(rwx) : ORIGIN = 0x20080044, LENGTH = 0xFBC
+    SCRATCH_X(rwx) : ORIGIN = 0x20080044, LENGTH = 0xfbc
     SCRATCH_Y(rwx) : ORIGIN = 0x20081000, LENGTH = 0x800
     RAM(rwx)       : ORIGIN = 0x20081800, LENGTH = 0x800
 }
@@ -33,13 +33,7 @@ ENTRY(_entry_point)
 
 SECTIONS
 {
-    /* Note unlike RP2040, we start the image with a vector table even for
-       NO_FLASH builds. On Arm, the bootrom expects a VT at the start of the
-       image by default; on RISC-V, the default is to enter the image at its
-       lowest address, so an IMAGEDEF item is required to specify the
-       nondefault entry point. */
-
-    .start_text : {
+    .start : {
         __logical_binary_start = .;
         /* Vectors require 512-byte alignment on v8-M when >48 IRQs are used,
            so we would waste RAM if the vector table were not at the
@@ -52,6 +46,7 @@ SECTIONS
     } > RAM_START
 
     .text : {
+        __text_start = .;
         __reset_start = .;
         KEEP (*(.reset))
         __reset_end = .;
@@ -123,26 +118,29 @@ SECTIONS
         KEEP(*(.mutex_array))
         PROVIDE_HIDDEN (__mutex_array_end = .);
 
+        /* We skip all the initializers as we need very little runtime, and preinit_array items
+         * are __used, so would never be garbage collected even if referenced
+         */
         . = ALIGN(4);
         /* preinit data */
-        PROVIDE_HIDDEN (__preinit_array_start = .);
-        KEEP(*(SORT(.preinit_array.*)))
-        KEEP(*(.preinit_array))
-        PROVIDE_HIDDEN (__preinit_array_end = .);
+/*        PROVIDE_HIDDEN (__preinit_array_start = .); */
+/*        KEEP(*(SORT(.preinit_array.*)))*/
+/*        KEEP(*(.preinit_array))*/
+/*        PROVIDE_HIDDEN (__preinit_array_end = .);*/
 
         . = ALIGN(4);
         /* init data */
-        PROVIDE_HIDDEN (__init_array_start = .);
-        KEEP(*(SORT(.init_array.*)))
-        KEEP(*(.init_array))
-        PROVIDE_HIDDEN (__init_array_end = .);
+/*        PROVIDE_HIDDEN (__init_array_start = .);*/
+/*        KEEP(*(SORT(.init_array.*)))*/
+/*        KEEP(*(.init_array))*/
+/*        PROVIDE_HIDDEN (__init_array_end = .);*/
 
         . = ALIGN(4);
         /* finit data */
-        PROVIDE_HIDDEN (__fini_array_start = .);
-        *(SORT(.fini_array.*))
-        *(.fini_array)
-        PROVIDE_HIDDEN (__fini_array_end = .);
+/*        PROVIDE_HIDDEN (__fini_array_start = .);*/
+/*        *(SORT(.fini_array.*))*/
+/*        *(.fini_array)*/
+/*        PROVIDE_HIDDEN (__fini_array_end = .);*/
 
         *(.jcr)
         . = ALIGN(4);
@@ -237,6 +235,7 @@ SECTIONS
     __StackOneBottom = __StackOneTop - SIZEOF(.stack1_dummy);
     __StackBottom = __StackTop - SIZEOF(.stack_dummy);
     PROVIDE(__stack = __StackTop);
+    ASSERT(__StackBottom >= __scratch_y_end__, "stack collision in scratch_y")
 
     /* picolibc and LLVM */
     PROVIDE (__heap_start = __end__);

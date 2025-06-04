@@ -54,6 +54,21 @@
 #define CK_JITTER            1         // Use the ROSC clock to make ARM timings unpredictable
 #endif
 
+#ifndef INLINE_REF_ROUNDKEY_SHARES_S
+#define INLINE_REF_ROUNDKEY_SHARES_S 0
+#endif
+
+#ifndef INLINE_REF_ROUNDKEY_HVPERMS_S
+#define INLINE_REF_ROUNDKEY_HVPERMS_S 0
+#endif
+
+#ifndef INLINE_SHIFT_ROWS_S
+#define INLINE_SHIFT_ROWS_S 0
+#endif
+
+#ifndef INLINE_MAP_SBOX_S
+#define INLINE_MAP_SBOX_S 0
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
