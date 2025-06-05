@@ -52,16 +52,16 @@ _reset_handler:
     adr r6, mpu_regions
     // set region 7 (flash)
     ldmia r6!, {r1, r2, r3, r4}
-    stmia r0, {r1, r2, r3, r4}
+    stmia r0!, {r1, r2, r3, r4}
     // sp should have low 3 bits == 0 (which is all the bits RNR is)
-    str sp, [r0, #M33_MPU_RNR_OFFSET - M33_MPU_CTRL_OFFSET]
+    str sp, [r0, #M33_MPU_RNR_OFFSET - (M33_MPU_CTRL_OFFSET + 16)]
 #if HARDENING
     sub lr, lr // we don't need lr and it is unlikely to be something that ww will read from memory if this is skipped
-    ldr r1, [r0, #M33_MPU_RNR_OFFSET - M33_MPU_CTRL_OFFSET]
+    ldr r1, [r0, #M33_MPU_RNR_OFFSET - (M33_MPU_CTRL_OFFSET + 16)]
     // RNR should read back as zero
     rcp_iequal_nodelay r1, lr
 #endif
-    adds r0, #8
+    subs r0, #8
     ldmia r6!, {r1, r2, r3, r4, r5, r8, r9, r10}
     stmia r0!, {r1, r2, r3, r4, r5, r8, r9, r10}
 #if HARDENING
