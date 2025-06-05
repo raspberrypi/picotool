@@ -184,9 +184,11 @@ const string getFiletypeName(enum filetype type)
 struct cancelled_exception : std::exception { };
 
 struct not_mapped_exception : std::exception {
+    explicit not_mapped_exception(uint32_t addr) : addr(addr), std::exception() {}
     const char *what() const noexcept override {
         return "Hmm uncaught not mapped";
     }
+    uint32_t addr;
 };
 
 // from -> to
@@ -287,14 +289,14 @@ template <typename T> struct range_map {
         auto f = m.upper_bound(p);
         if (f == m.end()) {
             if (m.empty())
-                throw not_mapped_exception();
+                throw not_mapped_exception(p);
         } else if (f == m.begin()) {
-            throw not_mapped_exception();
+            throw not_mapped_exception(p);
         }
         f--;
         assert(p >= f->first);
         if (p >= f->second.first) {
-            throw not_mapped_exception();
+            throw not_mapped_exception(p);
         }
         return std::make_pair(mapping(p - f->first, f->second.first - f->first), f->second.second);
     }
@@ -2152,14 +2154,14 @@ struct iostream_memory_access : public memory_access {
                 assert(this_size);
                 file->seekg(result.second + result.first.offset, ios::beg);
                 file->read((char*)buffer, this_size);
-            } catch (not_mapped_exception &e) {
+            } catch (not_mapped_exception &) {
                 if (zero_fill) {
                     // address is not in a range, so fill up to next range with zeros
                     this_size = rmap.next(address) - address;
                     this_size = std::min(this_size, size);
                     memset(buffer, 0, this_size);
                 } else {
-                    throw e;
+                    throw;
                 }
             }
             buffer += this_size;
@@ -3794,8 +3796,8 @@ void info_guts(memory_access &raw_access, void *con) {
             }
         }
         fos.flush();
-    } catch (not_mapped_exception&) {
-        std::cout << "\nfailed to read memory\n";
+    } catch (not_mapped_exception&e) {
+        std::cout << "\nfailed to read memory at " << hex_string(e.addr) << "\n";
     }
 }
 
