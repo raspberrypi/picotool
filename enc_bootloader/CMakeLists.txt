@@ -84,8 +84,6 @@ if (NOT USE_PRECOMPILED)
     endif()
 
     target_compile_definitions(enc_bootloader PRIVATE
-        #ALLOW_DEBUGGING=1
-
         # The following are to reduce the size of the binary
         # use stack guards, as AES variables are written near the stack
         PICO_USE_STACK_GUARDS=1
@@ -103,6 +101,9 @@ if (NOT USE_PRECOMPILED)
         PICO_USE_GPIO_COPROCESSOR=0
         FIB_WORKAROUND=1
     )
+    if (ALLOW_DEBUGGING)
+        target_compile_definitions(enc_bootloader PRIVATE ALLOW_DEBUGGING=1)
+    endif()
 
     # print memory usage
     target_link_options(enc_bootloader PUBLIC -Wl,--print-memory-usage)
