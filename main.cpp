@@ -4923,12 +4923,6 @@ void sign_guts_elf(elf_file* elf, private_t private_key, public_t public_key) {
         image_type->flags |= PICOBIN_IMAGE_TYPE_EXE_TBYB_BITS;
     }
 
-    if (settings.seal.set_tbyb) {
-        // Set the TBYB bit on the image_type_item
-        std::shared_ptr<image_type_item> image_type = new_block.get_item<image_type_item>();
-        image_type->flags |= PICOBIN_IMAGE_TYPE_EXE_TBYB_BITS;
-    }
-
     if (settings.seal.major_version || settings.seal.minor_version || settings.seal.rollback_version) {
         std::shared_ptr<version_item> version = new_block.get_item<version_item>();
         if (version != nullptr) {
