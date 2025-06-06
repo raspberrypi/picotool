@@ -23,6 +23,7 @@ std::map<enum picoboot_status, const char *> status_code_strings = {
         {picoboot_status::PICOBOOT_INVALID_TRANSFER_LENGTH, "invalid transfer length"},
         {picoboot_status::PICOBOOT_REBOOTING, "rebooting"},
         {picoboot_status::PICOBOOT_UNKNOWN_CMD, "unknown cmd"},
+        {picoboot_status::PICOBOOT_UNKNOWN_ERROR, "unknown error"},
         {picoboot_status::PICOBOOT_INVALID_STATE, "invalid state"},
         {picoboot_status::PICOBOOT_INVALID_ADDRESS, "invalid argument"},
         {picoboot_status::PICOBOOT_NOT_PERMITTED, "permission failure"},
@@ -117,7 +118,12 @@ void connection::write(uint32_t addr, uint8_t *buffer, uint32_t len) {
 }
 
 void connection::read(uint32_t addr, uint8_t *buffer, uint32_t len) {
-    wrap_call([&] { return picoboot_read(device, addr, buffer, len); });
+    // Workaround due to picoboot interface not supporting reads over 4MiB
+    uint32_t max_chunk_size = 0x00400000;
+    for (uint32_t i=0; i < len; i += max_chunk_size) {
+        uint32_t read_size = std::min(len - i, max_chunk_size);
+        wrap_call([&] { return picoboot_read(device, addr + i, buffer + i, read_size); });
+    }
 }
 
 void connection::otp_write(struct picoboot_otp_cmd *otp_cmd, uint8_t *buffer, uint32_t len) {

@@ -1,0 +1,23 @@
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "enc_bootloader_prebuilt",
+    srcs = ["enc_bootloader.elf"],
+)
+
+filegroup(
+    name = "enc_bootloader_mbedtls_prebuilt",
+    srcs = ["enc_bootloader_mbedtls.elf"],
+)
+
+# TODO: Make this work.
+cc_library(
+    name = "enc_bootloader",
+    srcs = ["enc_bootloader.c"],
+    tags = ["manual"],
+    deps = [
+        "//:enc_bootloader",
+        "@pico-sdk//src/rp2_common/pico_stdlib",
+        "@pico-sdk//src/rp2_common/pico_rand",
+    ],
+)

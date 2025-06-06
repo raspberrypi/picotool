@@ -19,6 +19,20 @@ picotool_binary_data_header(
 
 # TODO: Make it possible to build the prebuilt from source.
 picotool_binary_data_header(
+    name = "enc_bootloader_elf",
+    src = "//enc_bootloader:enc_bootloader_prebuilt",
+    out = "enc_bootloader_elf.h",
+)
+
+# TODO: Make it possible to build the prebuilt from source.
+picotool_binary_data_header(
+    name = "enc_bootloader_mbedtls_elf",
+    src = "//enc_bootloader:enc_bootloader_mbedtls_prebuilt",
+    out = "enc_bootloader_mbedtls_elf.h",
+)
+
+# TODO: Make it possible to build the prebuilt from source.
+picotool_binary_data_header(
     name = "flash_id_bin",
     src = "//picoboot_flash_id:picoboot_flash_id_prebuilt",
     out = "flash_id_bin.h",
@@ -26,10 +40,24 @@ picotool_binary_data_header(
 
 cc_library(
     name = "xip_ram_perms",
-    srcs = ["xip_ram_perms.cpp"],
+    srcs = ["get_xip_ram_perms.cpp"],
     hdrs = [
-        "xip_ram_perms.h",
+        "get_xip_ram_perms.h",
         "xip_ram_perms_elf.h",
+    ],
+    deps = [
+        "//bazel:data_locs",
+        "//lib/whereami",
+    ],
+)
+
+cc_library(
+    name = "enc_bootloader",
+    srcs = ["get_enc_bootloader.cpp"],
+    hdrs = [
+        "get_enc_bootloader.h",
+        "enc_bootloader_elf.h",
+        "enc_bootloader_mbedtls_elf.h",
     ],
     deps = [
         "//bazel:data_locs",
@@ -61,7 +89,8 @@ cc_binary(
         "otp.cpp",
         "otp.h",
         "rp2350.rom.h",
-        "xip_ram_perms.cpp",
+        "get_xip_ram_perms.cpp",
+        "get_enc_bootloader.cpp",
     ] + select({
         # MSVC can't handle long strings, so use this manually generated
         # header instead.
@@ -97,6 +126,7 @@ cc_binary(
     }),
     deps = [
         ":xip_ram_perms",
+        ":enc_bootloader",
         "//bazel:data_locs",
         "//bintool",
         "//elf",

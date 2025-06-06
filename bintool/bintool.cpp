@@ -50,7 +50,15 @@ int read_keys(const std::string &filename, public_t *public_key, private_t *priv
     int rc;
 
     mbedtls_pk_init(&pk_ctx);
+#if MBEDTLS_VERSION_MAJOR >= 3
+    // This rng is only used for blinding when reading the key file
+    // As this should only be done on a secure computer, blinding is not required, so it's fine to not actually seed it with any entropy
+    mbedtls_ctr_drbg_context ctr_drbg;
+    mbedtls_ctr_drbg_init(&ctr_drbg);
+    rc = mbedtls_pk_parse_keyfile(&pk_ctx, filename.c_str(), NULL, mbedtls_ctr_drbg_random, &ctr_drbg);
+#else
     rc = mbedtls_pk_parse_keyfile(&pk_ctx, filename.c_str(), NULL);
+#endif
     if (rc != 0) {
         char error_string[128];
         mbedtls_strerror(rc, error_string, sizeof(error_string));
@@ -184,6 +192,21 @@ std::unique_ptr<block> find_first_block(std::vector<uint8_t> bin, uint32_t stora
 }
 
 
+void set_block_ignored(elf_file *elf, uint32_t block_addr) {
+    auto seg = elf->segment_from_physical_address(block_addr);
+    if (seg == nullptr) {
+        fail(ERROR_NOT_POSSIBLE, "The ELF file does not contain the block address %x", block_addr);
+    }
+    std::vector<uint8_t> content = elf->content(*seg);
+    uint32_t offset = block_addr + 4 - seg->physical_address();
+    if ((content[offset] & 0x7f) != PICOBIN_BLOCK_ITEM_PARTITION_TABLE) {
+        DEBUG_LOG("setting block at %08x to ignored\n", block_addr);
+        content[offset] = 0x7e;   
+    }
+    elf->content(*seg, content);
+}
+
+
 void set_next_block(elf_file *elf, std::unique_ptr<block> &first_block, uint32_t highest_address) {
     // todo this isn't right, but virtual should be physical for now
     auto seg = elf->segment_from_physical_address(first_block->physical_addr);
@@ -206,6 +229,15 @@ void set_next_block(elf_file *elf, std::unique_ptr<block> &first_block, uint32_t
 }
 
 
+void set_block_ignored(std::vector<uint8_t> &bin, uint32_t storage_addr, uint32_t block_addr) {
+    uint32_t offset = block_addr + 4 - storage_addr;
+    if ((bin[offset] & 0x7f) != PICOBIN_BLOCK_ITEM_PARTITION_TABLE) {
+        DEBUG_LOG("setting block at %08x to ignored\n", block_addr);
+        bin[offset] = 0x7e;   
+    }
+}
+
+
 void set_next_block(std::vector<uint8_t> &bin, uint32_t storage_addr, std::unique_ptr<block> &first_block, uint32_t highest_address) {
     // todo this isn't right, but virtual should be physical for now
     uint32_t offset = first_block->physical_addr + first_block->next_block_rel_index * 4 - storage_addr;
@@ -222,7 +254,7 @@ void set_next_block(std::vector<uint8_t> &bin, uint32_t storage_addr, std::uniqu
 }
 
 
-block place_new_block(elf_file *elf, std::unique_ptr<block> &first_block) {
+block place_new_block(elf_file *elf, std::unique_ptr<block> &first_block, bool set_others_ignored) {
     uint32_t highest_ram_address = 0;
     uint32_t highest_flash_address = 0;
     bool no_flash = false;
@@ -252,14 +284,16 @@ block place_new_block(elf_file *elf, std::unique_ptr<block> &first_block) {
 
     int32_t loop_start_rel = 0;
     uint32_t new_block_addr = 0;
+    std::unique_ptr<block> new_first_block;
     if (!first_block->next_block_rel) {
         set_next_block(elf, first_block, highest_address);
         loop_start_rel = -first_block->next_block_rel;
         new_block_addr = first_block->physical_addr + first_block->next_block_rel;
+        if (set_others_ignored) set_block_ignored(elf, first_block->physical_addr);
     } else {
         DEBUG_LOG("There is already a block loop\n");
+        if (set_others_ignored) set_block_ignored(elf, first_block->physical_addr);
         uint32_t next_block_addr = first_block->physical_addr + first_block->next_block_rel;
-        std::unique_ptr<block> new_first_block;
         while (true) {
             auto segment = elf->segment_from_physical_address(next_block_addr);
             if (segment == nullptr) {
@@ -292,6 +326,7 @@ block place_new_block(elf_file *elf, std::unique_ptr<block> &first_block) {
                 break;
             } else {
                 DEBUG_LOG("Continue looping\n");
+                if (set_others_ignored) set_block_ignored(elf, new_first_block->physical_addr);
                 next_block_addr = new_first_block->physical_addr + new_first_block->next_block_rel;
                 new_first_block.reset();
             }
@@ -306,55 +341,34 @@ block place_new_block(elf_file *elf, std::unique_ptr<block> &first_block) {
 
     // loop back to first block
     block new_block(new_block_addr, loop_start_rel);
-    // copt the existing block
-    std::copy(first_block->items.begin(),
-              first_block->items.end(),
-              std::back_inserter(new_block.items));
+    // check if last block has an image_def
+    if (new_first_block != nullptr && new_first_block->get_item<image_type_item>() != nullptr) {
+        // copy the last block items
+        std::copy(new_first_block->items.begin(),
+                  new_first_block->items.end(),
+                  std::back_inserter(new_block.items));
+    } else {
+        // copy the first block items
+        std::copy(first_block->items.begin(),
+                  first_block->items.end(),
+                  std::back_inserter(new_block.items));
+    }
+
+    // Delete existing signature and hash as these will be replaced with new ones
+    std::shared_ptr<signature_item> signature = new_block.get_item<signature_item>();
+    if (signature != nullptr) {
+        new_block.items.erase(std::remove(new_block.items.begin(), new_block.items.end(), signature), new_block.items.end());
+    }
+    std::shared_ptr<hash_value_item> hash_value = new_block.get_item<hash_value_item>();
+    if (hash_value != nullptr) {
+        new_block.items.erase(std::remove(new_block.items.begin(), new_block.items.end(), hash_value), new_block.items.end());
+    }
+    std::shared_ptr<hash_def_item> hash_def = new_block.get_item<hash_def_item>();
+    if (hash_def != nullptr) {
+        new_block.items.erase(std::remove(new_block.items.begin(), new_block.items.end(), hash_def), new_block.items.end());
+    }
 
     return new_block;
-}
-
-
-std::unique_ptr<block> get_last_block(std::vector<uint8_t> &bin, uint32_t storage_addr, std::unique_ptr<block> &first_block, get_more_bin_cb more_cb) {
-    uint32_t next_block_addr = first_block->physical_addr + first_block->next_block_rel;
-    std::unique_ptr<block> new_first_block;
-    uint32_t read_size = PICOBIN_MAX_BLOCK_SIZE;
-    while (true) {
-        auto offset = next_block_addr - storage_addr;
-        if (offset + read_size > bin.size() && more_cb != nullptr) {
-            more_cb(bin, offset + read_size);
-        }
-        std::vector<uint32_t> words = lsb_bytes_to_words(bin.begin() + offset, bin.end());
-        if (words.front() != PICOBIN_BLOCK_MARKER_START) {
-            fail(ERROR_UNKNOWN, "Block loop is not valid - no block found at %08x\n", (int)(next_block_addr));
-        }
-        words.erase(words.begin());
-        DEBUG_LOG("Checking block at %x\n", next_block_addr);
-        DEBUG_LOG("Starts with %x %x %x %x\n", words[0], words[1], words[2], words[3]);
-        for(auto next_item = words.begin(); next_item < words.end(); ) {
-            unsigned int size = item::decode_size(*next_item);
-            if ((uint8_t)*next_item == PICOBIN_BLOCK_ITEM_2BS_LAST) {
-                if (size == next_item - words.begin()) {
-                    if (next_item < words.end() && next_item[2] == PICOBIN_BLOCK_MARKER_END) {
-                        DEBUG_LOG("is a valid block\n");
-                        new_first_block = block::parse(next_block_addr, next_item + 1, words.begin(), words.begin() + size);
-                        break;
-                    }
-                }
-            } else {
-                next_item += size;
-            }
-        }
-        if (new_first_block->physical_addr + new_first_block->next_block_rel == first_block->physical_addr) {
-            DEBUG_LOG("Found last block in block loop\n");
-            break;
-        } else {
-            DEBUG_LOG("Continue looping\n");
-            next_block_addr = new_first_block->physical_addr + new_first_block->next_block_rel;
-            new_first_block.reset();
-        }
-    }
-    return new_first_block;
 }
 
 
@@ -362,13 +376,19 @@ std::vector<std::unique_ptr<block>> get_all_blocks(std::vector<uint8_t> &bin, ui
     uint32_t next_block_addr = first_block->physical_addr + first_block->next_block_rel;
     std::vector<std::unique_ptr<block>> all_blocks;
     uint32_t read_size = PICOBIN_MAX_BLOCK_SIZE;
+    uint32_t current_bin_start = storage_addr;
     while (true) {
         std::unique_ptr<block> new_first_block;
-        auto offset = next_block_addr - storage_addr;
-        if (offset + read_size > bin.size() && more_cb != nullptr) {
-            more_cb(bin, offset + read_size);
+        if (next_block_addr + read_size > current_bin_start + bin.size() && more_cb != nullptr) {
+            DEBUG_LOG("Reading into bin %08x+%x\n", next_block_addr, read_size);
+            more_cb(bin, next_block_addr, read_size);
+            current_bin_start = next_block_addr;
         }
+        auto offset = next_block_addr - current_bin_start;
         std::vector<uint32_t> words = lsb_bytes_to_words(bin.begin() + offset, bin.end());
+        if (words.front() != PICOBIN_BLOCK_MARKER_START) {
+            fail(ERROR_UNKNOWN, "Block loop is not valid - no block found at %08x\n", (int)(next_block_addr));
+        }
         words.erase(words.begin());
         DEBUG_LOG("Checking block at %x\n", next_block_addr);
         DEBUG_LOG("Starts with %x %x %x %x\n", words[0], words[1], words[2], words[3]);
@@ -400,7 +420,13 @@ std::vector<std::unique_ptr<block>> get_all_blocks(std::vector<uint8_t> &bin, ui
 }
 
 
-block place_new_block(std::vector<uint8_t> &bin, uint32_t storage_addr, std::unique_ptr<block> &first_block) {
+std::unique_ptr<block> get_last_block(std::vector<uint8_t> &bin, uint32_t storage_addr, std::unique_ptr<block> &first_block, get_more_bin_cb more_cb) {
+    auto all_blocks = get_all_blocks(bin, storage_addr, first_block, more_cb);
+    return std::move(all_blocks.back());
+}
+
+
+block place_new_block(std::vector<uint8_t> &bin, uint32_t storage_addr, std::unique_ptr<block> &first_block, bool set_others_ignored) {
     uint32_t highest_ram_address = 0;
     uint32_t highest_flash_address = 0;
     bool no_flash = false;
@@ -427,13 +453,19 @@ block place_new_block(std::vector<uint8_t> &bin, uint32_t storage_addr, std::uni
 
     int32_t loop_start_rel = 0;
     uint32_t new_block_addr = 0;
+    std::unique_ptr<block> new_first_block;
     if (!first_block->next_block_rel) {
         set_next_block(bin, storage_addr, first_block, highest_address);
         loop_start_rel = -first_block->next_block_rel;
         new_block_addr = first_block->physical_addr + first_block->next_block_rel;
+        if (set_others_ignored) set_block_ignored(bin, storage_addr, first_block->physical_addr);
     } else {
         DEBUG_LOG("Ooh, there is already a block loop - lets find it's end\n");
-        auto new_first_block = get_last_block(bin, storage_addr, first_block);
+        auto all_blocks = get_all_blocks(bin, storage_addr, first_block);
+        for (auto &block : all_blocks) {
+            if (set_others_ignored) set_block_ignored(bin, storage_addr, block->physical_addr);
+        }
+        new_first_block = std::move(all_blocks.back());
         set_next_block(bin, storage_addr, new_first_block, highest_address);
         new_block_addr = new_first_block->physical_addr + new_first_block->next_block_rel;
         loop_start_rel = first_block->physical_addr - new_block_addr;
@@ -444,10 +476,32 @@ block place_new_block(std::vector<uint8_t> &bin, uint32_t storage_addr, std::uni
 
     // loop back to first block
     block new_block(new_block_addr, loop_start_rel);
-    // copt the existing block
-    std::copy(first_block->items.begin(),
-              first_block->items.end(),
-              std::back_inserter(new_block.items));
+    // check if last block has an image_def
+    if (new_first_block != nullptr && new_first_block->get_item<image_type_item>() != nullptr) {
+        // copy the last block items
+        std::copy(new_first_block->items.begin(),
+                  new_first_block->items.end(),
+                  std::back_inserter(new_block.items));
+    } else {
+        // copy the first block items
+        std::copy(first_block->items.begin(),
+                  first_block->items.end(),
+                  std::back_inserter(new_block.items));
+    }
+
+    // Delete existing signature and hash as these will be replaced with new ones
+    std::shared_ptr<signature_item> signature = new_block.get_item<signature_item>();
+    if (signature != nullptr) {
+        new_block.items.erase(std::remove(new_block.items.begin(), new_block.items.end(), signature), new_block.items.end());
+    }
+    std::shared_ptr<hash_value_item> hash_value = new_block.get_item<hash_value_item>();
+    if (hash_value != nullptr) {
+        new_block.items.erase(std::remove(new_block.items.begin(), new_block.items.end(), hash_value), new_block.items.end());
+    }
+    std::shared_ptr<hash_def_item> hash_def = new_block.get_item<hash_def_item>();
+    if (hash_def != nullptr) {
+        new_block.items.erase(std::remove(new_block.items.begin(), new_block.items.end(), hash_def), new_block.items.end());
+    }
 
     return new_block;
 }
@@ -569,6 +623,11 @@ uint32_t calc_checksum(std::vector<uint8_t> bin) {
 
 #if HAS_MBEDTLS
 void hash_andor_sign_block(block *new_block, const public_t public_key, const private_t private_key, bool hash_value, bool sign, std::vector<uint8_t> to_hash) {
+    if (!(hash_value || sign)) {
+        // Don't need to add anything if not actually hashing or signing
+        return;
+    }
+
     std::shared_ptr<hash_def_item> hash_def = std::make_shared<hash_def_item>(PICOBIN_HASH_SHA256);
     new_block->items.push_back(hash_def);
 
@@ -648,7 +707,7 @@ std::vector<uint8_t> get_lm_hash_data(elf_file *elf, block *new_block, bool clea
             if (data.size() != seg->physical_size()) {
                 fail(ERROR_INCOMPATIBLE, "Elf segment physical size (%" PRIx32 ") does not match data size in file (%zx)", seg->physical_size(), data.size());
             }
-            if (seg->physical_size() && seg->physical_address() < new_block->physical_addr) {
+            if (seg->physical_size()) {
                 std::copy(data.begin(), data.end(), std::back_inserter(to_hash));
                 DEBUG_LOG("HASH %08x + %08x\n", (int)seg->physical_address(), (int)seg->physical_size());
                 entries.push_back(
@@ -698,7 +757,7 @@ std::vector<uint8_t> get_lm_hash_data(elf_file *elf, block *new_block, bool clea
 }
 
 
-std::vector<uint8_t> get_lm_hash_data(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *new_block, bool clear_sram = false) {
+std::vector<uint8_t> get_lm_hash_data(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *new_block, get_more_bin_cb more_cb, bool clear_sram = false) {
     std::vector<uint8_t> to_hash;
     std::shared_ptr<load_map_item> load_map = new_block->get_item<load_map_item>();
     if (load_map == nullptr) {
@@ -729,6 +788,7 @@ std::vector<uint8_t> get_lm_hash_data(std::vector<uint8_t> bin, uint32_t storage
     } else {
         DEBUG_LOG("Already has load map, so hashing that\n");
         // todo hash existing load map
+        uint32_t current_bin_start = storage_addr;
         for(const auto &entry : load_map->entries) {
             if (entry.storage_address == 0) {
                 std::copy(
@@ -737,7 +797,15 @@ std::vector<uint8_t> get_lm_hash_data(std::vector<uint8_t> bin, uint32_t storage
                     std::back_inserter(to_hash));
                 DEBUG_LOG("CLEAR %08x + %08x\n", (int)entry.runtime_address, (int)entry.size);
             } else {
-                uint32_t rel_addr = entry.storage_address - storage_addr;
+                if (entry.storage_address + entry.size > current_bin_start + bin.size()) {
+                    if (more_cb == nullptr) {
+                        fail(ERROR_NOT_POSSIBLE, "BIN does not contain data for load_map entry %08x->%08x", entry.storage_address, entry.storage_address + entry.size);
+                    }
+                    DEBUG_LOG("Reading into bin %08x+%x\n", entry.storage_address, entry.size);
+                    more_cb(bin, entry.storage_address, entry.size);
+                    current_bin_start = entry.storage_address;
+                }
+                uint32_t rel_addr = entry.storage_address - current_bin_start;
                 std::copy(
                     bin.begin() + rel_addr,
                     bin.begin() + rel_addr + entry.size,
@@ -787,10 +855,10 @@ int hash_andor_sign(elf_file *elf, block *new_block, const public_t public_key, 
 
 
 std::vector<uint8_t> hash_andor_sign(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *new_block, const public_t public_key, const private_t private_key, bool hash_value, bool sign, bool clear_sram) {
-    std::vector<uint8_t> to_hash = get_lm_hash_data(bin, storage_addr, runtime_addr, new_block, clear_sram);
+    std::vector<uint8_t> to_hash = get_lm_hash_data(bin, storage_addr, runtime_addr, new_block, nullptr, clear_sram);
 
-    hash_andor_sign_block(new_block, public_key, private_key, hash_value, sign, bin);
-    
+    hash_andor_sign_block(new_block, public_key, private_key, hash_value, sign, to_hash);
+
     auto tmp = new_block->to_words();
     std::vector<uint8_t> data = words_to_lsb_bytes(tmp.begin(), tmp.end());
 
@@ -800,7 +868,7 @@ std::vector<uint8_t> hash_andor_sign(std::vector<uint8_t> bin, uint32_t storage_
 }
 
 
-void verify_block(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *block, verified_t &hash_verified, verified_t &sig_verified) {
+void verify_block(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *block, verified_t &hash_verified, verified_t &sig_verified, get_more_bin_cb more_cb) {
     std::shared_ptr<load_map_item> load_map = block->get_item<load_map_item>();
     std::shared_ptr<hash_def_item> hash_def = block->get_item<hash_def_item>();
     hash_verified = none;
@@ -808,7 +876,7 @@ void verify_block(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runt
     if (load_map == nullptr || hash_def == nullptr) {
         return;
     }
-    std::vector<uint8_t> to_hash = get_lm_hash_data(bin, storage_addr, runtime_addr, block, false);
+    std::vector<uint8_t> to_hash = get_lm_hash_data(bin, storage_addr, runtime_addr, block, more_cb, false);
 
     // auto it = std::find(block->items.begin(), block->items.end(), hash_def);
     // assert (it != block->items.end());
@@ -869,8 +937,7 @@ void verify_block(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runt
 }
 
 
-int encrypt(elf_file *elf, block *new_block, const private_t aes_key, const public_t public_key, const private_t private_key, bool hash_value, bool sign) {
-
+void encrypt_guts(elf_file *elf, block *new_block, const aes_key_t aes_key, std::vector<uint8_t> &iv_data, std::vector<uint8_t> &enc_data) {
     std::vector<uint8_t> to_enc = get_lm_hash_data(elf, new_block);
 
     std::random_device rand{};
@@ -886,12 +953,26 @@ int encrypt(elf_file *elf, block *new_block, const private_t aes_key, const publ
         e = rand();
     }
 
-    std::vector<uint8_t> iv_data(iv.bytes, iv.bytes + sizeof(iv.bytes));
+    iv_data.resize(sizeof(iv.bytes));
+    memcpy(iv_data.data(), iv.bytes, sizeof(iv.bytes));
 
-    std::vector<uint8_t> enc_data;
     enc_data.resize(to_enc.size());
 
     aes256_buffer(to_enc.data(), to_enc.size(), enc_data.data(), &aes_key, &iv);
+}
+
+
+int encrypt(elf_file *elf, block *new_block, const aes_key_t aes_key, const public_t public_key, const private_t private_key, std::vector<uint8_t> iv_salt, bool hash_value, bool sign) {
+
+    std::vector<uint8_t> iv_data;
+    std::vector<uint8_t> enc_data;
+    encrypt_guts(elf, new_block, aes_key, iv_data, enc_data);
+
+    // Salt IV
+    assert(iv_data.size() == iv_salt.size());
+    for (int i=0; i < iv_data.size(); i++) {
+        iv_data[i] ^= iv_salt[i];
+    }
 
     unsigned int i=0;
     for(const auto &seg : sorted_segs(elf)) {
@@ -975,7 +1056,7 @@ int encrypt(elf_file *elf, block *new_block, const private_t aes_key, const publ
 }
 
 
-std::vector<uint8_t> encrypt(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *new_block, const private_t aes_key, const public_t public_key, const private_t private_key, bool hash_value, bool sign) {
+std::vector<uint8_t> encrypt(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *new_block, const aes_key_t aes_key, const public_t public_key, const private_t private_key, std::vector<uint8_t> iv_salt, bool hash_value, bool sign) {
     std::random_device rand{};
     assert(rand.max() - rand.min() >= 256);
 
@@ -990,6 +1071,12 @@ std::vector<uint8_t> encrypt(std::vector<uint8_t> bin, uint32_t storage_addr, ui
     }
 
     std::vector<uint8_t> iv_data(iv.bytes, iv.bytes + sizeof(iv.bytes));
+
+    // Salt IV
+    assert(iv_data.size() == iv_salt.size());
+    for (int i=0; i < iv_data.size(); i++) {
+        iv_data[i] ^= iv_salt[i];
+    }
 
     std::vector<uint8_t> enc_data;
     enc_data.resize(bin.size());

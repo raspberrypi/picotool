@@ -230,15 +230,6 @@ void elf_file::flatten(void) {
         }
         idx++;
     }
-
-    idx = 0;
-    for (const auto &ph : ph_entries) {
-        if (ph.filez) {
-            elf_bytes.resize(std::max(ph.offset + ph.filez, (uint32_t)elf_bytes.size()));
-            memcpy(&elf_bytes[ph.offset], &ph_data[idx][0], ph.filez);
-        }
-        idx++;
-    }
     if (verbose) printf("Elf file size %zu\n", elf_bytes.size());
 }
 
@@ -260,6 +251,33 @@ void elf_file::read_sh(void) {
     }
 }
 
+// If there are holes between sections within segments, increase the section size to plug the hole
+// This is necessary to ensure the whole segment contains data defined in sections, otherwise you end up
+// signing/hashing/encrypting data that may not be written, as many tools write in sections not segments
+void elf_file::remove_sh_holes(void) {
+    bool found_hole = false;
+    for (int i=0; i+1 < sh_entries.size(); i++) {
+        auto sh0 = &(sh_entries[i]);
+        elf32_sh_entry sh1 = sh_entries[i+1];
+        if (
+            (sh0->type == SHT_PROGBITS && sh1.type == SHT_PROGBITS)
+            && (sh0->size && sh1.size)
+            && (sh0->addr + sh0->size < sh1.addr)
+            && (segment_from_section(*sh0) == segment_from_section(sh1))
+            && segment_from_section(*sh0) != NULL
+        ) {
+            uint32_t gap = sh1.addr - sh0->addr - sh0->size;
+            if (gap > sh1.addralign) {
+                fail(ERROR_INCOMPATIBLE, "Section %d: Cannot plug gap greater than alignment - gap %d, alignment %d", i, gap, sh1.addralign);
+            }
+            if (verbose) printf("Section %d: Moving end from 0x%08x to 0x%08x to plug gap\n", i, sh0->addr + sh0->size, sh1.addr);
+            sh0->size = sh1.addr - sh0->addr;
+            found_hole = true;
+        }
+    }
+    if (found_hole) read_sh_data();
+}
+
 // Read the section data from the internal byte array into discrete sections.
 // This is used after modifying segments but before inserting new segments
 void elf_file::read_sh_data(void) {
@@ -274,20 +292,8 @@ void elf_file::read_sh_data(void) {
     }
 }
 
-void elf_file::read_ph_data(void) {
-    int ph_idx = 0;
-    ph_data.resize(eh.ph_num);
-    for (const auto &ph: ph_entries) {
-        if (ph.filez) {
-            ph_data[ph_idx].resize(ph.filez);
-            read_bytes(ph.offset, ph.filez, &ph_data[ph_idx][0]);
-        }
-        ph_idx++;
-    }
-}
-
 const std::string elf_file::section_name(uint32_t sh_name) const {
-    if (!eh.sh_str_index || eh.sh_str_index > eh.sh_num)
+    if (!eh.sh_str_index || eh.sh_str_index > eh.sh_num || eh.sh_str_index >= sh_data.size())
         return "";
 
     if (sh_name > sh_data[eh.sh_str_index].size())
@@ -393,7 +399,6 @@ int elf_file::read_file(std::shared_ptr<std::iostream> file) {
             read_sh();
         }
         read_sh_data();
-        read_ph_data();
     }
     catch (const std::ios_base::failure &e) {
         std::cerr << "Failed to read elf file" << std::endl;
@@ -440,7 +445,6 @@ void elf_file::content(const elf32_ph_entry &ph, const std::vector<uint8_t> &con
     if (verbose) printf("Update segment content offset %x content size %zx physical size %x\n", ph.offset, content.size(), ph.filez);
     memcpy(&elf_bytes[ph.offset], &content[0], std::min(content.size(), (size_t) ph.filez));
     read_sh_data(); // Extract the sections after modifying the content
-    read_ph_data();
 }
 
 void elf_file::content(const elf32_sh_entry &sh, const std::vector<uint8_t> &content) {
@@ -449,7 +453,6 @@ void elf_file::content(const elf32_sh_entry &sh, const std::vector<uint8_t> &con
     if (verbose) printf("Update section content offset %x content size %zx section size %x\n", sh.offset, content.size(), sh.size);
     memcpy(&elf_bytes[sh.offset], &content[0], std::min(content.size(), (size_t) sh.size));
     read_sh_data();  // Extract the sections after modifying the content
-    read_ph_data();
 }
 
 const elf32_ph_entry* elf_file::segment_from_physical_address(uint32_t paddr) {
@@ -470,6 +473,16 @@ const elf32_ph_entry* elf_file::segment_from_virtual_address(uint32_t vaddr) {
         }
     }
     return NULL;
+}
+
+const elf32_ph_entry* elf_file::segment_from_section(const elf32_sh_entry &sh) {
+    for (int i = 0; i < eh.ph_num; i++) {
+        if (sh.offset >= ph_entries[i].offset && sh.offset < ph_entries[i].offset + ph_entries[i].filez) {
+            if (verbose) printf("segment %d contains section %s\n", i, section_name(sh.name).c_str());
+            return &ph_entries[i];
+        }
+    }
+    return nullptr;
 }
 
 // Appends a new segment and section - filled with zeros
@@ -527,7 +540,6 @@ const elf32_ph_entry& elf_file::append_segment(uint32_t vaddr, uint32_t paddr, u
     sh_entries.push_back(sh);
     sh_data.push_back(std::vector<uint8_t>(size));
     ph_entries.back().offset = sh.offset;
-    ph_data.push_back(std::vector<uint8_t>(size));
 
     eh.sh_offset = sh.offset + sh.size;
     eh.sh_num++;

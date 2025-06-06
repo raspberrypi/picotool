@@ -40,7 +40,49 @@ void mb_sha256_buffer(const uint8_t *data, size_t len, message_digest_t *digest_
     mbedtls_sha256(data, len, digest_out->bytes, 0);
 }
 
-void mb_aes256_buffer(const uint8_t *data, size_t len, uint8_t *data_out, const private_t *key, iv_t *iv) {
+#if IV0_XOR
+// Taken from mbedtls_aes_crypt_ctr, but with XOR instead of adding to IV0
+int mb_aes_crypt_ctr_xor(mbedtls_aes_context *ctx,
+    size_t length,
+    unsigned char iv0[16],
+    unsigned char nonce_xor[16],
+    unsigned char stream_block[16],
+    const unsigned char *input,
+    unsigned char *output)
+{
+    int c;
+    int ret = 0;
+    size_t n = 0;
+    uint32_t counter = 0;
+
+    assert(length == (uint32_t)length);
+
+    while (length--) {
+        if (n == 0) {
+            for (int i = 16; i > 0; i--) {
+                nonce_xor[i-1] = iv0[i-1];
+                if (i > 16 - sizeof(counter)) {
+                    nonce_xor[i-1] ^= (unsigned char)(counter >> ((16-i)*8));
+                }
+            }
+
+            ret = mbedtls_aes_crypt_ecb(ctx, MBEDTLS_AES_ENCRYPT, nonce_xor, stream_block);
+            if (ret != 0) {
+                break;
+            }
+            counter++;
+        }
+        c = *input++;
+        *output++ = (unsigned char) (c ^ stream_block[n]);
+
+        n = (n + 1) & 0x0F;
+    }
+
+    return ret;
+}
+#endif
+
+void mb_aes256_buffer(const uint8_t *data, size_t len, uint8_t *data_out, const aes_key_t *key, iv_t *iv) {
     mbedtls_aes_context aes;
 
     assert(len % 16 == 0);
@@ -48,7 +90,12 @@ void mb_aes256_buffer(const uint8_t *data, size_t len, uint8_t *data_out, const 
     mbedtls_aes_setkey_enc(&aes, key->bytes, 256);
     uint8_t stream_block[16] = {0};
     size_t nc_off = 0;
+#if IV0_XOR
+    uint8_t xor_working_block[16] = {0};
+    mb_aes_crypt_ctr_xor(&aes, len, iv->bytes, xor_working_block, stream_block, data, data_out);
+#else
     mbedtls_aes_crypt_ctr(&aes, len, &nc_off, iv->bytes, stream_block, data, data_out);
+#endif
 }
 
 void raw_to_der(signature_t *sig) {
@@ -175,7 +222,11 @@ void mb_sign_sha256(const uint8_t *entropy, size_t entropy_size, const message_d
 
     DEBUG_LOG(" ok (key size: %d bits)\n", (int) ctx_sign.grp.pbits);
 
+#if MBEDTLS_VERSION_MAJOR >= 3
+    ret = mbedtls_ecp_check_pub_priv(&ctx_sign, &ctx_sign, mbedtls_ctr_drbg_random, &ctr_drbg);
+#else
     ret = mbedtls_ecp_check_pub_priv(&ctx_sign, &ctx_sign);
+#endif
     DEBUG_LOG("Pub Priv Returned %d\n", ret);
 
     dump_pubkey("  + Public key: ", &ctx_sign);
@@ -187,7 +238,11 @@ void mb_sign_sha256(const uint8_t *entropy, size_t entropy_size, const message_d
 
     if ((ret = mbedtls_ecdsa_write_signature(&ctx_sign, MBEDTLS_MD_SHA256,
                                              m->bytes, sizeof(m->bytes),
-                                             out->der, &out->der_len,
+                                             out->der,
+                                             #if MBEDTLS_VERSION_MAJOR >= 3
+                                             sizeof(out->der),
+                                             #endif
+                                             &out->der_len,
                                              mbedtls_ctr_drbg_random, &ctr_drbg)) != 0) {
         DEBUG_LOG(" failed\n  ! mbedtls_ecdsa_write_signature returned %d\n", ret);
         return;

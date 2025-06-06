@@ -5,7 +5,7 @@
 #include <sstream>
 #include <fstream>
 
-#include "xip_ram_perms.h"
+#include "get_xip_ram_perms.h"
 #include "xip_ram_perms_elf.h"
 
 #include "data_locs.h"

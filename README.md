@@ -1,101 +1,3 @@
-## Building
-
-You need to set PICO_SDK_PATH in the environment, or pass it to cmake with `-DPICO_SDK_PATH=/path/to/pico-sdk`. To use features such as signing or hashing, you will need to make sure the mbedtls submodule in the SDK is checked out - this can be done by running this from your SDK directory.
-
-```console
-git submodule update --init lib/mbedtls
-```
-
-You also need to install `libusb-1.0`.
-
-### Linux / macOS
-
-Use your favorite package tool to install dependencies. For example, on Ubuntu:
-
-```console
-sudo apt install build-essential pkg-config libusb-1.0-0-dev cmake
-```
-
-> If libusb-1.0-0-dev is not installed, picotool still builds, but it omits all options that deal with managing a pico via USB (load, save, erase, verify, reboot). Builds that do not include USB support can be recognized because these commands also do not appear in the help command. The build output message 'libUSB is not found - no USB support will be built' also appears in the build logs.
-
-Then simply build like a normal CMake project:
-
-```console
-mkdir build
-cd build
-cmake ..
-make
-```
-
-On Linux you can add udev rules in order to run picotool without sudo:
-
-```console
-sudo cp udev/99-picotool.rules /etc/udev/rules.d/
-```
-
-### Windows
-
-##### For Windows without MinGW
-
-Download libUSB from here https://libusb.info/
-
-set LIBUSB_ROOT environment variable to the install directory.
-```console
-mkdir build
-cd build
-cmake -G "NMake Makefiles" ..
-nmake
-```
-
-##### For Windows with MinGW in WSL
-
-Download libUSB from here https://libusb.info/
-
-set LIBUSB_ROOT environment variable to the install directory.
-
-```console
-mkdir build
-cd build
-cmake ..
-make
-```
-
-##### For Windows with MinGW in MSYS2:
-
-No need to download libusb separately or set `LIBUSB_ROOT`.
-
-```console
-pacman -S $MINGW_PACKAGE_PREFIX-{toolchain,cmake,libusb}
-mkdir build
-cd build
-cmake .. -DCMAKE_INSTALL_PREFIX=$MINGW_PREFIX
-cmake --build .
-```
-
-## Usage by the Raspberry Pi Pico SDK
-
-The Raspberry Pi Pico SDK ([pico-sdk](https://github.com/raspberrypi/pico-sdk)) version 2.0.0 and above uses `picotool` to do the ELF-to-UF2 conversion previously handled by the `elf2uf2` tool in the SDK. The SDK also uses `picotool` to hash and sign binaries.
-
-Whilst the SDK can download picotool on its own per project, if you have multiple projects or build configurations, it is preferable to install a single copy of `picotool` locally. This can be done most simply with `make install` or `cmake --install .`, using `sudo` if required; the SDK will use this installed version by default.
-
-> On some Linux systems, the `~/.local` prefix may be used for an install without `sudo`; from your build directory simply run
-> ```console
-> cmake -DCMAKE_INSTALL_PREFIX=~/.local ..
-> make install
-> ```
-> This will only work if `~/.local` is included in your `PATH`
-
-Alternatively, you can install to a custom path via:
-
-```console
-cmake -DCMAKE_INSTALL_PREFIX=$MY_INSTALL_DIR -DPICOTOOL_FLAT_INSTALL=1 ..
-make install
-```
-
-In order for the SDK to find `picotool` in this custom folder, you will usually need to set the `picotool_DIR` variable in your project. This can be achieved either by setting the `picotool_DIR` environment variable to `$MY_INSTALL_DIR/picotool`, by passing `-Dpicotool_DIR=$MY_INSTALL_DIR/picotool` to your `cmake` command, or by adding `set(picotool_DIR $MY_INSTALL_DIR/picotool)` to your CMakeLists.txt file.
-
-> See the [find_package documentation](https://cmake.org/cmake/help/latest/command/find_package.html#config-mode-search-procedure) for more details
-
 ## Overview
 
 `picotool` is a tool for working with RP2040/RP2350 binaries, and interacting with RP2040/RP2350 devices when they are in BOOTSEL mode. (As of version 1.1 of `picotool` it is also possible to interact with devices that are not in BOOTSEL mode, but are using USB stdio support from the Raspberry Pi Pico SDK by using the `-f` argument of `picotool`).
@@ -112,23 +14,26 @@ SYNOPSIS:
     picotool info [-b] [-m] [-p] [-d] [--debug] [-l] [-a] <filename> [-t <type>]
     picotool config [-s <key> <value>] [-g <group>] [device-selection]
     picotool config [-s <key> <value>] [-g <group>] <filename> [-t <type>]
-    picotool load [--ignore-partitions] [--family <family_id>] [-p <partition>] [-n] [-N] [-u] [-v] [-x] <filename> [-t <type>] [-o <offset>] [device-selection]
-    picotool encrypt [--quiet] [--verbose] [--hash] [--sign] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] <aes_key> [-t <type>] [<signing_key>] [-t <type>]
-    picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] [<key>] [-t <type>] [<otp>] [-t <type>] [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
-    picotool link [--quiet] [--verbose] <outfile> [-t <type>] <infile1> [-t <type>] <infile2> [-t <type>] [<infile3>] [-t <type>] [-p] <pad>
-    picotool save [-p] [-v] [--family <family_id>] [device-selection]
-    picotool save -a [-v] [--family <family_id>] [device-selection]
-    picotool save -r <from> <to> [-v] [--family <family_id>] [device-selection]
+    picotool load [--ignore-partitions] [--family <family_id>] [-p <partition>] [-n] [-N] [-u] [-v] [-x] <filename> [-t <type>] [-o
+                <offset>] [device-selection]
+    picotool encrypt [--quiet] [--verbose] [--embed] [--fast-rosc] [--use-mbedtls] [--otp-key-page <page>] [--hash] [--sign] <infile> [-t
+                <type>] [-o <offset>] <outfile> [-t <type>] <aes_key> <iv_salt> <signing_key> <otp>
+    picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] <key> <otp>
+                [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
+    picotool link [--quiet] [--verbose] <outfile> [-t <type>] <infile1> [-t <type>] <infile2> [-t <type>] [<infile3>] [-t <type>] [-p <pad>]
+    picotool save [-p] [-v] [--family <family_id>] <filename> [-t <type>] [device-selection]
+    picotool save -a [-v] [--family <family_id>] <filename> [-t <type>] [device-selection]
+    picotool save -r <from> <to> [-v] [--family <family_id>] <filename> [-t <type>] [device-selection]
     picotool erase [-a] [device-selection]
     picotool erase -p <partition> [device-selection]
     picotool erase -r <from> <to> [device-selection]
-    picotool verify [device-selection]
+    picotool verify <filename> [-t <type>] [device-selection] [-r <from> <to>] [-o <offset>] [device-selection]
     picotool reboot [-a] [-u] [-g <partition>] [-c <cpu>] [device-selection]
     picotool otp list|get|set|load|dump|permissions|white-label
     picotool partition info|create
     picotool uf2 info|convert
     picotool version [-s] [<version>]
-    picotool coprodis [--quiet] [--verbose] <infile> [-t <type>] <outfile> [-t <type>]
+    picotool coprodis [--quiet] [--verbose] <infile> <outfile>
     picotool help [<cmd>]
 
 COMMANDS:
@@ -154,6 +59,12 @@ Use "picotool help <cmd>" for more info
 ```
 
 Note commands that aren't acting on files require a device in BOOTSEL mode to be connected.
+
+## Building & Installing
+
+If you don't want to build picotool yourself, you can find pre-built executables for Windows, macOS, and Linux in the [pico-sdk-tools](https://github.com/raspberrypi/pico-sdk-tools/releases) repository. Assuming you've extracted that archive to `<extract_location>` (with the actual picotool executable at `<extract_location>/picotool/picotool`), you can point the Pico SDK at this binary by setting the `picotool_DIR` environment variable to `<extract_location>/picotool`, or by passing `-Dpicotool_DIR=<extract_location>/picotool` to your `cmake` command or setting it in your `CMakeLists.txt` file.
+
+If you do wish to build picotool yourself, then see [Building](BUILDING.md#building) for build instructions. For the Pico SDK to find your picotool you will need to install it, the simplest way being to run `cmake --install .` - see [Installing](BUILDING.md#installing-so-the-pico-sdk-can-find-it) for more details and alternatives. **You cannot just copy the binary into your `PATH`, else the Pico SDK will not be able to locate it.**
 
 ## info
 
@@ -208,7 +119,7 @@ TARGET SELECTION:
         -F, --force-no-reboot
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
-            RPI-RP2 drive mounted
+            USB drive mounted
     To target a file
         <filename>
             The file name
@@ -316,7 +227,7 @@ TARGET SELECTION:
         -F, --force-no-reboot
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
-            RPI-RP2 drive mounted
+            USB drive mounted
     To target a file
         <filename>
             The file name
@@ -417,7 +328,7 @@ OPTIONS:
         -F, --force-no-reboot
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
-            RPI-RP2 drive mounted
+            USB drive mounted
 ```
 
 e.g.
@@ -437,9 +348,9 @@ SAVE:
     Save the program / memory stored in flash on the device to a file.
 
 SYNOPSIS:
-    picotool save [-p] [-v] [--family <family_id>] [device-selection]
-    picotool save -a [-v] [--family <family_id>] [device-selection]
-    picotool save -r <from> <to> [-v] [--family <family_id>] [device-selection]
+    picotool save [-p] [-v] [--family <family_id>] <filename> [-t <type>] [device-selection]
+    picotool save -a [-v] [--family <family_id>] <filename> [-t <type>] [device-selection]
+    picotool save -r <from> <to> [-v] [--family <family_id>] <filename> [-t <type>] [device-selection]
 
 OPTIONS:
     Selection of data to save
@@ -460,7 +371,12 @@ OPTIONS:
         --family
             Specify the family ID to save the file as
         <family_id>
-            family id to save file as
+            family ID to save file as
+    File to save to
+        <filename>
+            The file name
+        -t <type>
+            Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
     Source device selection
         --bus <bus>
             Filter devices by USB bus number
@@ -478,12 +394,7 @@ OPTIONS:
         -F, --force-no-reboot
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
-            RPI-RP2 drive mounted
-    File to save to
-        <filename>
-            The file name
-        -t <type>
-            Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
+            USB drive mounted
 ```
 
 e.g. first looking at what is on the device...
@@ -511,6 +422,55 @@ name:      lcd_1602_i2c
 web site:  https://github.com/raspberrypi/pico-examples/tree/HEAD/i2c/lcd_1602_i2c
 ```
 
+## verify
+
+This command allows you to verify that the contents of Flash/SRAM on the device matches a file, similar to the `--verify` option for `save` and `load`.
+
+```text
+$ picotool help verify
+VERIFY:
+    Check that the device contents match those in the file.
+
+SYNOPSIS:
+    picotool verify <filename> [-t <type>] [-r <from> <to>] [-o <offset>] [device-selection]
+
+OPTIONS:
+    The file to compare against
+        <filename>
+            The file name
+        -t <type>
+            Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
+    Address options
+        -r, --range
+            Compare a sub range of memory only
+        <from>
+            The lower address bound in hex
+        <to>
+            The upper address bound in hex
+        -o, --offset
+            Specify the load address when comparing with a BIN file
+        <offset>
+            Load offset (memory address; default 0x10000000)
+    Target device selection
+        --bus <bus>
+            Filter devices by USB bus number
+        --address <addr>
+            Filter devices by USB device address
+        --vid <vid>
+            Filter by vendor id
+        --pid <pid>
+            Filter by product id
+        --ser <ser>
+            Filter by serial number
+        -f, --force
+            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
+            command (unless the command itself is a 'reboot') the device will be rebooted back to application mode
+        -F, --force-no-reboot
+            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
+            command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
+            USB drive mounted
+```
+
 ## erase
 
 `erase` allows you to erase all of flash, a partition of flash, or an explicit range of flash on the device.
@@ -523,7 +483,7 @@ ERASE:
 
 SYNOPSIS:
     picotool erase [-a] [device-selection]
-    picotool erase [-p <partition>] [device-selection]
+    picotool erase -p <partition> [device-selection]
     picotool erase -r <from> <to> [device-selection]
 
 OPTIONS:
@@ -557,7 +517,7 @@ OPTIONS:
         -F, --force-no-reboot
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
-            RPI-RP2 drive mounted
+            USB drive mounted
 ```
 
 e.g. first looking at what is on the device...
@@ -618,14 +578,18 @@ SEAL:
     Add final metadata to a binary, optionally including a hash and/or signature.
 
 SYNOPSIS:
-    picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] [<key>] [-t
-                <type>] [<otp>] [-t <type>] [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
+    picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] <key> <otp>
+                [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
 
 OPTIONS:
         --quiet
             Don't print any output
         --verbose
             Print verbose output
+        <key>
+            Key file (.pem)
+        <otp>
+            JSON file to save OTP to (will edit existing file if it exists)
         --major <major>
             Add Major Version
         --minor <minor>
@@ -654,21 +618,11 @@ OPTIONS:
             The file name
         -t <type>
             Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
-    Key file
-        <key>
-            The file name
-        -t <type>
-            Specify file type (pem) explicitly, ignoring file extension
-    File to save OTP to (will edit existing file if it exists)
-        <otp>
-            The file name
-        -t <type>
-            Specify file type (json) explicitly, ignoring file extension
 ```
 
 ## encrypt
 
-`encrypt` allows you to encrypt and sign a binary for use on the RP2350. By default, it will sign the encrypted binary, but that can be configured similarly to `picotool sign`.
+`encrypt` allows you to encrypt and sign a binary for use on the RP2350. By default, it will sign the encrypted binary, but that can be configured similarly to `picotool seal`. You can either provide your own bootloader to decrypt the binary (see pico-examples/bootloaders/encrypted), or embed a decrypting bootloader into the binary with the `--embed` argument, to create a self-decrypting binary.
 
 The encrypted binary will have the following structure:
 
@@ -678,7 +632,15 @@ The encrypted binary will have the following structure:
 - Padding to ensure the encrypted length is a multiple of 4 words
 - Signature metadata block
 
-The AES key must be provided as a .bin file of the 256 bit AES key to be used for encryption.
+The AES key can either be provided as a 1024-bit (128 byte) 4-way key share or as a 256-bit (32 byte) AES key. In the latter case, a key share will be generated for you, as the decryption code needs a 4-way key share in OTP rather than a plain key.
+
+The 4-way key share should be generated by creating a random .bin file of length 128 bytes and the AES key will be derived from that. With the words stored in the file as A[0], B[0], C[0], D[0], A[1], B[1], etc., C[7], D[7], word i of the key X is X[i] = A[i] ^ B[i] ^ C[i] ^ D[i].
+
+Alternatively an AES key can be provided directly, as either a 32 byte .bin file or as a string of 64 hexadecimal characters (eg 0x0123456789abcdeffedcba98765432100123456789abcdeffedcba9876543210). Picotool will generate a random key share for that key, by generating 3 random shares (A, B & C) and calculating a 4th share (D) to match the provided key (X), with each word i of the 4th share calculated as D[i] = X[i] ^ A[i] ^ B[i] ^ C[i].
+
+When using a .bin file, picotool will use the file size to determine if a 128 byte key share or a 32 byte key has been provided - any other file size will throw an error.
+
+The encryption/decryption code also salts the IV (initialisation vector) so it's not stored in plaintext in the binary. This requires a per-device IV salt in OTP, which should be a 128-bit (16 byte) random value - this can be provided as either a 16 byte .bin file, or a string of 32 hexadecimal characters, similar to the AES key. This per-device salt will be XORed with the IV stored in the binary, to give the IV used by the decryption code.
 
 ```text
 $ picotool help encrypt
@@ -686,14 +648,32 @@ ENCRYPT:
     Encrypt the program.
 
 SYNOPSIS:
-    picotool encrypt [--quiet] [--verbose] [--hash] [--sign] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] <aes_key> [-t <type>]
-                [<signing_key>] [-t <type>]
+    picotool encrypt [--quiet] [--verbose] [--embed] [--fast-rosc] [--use-mbedtls] [--otp-key-page <page>] [--hash] [--sign] <infile> [-t
+                <type>] [-o <offset>] <outfile> [-t <type>] <aes_key> <iv_salt> <signing_key> <otp>
 
 OPTIONS:
         --quiet
             Don't print any output
         --verbose
             Print verbose output
+        --embed
+            Embed bootloader in output file
+        --fast-rosc
+            Use ~180MHz ROSC configuration for embedded bootloader
+        --use-mbedtls
+            Use MbedTLS implementation of embedded bootloader (faster but less secure)
+        --otp-key-page
+            Specify the OTP page storing the AES key (IV salt is stored on the next page)
+        <page>
+            OTP page (default 29)
+        <aes_key>
+            AES Key Share or AES Key
+        <iv_salt>
+            IV Salt
+        <signing_key>
+            Signing Key file (.pem)
+        <otp>
+            JSON file to save OTP to (will edit existing file if it exists)
     Signing Configuration
         --hash
             Hash the encrypted file
@@ -714,16 +694,6 @@ OPTIONS:
             The file name
         -t <type>
             Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
-    AES Key
-        <aes_key>
-            The file name
-        -t <type>
-            Specify file type (bin) explicitly, ignoring file extension
-    Signing Key file
-        <signing_key>
-            The file name
-        -t <type>
-            Specify file type (pem) explicitly, ignoring file extension
 ```
 
 ## partition
@@ -738,10 +708,29 @@ PARTITION INFO:
     Print the device's partition table.
 
 SYNOPSIS:
-    picotool partition info -m <family_id> [device-selection]
+    picotool partition info [-m <family_id>] [device-selection]
 
 OPTIONS:
-        -m <family_id> [device-selection]
+        -m <family_id>
+            family ID (will show target partition for said family)
+    Target device selection
+        --bus <bus>
+            Filter devices by USB bus number
+        --address <addr>
+            Filter devices by USB device address
+        --vid <vid>
+            Filter by vendor id
+        --pid <pid>
+            Filter by product id
+        --ser <ser>
+            Filter by serial number
+        -f, --force
+            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
+            command (unless the command itself is a 'reboot') the device will be rebooted back to application mode
+        -F, --force-no-reboot
+            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
+            command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
+            USB drive mounted
 ```
 
 ```text
@@ -773,19 +762,16 @@ PARTITION CREATE:
     Create a partition table from json
 
 SYNOPSIS:
-    picotool partition create [--quiet] [--verbose] <infile> [-t <type>] <outfile> [-t <type>] [[-o <offset>] [--family <family_id>]]
-                [<bootloader>] [-t <type>] [[--sign <keyfile>] [-t <type>] [--no-hash] [--singleton]] [[--abs-block] [<abs_block_loc>]]
+    picotool partition create [--quiet] [--verbose] <infile> <outfile> [-t <type>] [[-o <offset>] [--family <family_id>]] [<bootloader>] [-t
+                <type>] [[--sign <keyfile>] [-t <type>] [--no-hash] [--singleton]] [[--abs-block] [<abs_block_loc>]]
 
 OPTIONS:
         --quiet
             Don't print any output
         --verbose
             Print verbose output
-    partition table JSON
         <infile>
-            The file name
-        -t <type>
-            Specify file type (json) explicitly, ignoring file extension
+            partition table JSON
     output file
         <outfile>
             The file name
@@ -830,7 +816,7 @@ The `uf2` commands allow for creation of UF2s, and can provide information if a 
 This command replaces the elf2uf2 functionality that was previously in the Raspberry Pi Pico SDK. It will attempt to auto-detect the family ID, but if this fails you can specify one manually with the `--family` argument.
 
 ```text
-picotool help uf2 convert
+$ picotool help uf2 convert
 UF2 CONVERT:
     Convert ELF/BIN to UF2.
 
@@ -898,8 +884,7 @@ OPTIONS:
         -F, --force-no-reboot
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
-            RPI-RP2 drive mounted
-
+            USB drive mounted
 ```
 
 ## otp
@@ -921,55 +906,65 @@ SYNOPSIS:
     picotool otp get [-c <copies>] [-r] [-e] [-n] [-i <filename>] [device-selection] [-z] [<selector>..]
     picotool otp set [-c <copies>] [-r] [-e] [-s] [-i <filename>] [-z] <selector> <value> [device-selection]
     picotool otp load [-r] [-e] [-s <row>] [-i <filename>] <filename> [-t <type>] [device-selection]
-    picotool otp dump [-r] [-e] [device-selection]
-    picotool otp permissions <filename> [-t <type>] [--led <pin>] [--hash] [--sign] [<key>] [-t <type>] [device-selection]
-    picotool otp white-label -s <row> <filename> [-t <type>] [device-selection]
+    picotool otp dump [-r] [-e] [-p] [device-selection]
+    picotool otp permissions <filename> [--led <pin>] [--hash] [--sign] <key> [device-selection]
+    picotool otp white-label -s <row> <filename> [device-selection]
 
 SUB COMMANDS:
     list          List matching known registers/fields
     get           Get the value of one or more OTP registers/fields (RP2350 only)
     set           Set the value of an OTP row/field (RP2350 only)
-    load          Load the row range stored in a file into OTP and verify. Data is 2 bytes/row for ECC, 4 bytes/row for raw. (RP2350 only)
+    load          Load the row range stored in a file into OTP and verify. Data is 2 bytes/row for ECC, 4 bytes/row for raw (MSB is
+                  ignored). (RP2350 only)
     dump          Dump entire OTP (RP2350 only)
     permissions   Set the OTP access permissions (RP2350 only)
     white-label   Set the white labelling values in OTP (RP2350 only)
-
 ```
 
 ### set/get
 
 These commands will set/get specific rows of OTP. By default, they will write/read all redundant rows, but this can be overridden with the `-c` argument
 
-### load
-
-This command allows loading of a range of OTP rows onto the device. The source can be a binary file, or a JSON file such as the one output by `picotool sign`. The schema for this JSON file is [here](json/schemas/otp-schema.json)
-For example, if you wish to sign a binary and then test secure boot with it, you can run the following set of commands:
 ```text
-$ picotool sign hello_world.elf hello_world.signed.elf private.pem otp.json
-$ picotool load hello_world.signed.elf
-$ picotool otp load otp.json
-$ picotool reboot
-```
-
-### white-label
-
-This command allows for OTP white-labelling, which sets the USB configuration used by the device in BOOTSEL mode.
-This can be configured from a JSON file, an example of which is in [sample-wl.json](json/sample-wl.json). The schema for this JSON file is [here](json/schemas/whitelabel-schema.json)
-
-```text
-$ picotool help otp white-label
-OTP WHITE-LABEL:
-    Set the white labelling values in OTP
+$ picotool help otp get
+OTP GET:
+    Get the value of one or more OTP registers/fields
 
 SYNOPSIS:
-    picotool otp white-label -s <row> <filename> [-t <type>] [device-selection]
+    picotool otp get [-c <copies>] [-r] [-e] [-n] [-i <filename>] [device-selection] [-z] [<selector>..]
 
 OPTIONS:
-    File with white labelling values
-        <filename>
-            The file name
-        -t <type>
-            Specify file type (json) explicitly, ignoring file extension
+    Row/field options
+        -c <copies>
+            Read multiple redundant values
+        -r, --raw
+            Get raw 24-bit values
+        -e, --ecc
+            Use error correction
+        -n, --no-descriptions
+            Don't show descriptions
+        -i <filename>
+            Include extra otp definition
+    Row/Field Selection
+        -z, --fuzzy
+            Allow fuzzy name searches in selector vs exact match
+        <selector>
+            The row/field selector, each of which can select a whole row:
+
+            ROW_NAME to select a whole row by name.
+            ROW_NUMBER to select a whole row by number.
+            PAGE:PAGE_ROW_NUMBER to select a whole row by page and number within page.
+
+            ... or can select a single field/subset of a row (where ROW_SEL is one of the above row selectors):
+
+            ROW_SEL.FIELD_NAME to select a field within a row by name.
+            ROW_SEL.n-m to select a range of bits within a row.
+            ROW_SEL.n to select a single bit within a row.
+            .FIELD_NAME to select any row's field by name.
+
+            .. or can select multiple rows by using blank or '*' for PAGE or PAGE_ROW_NUMBER
+
+TARGET SELECTION:
     Target device selection
         --bus <bus>
             Filter devices by USB bus number
@@ -987,8 +982,158 @@ OPTIONS:
         -F, --force-no-reboot
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
-            RPI-RP2 drive mounted
+            USB drive mounted
+```
 
+```text
+$ picotool help otp set
+OTP SET:
+    Set the value of an OTP row/field
+
+SYNOPSIS:
+    picotool otp set [-c <copies>] [-r] [-e] [-s] [-i <filename>] [-z] <selector> <value> [device-selection]
+
+OPTIONS:
+    Redundancy/Error Correction Overrides
+        -c <copies>
+            Write multiple redundant values
+        -r, --raw
+            Set raw 24-bit values
+        -e, --ecc
+            Use error correction
+        -s, --set-bits
+            Set bits only
+        -i <filename>
+            Include extra otp definition
+        <value>
+            The value to set
+    Row/Field Selection
+        -z, --fuzzy
+            Allow fuzzy name searches in selector vs exact match
+        <selector>
+            The row/field selector, which can select a whole row:
+
+            ROW_NAME to select a whole row by name.
+            ROW_NUMBER to select a whole row by number.
+            PAGE:PAGE_ROW_NUMBER to select a whole row by page and number within page.
+
+            ... or can select a single field/subset of a row (where ROW_SEL is one of the above row selectors):
+
+            ROW_SEL.FIELD_NAME to select a field within a row by name.
+            ROW_SEL.n-m to select a range of bits within a row.
+            ROW_SEL.n to select a single bit within a row.
+            .FIELD_NAME to select any row's field by name.
+
+TARGET SELECTION:
+    Target device selection
+        --bus <bus>
+            Filter devices by USB bus number
+        --address <addr>
+            Filter devices by USB device address
+        --vid <vid>
+            Filter by vendor id
+        --pid <pid>
+            Filter by product id
+        --ser <ser>
+            Filter by serial number
+        -f, --force
+            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
+            command (unless the command itself is a 'reboot') the device will be rebooted back to application mode
+        -F, --force-no-reboot
+            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
+            command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
+            USB drive mounted
+```
+
+### load
+
+This command allows loading of a range of OTP rows onto the device. The source can be a binary file, or a JSON file such as the one output by `picotool seal`. The schema for this JSON file is [here](json/schemas/otp-schema.json)
+
+```text
+$ picotool help otp load
+OTP LOAD:
+    Load the row range stored in a file into OTP and verify. Data is 2 bytes/row for ECC, 4 bytes/row for raw (MSB is ignored).
+
+SYNOPSIS:
+    picotool otp load [-r] [-e] [-s <row>] [-i <filename>] <filename> [-t <type>] [device-selection]
+
+OPTIONS:
+    Row options
+        -r, --raw
+            Set raw 24-bit values. This is the default for BIN files
+        -e, --ecc
+            Use error correction
+        -s <row>
+            Start row to load at (note use 0x for hex)
+        -i <filename>
+            Include extra otp definition
+    File to load row(s) from
+        <filename>
+            The file name
+        -t <type>
+            Specify file type (json | bin) explicitly, ignoring file extension
+    Target device selection
+        --bus <bus>
+            Filter devices by USB bus number
+        --address <addr>
+            Filter devices by USB device address
+        --vid <vid>
+            Filter by vendor id
+        --pid <pid>
+            Filter by product id
+        --ser <ser>
+            Filter by serial number
+        -f, --force
+            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
+            command (unless the command itself is a 'reboot') the device will be rebooted back to application mode
+        -F, --force-no-reboot
+            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
+            command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
+            USB drive mounted
+```
+
+For example, if you wish to sign a binary and then test secure boot with it, you can run the following set of commands:
+```text
+$ picotool seal --sign hello_world.elf hello_world.signed.elf private.pem otp.json
+$ picotool load hello_world.signed.elf
+$ picotool otp load otp.json
+$ picotool reboot
+```
+
+### white-label
+
+This command allows for OTP white-labelling, which sets the USB configuration used by the device in BOOTSEL mode.
+This can be configured from a JSON file, an example of which is in [sample-wl.json](json/sample-wl.json). The schema for this JSON file is [here](json/schemas/whitelabel-schema.json)
+
+```text
+$ picotool help otp white-label
+OTP WHITE-LABEL:
+    Set the white labelling values in OTP
+
+SYNOPSIS:
+    picotool otp white-label -s <row> <filename> [device-selection]
+
+OPTIONS:
+        <filename>
+            JSON file with white labelling values
+    Target device selection
+        --bus <bus>
+            Filter devices by USB bus number
+        --address <addr>
+            Filter devices by USB device address
+        --vid <vid>
+            Filter by vendor id
+        --pid <pid>
+            Filter by product id
+        --ser <ser>
+            Filter by serial number
+        -f, --force
+            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
+            command (unless the command itself is a 'reboot') the device will be rebooted back to application mode
+        -F, --force-no-reboot
+            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
+            command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
+            USB drive mounted
 ```
 
 ```text
@@ -1031,9 +1176,9 @@ Device Descriptor:
 
 ### permissions
 
-This command will run a binary on your device in order to set the OTP permissions, as these are not directly accessible from `picotool` on due to the default permissions settings required to fix  errata XXX on RP2350. 
-Because it runs a binary, the binary needs to be sign it if secure boot is enabled. The binary will print what it is doing over uart, which
-can be configured using the UART Configuration arguments. You can define your OTP permissions in a json file, an example of which
+This command will run a binary on your device in order to set the OTP permissions, as these are not directly accessible from `picotool` due to errata RP2350-E15 on RP2350 A2. 
+Because it runs a binary, the binary needs to be signed if secure boot is enabled. The binary will light an LED when running, which
+can be configured using the `--led` argument. You can define your OTP permissions in a json file, an example of which
 is in [sample-permissions.json](json/sample-permissions.json). The schema for this JSON file is [here](json/schemas/permissions-schema.json)
 
 ```text
@@ -1042,14 +1187,11 @@ OTP PERMISSIONS:
     Set the OTP access permissions
 
 SYNOPSIS:
-    picotool otp permissions <filename> [-t <type>] [--led <pin>] [--hash] [--sign] [<key>] [-t <type>] [device-selection]
+    picotool otp permissions <filename> [--led <pin>] [--hash] [--sign] <key> [device-selection]
 
 OPTIONS:
-    File to load permissions from
         <filename>
-            The file name
-        -t <type>
-            Specify file type (json) explicitly, ignoring file extension
+            JSON file to load permissions from
         --led <pin>
             LED Pin to flash; default 25
     Signing Configuration
@@ -1057,11 +1199,8 @@ OPTIONS:
             Hash the executable
         --sign
             Sign the executable
-    Key file
         <key>
-            The file name
-        -t <type>
-            Specify file type (pem) explicitly, ignoring file extension
+            Key file (.pem)
     Target device selection
         --bus <bus>
             Filter devices by USB bus number
@@ -1079,7 +1218,7 @@ OPTIONS:
         -F, --force-no-reboot
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
-            RPI-RP2 drive mounted
+            USB drive mounted
 ```
 
 ```text
@@ -1100,6 +1239,145 @@ Loading into XIP RAM: [==============================]  100%
 >>> using flash update boot of 13ffc000
 
 The device was rebooted to start the application.
+```
+
+### dump
+
+This command will read the entire OTP contents and print it out as hex.
+
+```text
+$ picotool help otp dump
+OTP DUMP:
+    Dump entire OTP
+
+SYNOPSIS:
+    picotool otp dump [-r] [-e] [-p] [device-selection]
+
+OPTIONS:
+    Row/field options
+        -r, --raw
+            Get raw 24-bit values. This is the default
+        -e, --ecc
+            Use error correction
+        -p, --pages
+            Index by page number & row number
+
+TARGET SELECTION:
+    Target device selection
+        --bus <bus>
+            Filter devices by USB bus number
+        --address <addr>
+            Filter devices by USB device address
+        --vid <vid>
+            Filter by vendor id
+        --pid <pid>
+            Filter by product id
+        --ser <ser>
+            Filter by serial number
+        -f, --force
+            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
+            command (unless the command itself is a 'reboot') the device will be rebooted back to application mode
+        -F, --force-no-reboot
+            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
+            command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
+            USB drive mounted
+```
+
+### list
+
+This command will list all the defined OTP rows & fields. You can list specific rows/fields using the selector
+
+```text
+$ picotool help otp list
+OTP LIST:
+    List matching known registers/fields
+
+SYNOPSIS:
+    picotool otp list [-p] [-n] [-f] [-i <filename>] [<selector>..]
+
+OPTIONS:
+    Row/Field Selection
+        -p, --pages
+            Show page number/page row number
+        -n, --no-descriptions
+            Don't show descriptions
+        -f, --field-descriptions
+            Show all field descriptions
+        -i <filename>
+            Include extra otp definition
+        <selector>
+            The row/field selector, each of which can select a whole row:
+
+            ROW_NAME to select a whole row by name.
+            ROW_NUMBER to select a whole row by number.
+            PAGE:PAGE_ROW_NUMBER to select a whole row by page and number within page.
+
+            ... or can select a single field/subset of a row (where ROW_SEL is one of the above row selectors):
+
+            ROW_SEL.FIELD_NAME to select a field within a row by name.
+            ROW_SEL.n-m to select a range of bits within a row.
+            ROW_SEL.n to select a single bit within a row.
+            .FIELD_NAME to select any row's field by name.
+
+            .. or can select multiple rows by using blank or '*' for PAGE or PAGE_ROW_NUMBER
+```
+
+## coprodis
+
+This command is used by the SDK to post-process dissassembly files, to replace the coprocessor instructions (mcr, mrc, etc.) with more human readable ones (eg rcp_bvalid, gpioc_hi_put, etc.).
+
+```text
+$ picotool help coprodis
+COPRODIS:
+    Post-process coprocessor instructions in disassembly files.
+
+SYNOPSIS:
+    picotool coprodis [--quiet] [--verbose] <infile> <outfile>
+
+OPTIONS:
+        --quiet
+            Don't print any output
+        --verbose
+            Print verbose output
+        <infile>
+            Input DIS
+        <outfile>
+            Output DIS
+```
+
+## link
+
+This command is used to link multiple binaries with block loops into a single larger block loop. It can currently link up to 3 files into a block loop. It will add the required Rolling Window Delta items to the new block loop, to ensure that everyting is rolled correctly when being executed. For examples of its usage, see the universal examples in [pico-examples](https://github.com/raspberrypi/pico-examples?tab=readme-ov-file#universal).
+
+```text
+$ picotool help link
+LINK:
+    Link multiple binaries into one block loop.
+
+SYNOPSIS:
+    picotool link [--quiet] [--verbose] <outfile> [-t <type>] <infile1> [-t <type>] <infile2> [-t <type>] [<infile3>] [-t <type>] [-p <pad>]
+
+OPTIONS:
+        --quiet
+            Don't print any output
+        --verbose
+            Print verbose output
+        -p <pad>
+            Specify alignment to pad to, defaults to 0x1000
+    File to write to
+        <outfile>
+            The file name
+        -t <type>
+            Specify file type (uf2 | bin) explicitly, ignoring file extension
+    Files to link
+        <infile1>
+            The file name
+        -t <type>
+            Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
+        <infile2>
+            The file name
+        <infile3>
+            The file name
 ```
 
 ## Binary Information

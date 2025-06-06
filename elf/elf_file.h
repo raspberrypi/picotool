@@ -43,9 +43,11 @@ public:
     const std::string section_name(uint32_t sh_name) const;
     const elf32_ph_entry* segment_from_physical_address(uint32_t paddr);
     const elf32_ph_entry* segment_from_virtual_address(uint32_t vaddr);
+    const elf32_ph_entry* segment_from_section(const elf32_sh_entry &sh);
     void dump(void) const;
 
     void move_all(int dist);
+    void remove_sh_holes(void);
 
     static std::vector<uint8_t> read_binfile(std::shared_ptr<std::iostream> file);
 
@@ -55,7 +57,6 @@ private:
     void read_ph(void);
     void read_sh(void);
     void read_sh_data(void);
-    void read_ph_data(void);
     void read_bytes(unsigned offset, unsigned length, void *dest);
     uint32_t append_section_name(const std::string &sh_name_str);
     void flatten(void);
@@ -66,7 +67,6 @@ private:
     std::vector<elf32_ph_entry> ph_entries;
     std::vector<elf32_sh_entry> sh_entries;
     std::vector<std::vector<uint8_t>> sh_data;
-    std::vector<std::vector<uint8_t>> ph_data;
     bool verbose;
 };
 int rp_check_elf_header(const elf32_header &eh);

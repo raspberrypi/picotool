@@ -1,0 +1,55 @@
+name: Check Help Text
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check-help-text:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt install cmake ninja-build python3 build-essential libusb-1.0-0-dev
+
+      - name: Checkout Pico SDK
+        uses: actions/checkout@v4
+        with:
+          repository: raspberrypi/pico-sdk
+          ref: develop
+          path: pico-sdk
+          submodules: 'true'
+
+      - name: Build and Install
+        run: |
+          cmake -S . -B build -G "Ninja" -D PICO_SDK_PATH="${{ github.workspace }}/pico-sdk" -D GENERATE_FIXED_DOCS_WIDTH=1
+          cmake --build build
+          sudo cmake --install build
+
+      - name: Check if help text needs updating
+        run: |
+          # Create a copy of README.md
+          cp README.md README.md.orig
+
+          # Run the script
+          ./gen_help_txt.sh
+
+          # Compare the files
+          if ! cmp -s README.md README.md.orig; then
+            echo "Error: Help text in README.md is out of date - update by running gen_help_txt.sh, or use the artifact from this workflow"
+            exit 1
+          fi
+
+          # Clean up
+          rm README.md.orig
+
+      - name: Upload new README.md
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: README.md
+          path: README.md
