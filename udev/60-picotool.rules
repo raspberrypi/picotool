@@ -1,3 +1,6 @@
+# Copy this file to /etc/udev/rules.d/
+# You can reload the udev rules with "udevadm control --reload"
+
 SUBSYSTEM=="usb", \
     ATTRS{idVendor}=="2e8a", \
     ATTRS{idProduct}=="0003", \
