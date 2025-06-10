@@ -1,0 +1,81 @@
+name: Check Precompiled Binaries
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check-precompiled:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt install cmake ninja-build python3 build-essential gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib libusb-1.0-0-dev
+
+      - name: Checkout Pico SDK
+        uses: actions/checkout@v4
+        with:
+          repository: raspberrypi/pico-sdk
+          ref: develop
+          path: pico-sdk
+          submodules: 'true'
+
+      - name: Create copies of the precompiled binaries
+        run: |
+          cp enc_bootloader/enc_bootloader.elf enc_bootloader/enc_bootloader.elf.orig
+          cp enc_bootloader/enc_bootloader_mbedtls.elf enc_bootloader/enc_bootloader_mbedtls.elf.orig
+          cp picoboot_flash_id/flash_id.bin picoboot_flash_id/flash_id.bin.orig
+          cp xip_ram_perms/xip_ram_perms.elf xip_ram_perms/xip_ram_perms.elf.orig
+
+      - name: Build and Install
+        run: |
+          cmake -S . -B build -G "Ninja" -D PICO_SDK_PATH="${{ github.workspace }}/pico-sdk" -D USE_PRECOMPILED=FALSE
+          cmake --build build
+          sudo cmake --install build
+
+      - name: Check if precompiled binaries are up to date
+        env:
+          ALL_FINE: 1
+        run: |
+          # Compare the files
+          if ! cmp -s enc_bootloader/enc_bootloader.elf enc_bootloader/enc_bootloader.elf.orig; then
+            echo "Error: enc_bootloader.elf is out of date"
+            ALL_FINE=0
+          fi
+
+          if ! cmp -s enc_bootloader/enc_bootloader_mbedtls.elf enc_bootloader/enc_bootloader_mbedtls.elf.orig; then
+            echo "Error: enc_bootloader_mbedtls.elf is out of date"
+            ALL_FINE=0
+          fi
+
+          if ! cmp -s picoboot_flash_id/flash_id.bin picoboot_flash_id/flash_id.bin.orig; then
+            echo "Error: flash_id.bin is out of date"
+            ALL_FINE=0
+          fi
+
+          if ! cmp -s xip_ram_perms/xip_ram_perms.elf xip_ram_perms/xip_ram_perms.elf.orig; then
+            echo "Error: xip_ram_perms.elf is out of date"
+            ALL_FINE=0
+          fi
+
+          if [ "$ALL_FINE" -eq 1 ]; then
+            echo "All precompiled binaries are up to date"
+          else
+            echo "Some precompiled binaries are out of date - update by building with USE_PRECOMPILED=FALSE, or use the artifact from this workflow"
+            exit 1
+          fi
+
+      - name: Upload new precompiled binaries
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: precompiled-binaries
+          path: |
+            enc_bootloader/enc_bootloader.elf
+            enc_bootloader/enc_bootloader_mbedtls.elf
+            picoboot_flash_id/flash_id.bin
+            xip_ram_perms/xip_ram_perms.elf
