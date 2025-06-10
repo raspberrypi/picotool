@@ -25,6 +25,8 @@ if (NOT USE_PRECOMPILED)
     target_link_options(flash_id PRIVATE -nostartfiles -nodefaultlibs -Ttext=0)
     pico_add_bin_output(flash_id)
     pico_add_dis_output(flash_id)
+
+    install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/flash_id.bin DESTINATION ${CMAKE_CURRENT_LIST_DIR})
 else()
     project(flash_id C CXX ASM)
     message("Using precompiled flash_id.bin")

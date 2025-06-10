@@ -112,6 +112,12 @@ if (NOT USE_PRECOMPILED)
 
     pico_set_binary_type(enc_bootloader no_flash)
     pico_add_dis_output(enc_bootloader)
+
+    if (USE_MBEDTLS)
+        install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/enc_bootloader.elf DESTINATION ${CMAKE_CURRENT_LIST_DIR} RENAME enc_bootloader_mbedtls.elf)
+    else()
+        install(TARGETS enc_bootloader DESTINATION ${CMAKE_CURRENT_LIST_DIR})
+    endif()
 else()
     project(enc_bootloader C CXX ASM)
     message("Using precompiled enc_bootloader.elf")

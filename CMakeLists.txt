@@ -74,7 +74,6 @@ ExternalProject_Add(enc_bootloader
             "-DUSE_MBEDTLS=0"
             "-DPICO_DEBUG_INFO_IN_RELEASE=OFF"
         BUILD_ALWAYS 1 # todo remove this
-        INSTALL_COMMAND ""
         )
 
 set(ENC_BOOTLOADER_ELF ${CMAKE_BINARY_DIR}/enc_bootloader/enc_bootloader.elf)
@@ -91,7 +90,6 @@ if (TARGET mbedtls)
                 "-DUSE_MBEDTLS=1"
                 "-DPICO_DEBUG_INFO_IN_RELEASE=OFF"
             BUILD_ALWAYS 1 # todo remove this
-            INSTALL_COMMAND ""
             )
 
     set(ENC_BOOTLOADER_MBEDTLS_ELF ${CMAKE_BINARY_DIR}/enc_bootloader_mbedtls/enc_bootloader.elf)
@@ -109,7 +107,6 @@ if (NOT PICOTOOL_NO_LIBUSB)
                 "-DUSE_PRECOMPILED:BOOL=${USE_PRECOMPILED}"
                 "-DPICO_DEBUG_INFO_IN_RELEASE=OFF"
             BUILD_ALWAYS 1 # todo remove this
-            INSTALL_COMMAND ""
             )
 
     set(XIP_RAM_PERMS_ELF ${CMAKE_BINARY_DIR}/xip_ram_perms/xip_ram_perms.elf)
@@ -125,7 +122,6 @@ if (NOT PICOTOOL_NO_LIBUSB)
                 "-DUSE_PRECOMPILED:BOOL=${USE_PRECOMPILED}"
                 "-DPICO_DEBUG_INFO_IN_RELEASE=OFF"
             BUILD_ALWAYS 1 # todo remove this
-            INSTALL_COMMAND ""
             )
 
     set(FLASH_ID_BIN ${CMAKE_BINARY_DIR}/picoboot_flash_id/flash_id.bin)

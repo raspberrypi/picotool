@@ -42,6 +42,8 @@ if (NOT USE_PRECOMPILED)
     string(REPLACE "RAM(rwx) : ORIGIN =  0x20000000, LENGTH = 512k" "RAM(rwx) : ORIGIN =  0x13ffc000, LENGTH = 16k" LINKER_SCRIPT "${LINKER_SCRIPT}")
     file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/memmap_xip_ram.ld "${LINKER_SCRIPT}")
     pico_set_linker_script(xip_ram_perms ${CMAKE_CURRENT_BINARY_DIR}/memmap_xip_ram.ld)
+
+    install(TARGETS xip_ram_perms DESTINATION ${CMAKE_CURRENT_LIST_DIR})
 else()
     project(xip_ram_perms C CXX ASM)
     message("Using precompiled xip_ram_perms.elf")
