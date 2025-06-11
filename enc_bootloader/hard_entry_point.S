@@ -62,6 +62,9 @@ _reset_handler:
     rcp_iequal_nodelay r1, lr
 #endif
     subs r0, #8
+#ifdef HARDENING
+    rcp_iequal_nodelay lr, r1
+#endif
     ldmia r6!, {r1, r2, r3, r4, r5, r8, r9, r10}
     stmia r0!, {r1, r2, r3, r4, r5, r8, r9, r10}
 #if HARDENING
