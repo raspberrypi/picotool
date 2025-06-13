@@ -251,7 +251,33 @@ void elf_file::read_sh(void) {
     }
 }
 
-// If there are holes between sections within segments, increase the section size to plug the hole
+// If there are holes between segments, increase the segment size to plug the hole
+// This is necessary to ensure that segments are contiguous, which is required for encrypting,
+// but this is not necessary for signing/hashing
+void elf_file::remove_ph_holes(void) {
+    for (int i=0; i+1 < ph_entries.size(); i++) {
+        auto ph0 = &(ph_entries[i]);
+        elf32_ph_entry ph1 = ph_entries[i+1];
+        if (
+            (ph0->type == PT_LOAD && ph1.type == PT_LOAD)
+            && (ph0->filez && ph1.filez)
+            && (ph0->paddr + ph0->filez < ph1.paddr)
+        ) {
+            uint32_t gap = ph1.paddr - ph0->paddr - ph0->filez;
+            if (gap > ph1.align) {
+                fail(ERROR_INCOMPATIBLE, "Segment %d: Cannot plug gap greater than alignment - gap %d, alignment %d", i, gap, ph1.align);
+            }
+            if (ph0->offset + ph0->filez + gap > ph1.offset) {
+                fail(ERROR_INCOMPATIBLE, "Segment %d: Cannot plug gap without space in file - gap %d", i, gap);
+            }
+            if (verbose) printf("Segment %d: Moving end from 0x%08x to 0x%08x to plug gap\n", i, ph0->paddr + ph0->filez, ph1.paddr);
+            ph0->filez = ph1.paddr - ph0->paddr;
+            ph0->memsz = ph0->filez;
+        }
+    }
+}
+
+// If there are holes within segments, increase the section size to plug the hole
 // This is necessary to ensure the whole segment contains data defined in sections, otherwise you end up
 // signing/hashing/encrypting data that may not be written, as many tools write in sections not segments
 void elf_file::remove_sh_holes(void) {
@@ -272,6 +298,17 @@ void elf_file::remove_sh_holes(void) {
             }
             if (verbose) printf("Section %d: Moving end from 0x%08x to 0x%08x to plug gap\n", i, sh0->addr + sh0->size, sh1.addr);
             sh0->size = sh1.addr - sh0->addr;
+            found_hole = true;
+        } else if (
+            (sh0->type == SHT_PROGBITS)
+            && (segment_from_section(*sh0) != segment_from_section(sh1))
+            && segment_from_section(*sh0) != NULL
+            && (sh0->offset + sh0->size < segment_from_section(*sh0)->offset + segment_from_section(*sh0)->filez)
+        ) {
+            const elf32_ph_entry *seg = segment_from_section(*sh0);
+            uint32_t gap = seg->offset + seg->filez - sh0->offset - sh0->size;
+            if (verbose) printf("Section %d: Moving end from 0x%08x to 0x%08x to plug gap at end of segment\n", i, sh0->addr + sh0->size, seg->offset + seg->filez);
+            sh0->size = seg->offset + seg->filez - sh0->offset;
             found_hole = true;
         }
     }

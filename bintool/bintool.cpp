@@ -263,6 +263,7 @@ block place_new_block(elf_file *elf, std::unique_ptr<block> &first_block, bool s
         // std::cout << &seg << " " << to_string(seg) << std::endl;
         const uint32_t paddr = seg.physical_address();
         const uint32_t psize = seg.physical_size();
+        if (psize == 0) continue;
         if (paddr >= 0x20000000 && paddr < 0x20080000) {
             highest_ram_address = std::max(paddr + psize, highest_ram_address);
         } else if (paddr >= 0x10000000 && paddr < 0x20000000) {
@@ -405,6 +406,9 @@ std::vector<std::unique_ptr<block>> get_all_blocks(std::vector<uint8_t> &bin, ui
             } else {
                 next_item += size;
             }
+        }
+        if (new_first_block == nullptr) {
+            fail(ERROR_UNKNOWN, "Block loop is not valid - incomplete block found at %08x\n", (int)(next_block_addr));
         }
         if (new_first_block->physical_addr + new_first_block->next_block_rel == first_block->physical_addr) {
             DEBUG_LOG("Found last block in block loop\n");

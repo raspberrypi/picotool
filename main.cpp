@@ -5171,6 +5171,7 @@ bool encrypt_command::execute(device_map &devices) {
         elf_file *elf = &source_file;
         elf->read_file(get_file(ios::in|ios::binary));
         // Remove any holes in the ELF file, as these cause issues when encrypting
+        elf->remove_ph_holes();
         elf->remove_sh_holes();
 
         std::unique_ptr<block> first_block = find_first_block(elf);

@@ -47,6 +47,7 @@ public:
     void dump(void) const;
 
     void move_all(int dist);
+    void remove_ph_holes(void);
     void remove_sh_holes(void);
 
     static std::vector<uint8_t> read_binfile(std::shared_ptr<std::iostream> file);
