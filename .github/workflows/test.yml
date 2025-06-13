@@ -76,12 +76,22 @@ jobs:
     # Prevent running twice for PRs from same repo
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
     name: Test Build Examples
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: ["gcc", "clang"]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Install dependencies
-        run: sudo apt install cmake ninja-build python3 build-essential gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib libusb-1.0-0-dev
+        run: sudo apt install cmake ninja-build python3 build-essential libusb-1.0-0-dev
+      - name: Install GCC
+        if: matrix.compiler == 'gcc'
+        run: sudo apt install gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib
+      - name: Install Clang
+        if: matrix.compiler == 'clang'
+        uses: stellar-aria/llvm-embedded-toolchain-for-arm-action@latest
       - name: Checkout Pico SDK
         uses: actions/checkout@v4
         with:
@@ -102,5 +112,5 @@ jobs:
           path: pico-examples
       - name: Build Pico Examples
         run: |
-          cmake -S pico-examples -B build-examples -G "Ninja" -D PICO_SDK_PATH="${{ github.workspace }}/pico-sdk" -D PICO_BOARD=pico2_w
+          cmake -S pico-examples -B build-examples -G "Ninja" -D PICO_SDK_PATH="${{ github.workspace }}/pico-sdk" -D PICO_BOARD=pico2_w ${{ matrix.compiler == 'clang' && '-D PICO_COMPILER=pico_arm_clang' || '' }}
           cmake --build build-examples
