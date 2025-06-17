@@ -3,7 +3,7 @@
 # Pass updated files in $updated_files environment variable
 
 # enc_bootloader
-echo "$updated_files" | grep -q "enc_bootloader/.*\.elf"
+echo "$updated_files" | grep -q "^enc_bootloader/.*\.elf$"
 enc_bootloader_elf_not_updated=$?
 if [ $enc_bootloader_elf_not_updated -eq 1 ]; then
     echo "Checking enc_bootloader files for modifications as ELFs have not been updated"
@@ -19,7 +19,7 @@ if [ $enc_bootloader_elf_not_updated -eq 1 ]; then
 fi
 
 # picoboot_flash_id
-echo "$updated_files" | grep -q "picoboot_flash_id/.*\.bin"
+echo "$updated_files" | grep -q "^picoboot_flash_id/.*\.bin$"
 flash_id_bin_not_updated=$?
 if [ $flash_id_bin_not_updated -eq 1 ]; then
     echo "Checking picoboot_flash_id files for modifications as BINs have not been updated"
@@ -35,7 +35,7 @@ if [ $flash_id_bin_not_updated -eq 1 ]; then
 fi
 
 # xip_ram_perms
-echo "$updated_files" | grep -q "xip_ram_perms/.*\.elf"
+echo "$updated_files" | grep -q "^xip_ram_perms/.*\.elf$"
 xip_ram_perms_elf_not_updated=$?
 if [ $xip_ram_perms_elf_not_updated -eq 1 ]; then
     echo "Checking xip_ram_perms files for modifications as ELFs have not been updated"
