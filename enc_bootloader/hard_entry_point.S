@@ -60,6 +60,7 @@ _reset_handler:
     ldr r1, [r0, #M33_MPU_RNR_OFFSET - (M33_MPU_CTRL_OFFSET + 16)]
     // RNR should read back as zero
     rcp_iequal_nodelay r1, lr
+    adds r0, r1
 #endif
     subs r0, #8
 #ifdef HARDENING
