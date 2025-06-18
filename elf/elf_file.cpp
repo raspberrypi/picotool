@@ -315,6 +315,15 @@ void elf_file::remove_sh_holes(void) {
     if (found_hole) read_sh_data();
 }
 
+void elf_file::remove_empty_ph_entries(void) {
+    for (int i = 0; i < ph_entries.size(); i++) {
+        if (ph_entries[i].filez == 0) {
+            ph_entries.erase(ph_entries.begin() + i);
+            eh.ph_num--; i--;
+        }
+    }
+}
+
 // Read the section data from the internal byte array into discrete sections.
 // This is used after modifying segments but before inserting new segments
 void elf_file::read_sh_data(void) {
@@ -410,6 +419,8 @@ void elf_file::dump(void) const {
 
 void elf_file::move_all(int dist) {
     if (verbose) printf("Incrementing all paddr by %d\n", dist);
+    // Remove empty ph entries, as they will likely be moved to invalid addresses
+    remove_empty_ph_entries();
     for (auto &ph: ph_entries) {
         ph.paddr += dist;
     }
