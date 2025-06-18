@@ -8,7 +8,7 @@ enc_bootloader_elf_not_updated=$?
 if [ $enc_bootloader_elf_not_updated -eq 1 ]; then
     echo "Checking enc_bootloader files for modifications as ELFs have not been updated"
     for file in enc_bootloader/*; do
-        if echo "$file" | grep -q "CMakeLists.txt" || echo "$file" | grep -q "BUILD.bazel"; then
+        if [[ "$file" == "enc_bootloader/CMakeLists.txt" || "$file" == "enc_bootloader/BUILD.bazel" ]]; then
             continue
         fi
         if echo "$updated_files" | grep -q "$file"; then
@@ -24,7 +24,7 @@ flash_id_bin_not_updated=$?
 if [ $flash_id_bin_not_updated -eq 1 ]; then
     echo "Checking picoboot_flash_id files for modifications as BINs have not been updated"
     for file in picoboot_flash_id/*; do
-        if echo "$file" | grep -q "CMakeLists.txt" || echo "$file" | grep -q "BUILD.bazel"; then
+        if [[ "$file" == "picoboot_flash_id/CMakeLists.txt" || "$file" == "picoboot_flash_id/BUILD.bazel" ]]; then
             continue
         fi
         if echo "$updated_files" | grep -q "$file"; then
@@ -40,7 +40,7 @@ xip_ram_perms_elf_not_updated=$?
 if [ $xip_ram_perms_elf_not_updated -eq 1 ]; then
     echo "Checking xip_ram_perms files for modifications as ELFs have not been updated"
     for file in xip_ram_perms/*; do
-        if echo "$file" | grep -q "CMakeLists.txt" || echo "$file" | grep -q "BUILD.bazel"; then
+        if [[ "$file" == "xip_ram_perms/CMakeLists.txt" || "$file" == "xip_ram_perms/BUILD.bazel" ]]; then
             continue
         fi
         if echo "$updated_files" | grep -q "$file"; then

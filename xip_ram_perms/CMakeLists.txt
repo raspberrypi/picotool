@@ -43,7 +43,7 @@ if (NOT USE_PRECOMPILED)
     file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/memmap_xip_ram.ld "${LINKER_SCRIPT}")
     pico_set_linker_script(xip_ram_perms ${CMAKE_CURRENT_BINARY_DIR}/memmap_xip_ram.ld)
 
-    install(TARGETS xip_ram_perms DESTINATION ${CMAKE_CURRENT_LIST_DIR})
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/xip_ram_perms.elf DESTINATION ${CMAKE_CURRENT_LIST_DIR})
 else()
     project(xip_ram_perms C CXX ASM)
     message("Using precompiled xip_ram_perms.elf")
