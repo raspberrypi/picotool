@@ -113,6 +113,7 @@ static const string rp2040_family_name = "rp2040";
 static const string rp2350_arm_s_family_name = "rp2350-arm-s";
 static const string rp2350_arm_ns_family_name = "rp2350-arm-ns";
 static const string rp2350_riscv_family_name = "rp2350-riscv";
+static const string cyw43_firmware_family_name = "cyw43-firmware";
 
 static string hex_string(int64_t value, int width=8, bool prefix=true, bool uppercase=false) {
     std::stringstream ss;
@@ -367,6 +368,8 @@ struct family_id : public cli::value_base<family_id> {
                 t = RP2350_ARM_NS_FAMILY_ID;
             } else if (value == rp2350_riscv_family_name) {
                 t = RP2350_RISCV_FAMILY_ID;
+            } else if (value == cyw43_firmware_family_name) {
+                t = CYW43_FIRMWARE_FAMILY_ID;
             } else {
                 if (value.find("0x") == 0) {
                     value = value.substr(2);
@@ -402,6 +405,7 @@ string family_name(unsigned int family_id) {
     if (family_id == RP2350_ARM_S_FAMILY_ID) return "'" + rp2350_arm_s_family_name + "'";
     if (family_id == RP2350_ARM_NS_FAMILY_ID) return "'" + rp2350_arm_ns_family_name + "'";
     if (family_id == RP2350_RISCV_FAMILY_ID) return "'" + rp2350_riscv_family_name + "'";
+    if (family_id == CYW43_FIRMWARE_FAMILY_ID) return "'" + cyw43_firmware_family_name + "'";
     if (!family_id) return "none";
     return hex_string(family_id);
 }
@@ -3142,12 +3146,12 @@ string str_permissions(unsigned int p) {
 }
 
 void insert_default_families(uint32_t flags_and_permissions, vector<std::string> &family_ids) {
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_ABSOLUTE_BITS) family_ids.emplace_back(absolute_family_name);
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2040_BITS) family_ids.emplace_back(rp2040_family_name);
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_S_BITS) family_ids.emplace_back(rp2350_arm_s_family_name);
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_NS_BITS) family_ids.emplace_back(rp2350_arm_ns_family_name);
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_RISCV_BITS) family_ids.emplace_back(rp2350_riscv_family_name);
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_DATA_BITS) family_ids.emplace_back(data_family_name);
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_ABSOLUTE_BITS) family_ids.emplace_back(family_name(ABSOLUTE_FAMILY_ID));
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2040_BITS) family_ids.emplace_back(family_name(RP2040_FAMILY_ID));
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_S_BITS) family_ids.emplace_back(family_name(RP2350_ARM_S_FAMILY_ID));
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_NS_BITS) family_ids.emplace_back(family_name(RP2350_ARM_NS_FAMILY_ID));
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_RISCV_BITS) family_ids.emplace_back(family_name(RP2350_RISCV_FAMILY_ID));
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_DATA_BITS) family_ids.emplace_back(family_name(DATA_FAMILY_ID));
 }
 
 #if HAS_LIBUSB
@@ -3290,7 +3294,7 @@ void info_guts(memory_access &raw_access, void *con) {
                     family_ids.clear();
                     insert_default_families(flags, family_ids);
                     for (auto family : partition.extra_families) {
-                        family_ids.emplace_back(hex_string(family));
+                        family_ids.emplace_back(family_name(family));
                     }
                     if (flags & PICOBIN_PARTITION_FLAGS_HAS_NAME_BITS) {
                         pstring << ", \"";
@@ -6213,7 +6217,7 @@ bool partition_info_command::execute(device_map &devices) {
                 assert((flags_and_permissions & PICOBIN_PARTITION_FLAGS_HAS_NAME_BITS) ||
                        got == num_extra_families + 1);
                 for (unsigned int j = 1; j < num_extra_families + 1; j++) {
-                    family_ids.emplace_back(hex_string(family_id_name_buf_32[j + 1]));
+                    family_ids.emplace_back(family_name(family_id_name_buf_32[j + 1]));
                 }
                 if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_HAS_NAME_BITS) {
                     uint8_t *bytes = &family_id_name_buf[(num_extra_families + 2) * 4];
@@ -6359,7 +6363,7 @@ bool partition_create_command::execute(device_map &devices) {
                 fail(ERROR_FORMAT, "Could not parse family ID from %s: %s", family.c_str(), ret.c_str());
             }
             DEBUG_LOG("Got ID %08x\n", id);
-            if (id < RP2040_FAMILY_ID || id > FAMILY_ID_MAX) {
+            if (id < DEFAULT_FAMILY_ID_MIN || id > FAMILY_ID_MAX) {
                 DEBUG_LOG("Adding extra family\n");
                 new_p.extra_families.push_back(id);
             }
