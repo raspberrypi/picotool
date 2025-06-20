@@ -73,6 +73,7 @@ function(add_embedded_data_project TARGET)
             BINARY_DIR ${OPTS_BINARY_DIR}
             CMAKE_ARGS ${OPTS_CMAKE_ARGS}
             INSTALL_COMMAND ""
+            BUILD_ALWAYS 1
         )
     else()
         ExternalProject_Add(${TARGET}
