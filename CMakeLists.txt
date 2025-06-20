@@ -62,14 +62,32 @@ if (NOT DEFINED USE_PRECOMPILED)
     set(USE_PRECOMPILED true)
 endif()
 
-if (USE_PRECOMPILED)
-    set(EXTERNAL_PROJECT_INSTALL_COMMAND "")
-else()
-    set(EXTERNAL_PROJECT_INSTALL_COMMAND ${CMAKE_COMMAND} --install .)
-endif()
+
+function(add_embedded_data_project TARGET)
+    cmake_parse_arguments(PARSE_ARGV 1 OPTS "" "PREFIX;SOURCE_DIR;BINARY_DIR" "CMAKE_ARGS")
+
+    if (USE_PRECOMPILED)
+        ExternalProject_Add(${TARGET}
+            PREFIX ${OPTS_PREFIX}
+            SOURCE_DIR ${OPTS_SOURCE_DIR}
+            BINARY_DIR ${OPTS_BINARY_DIR}
+            CMAKE_ARGS ${OPTS_CMAKE_ARGS}
+            INSTALL_COMMAND ""
+        )
+    else()
+        ExternalProject_Add(${TARGET}
+            PREFIX ${OPTS_PREFIX}
+            SOURCE_DIR ${OPTS_SOURCE_DIR}
+            BINARY_DIR ${OPTS_BINARY_DIR}
+            CMAKE_ARGS ${OPTS_CMAKE_ARGS}
+            BUILD_ALWAYS 1
+        )
+    endif()
+endfunction()
+
 
 # compile enc_bootloader.elf
-ExternalProject_Add(enc_bootloader
+add_embedded_data_project(enc_bootloader
         PREFIX enc_bootloader
         SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/enc_bootloader
         BINARY_DIR ${CMAKE_BINARY_DIR}/enc_bootloader
@@ -79,14 +97,12 @@ ExternalProject_Add(enc_bootloader
             "-DUSE_PRECOMPILED:BOOL=${USE_PRECOMPILED}"
             "-DUSE_MBEDTLS=0"
             "-DPICO_DEBUG_INFO_IN_RELEASE=OFF"
-        BUILD_ALWAYS 1 # todo remove this
-        INSTALL_COMMAND "${EXTERNAL_PROJECT_INSTALL_COMMAND}"
         )
 
 set(ENC_BOOTLOADER_ELF ${CMAKE_BINARY_DIR}/enc_bootloader/enc_bootloader.elf)
 
 if (TARGET mbedtls)
-    ExternalProject_Add(enc_bootloader_mbedtls
+    add_embedded_data_project(enc_bootloader_mbedtls
             PREFIX enc_bootloader_mbedtls
             SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/enc_bootloader
             BINARY_DIR ${CMAKE_BINARY_DIR}/enc_bootloader_mbedtls
@@ -96,8 +112,6 @@ if (TARGET mbedtls)
                 "-DUSE_PRECOMPILED:BOOL=${USE_PRECOMPILED}"
                 "-DUSE_MBEDTLS=1"
                 "-DPICO_DEBUG_INFO_IN_RELEASE=OFF"
-            BUILD_ALWAYS 1 # todo remove this
-            INSTALL_COMMAND "${EXTERNAL_PROJECT_INSTALL_COMMAND}"
             )
 
     set(ENC_BOOTLOADER_MBEDTLS_ELF ${CMAKE_BINARY_DIR}/enc_bootloader_mbedtls/enc_bootloader.elf)
@@ -105,7 +119,7 @@ endif()
 
 if (NOT PICOTOOL_NO_LIBUSB)
     # compile xip_ram_perms.elf
-    ExternalProject_Add(xip_ram_perms
+    add_embedded_data_project(xip_ram_perms
             PREFIX xip_ram_perms
             SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/xip_ram_perms
             BINARY_DIR ${CMAKE_BINARY_DIR}/xip_ram_perms
@@ -114,14 +128,12 @@ if (NOT PICOTOOL_NO_LIBUSB)
                 "-DPICO_SDK_PATH:FILEPATH=${PICO_SDK_PATH}"
                 "-DUSE_PRECOMPILED:BOOL=${USE_PRECOMPILED}"
                 "-DPICO_DEBUG_INFO_IN_RELEASE=OFF"
-            BUILD_ALWAYS 1 # todo remove this
-            INSTALL_COMMAND "${EXTERNAL_PROJECT_INSTALL_COMMAND}"
             )
 
     set(XIP_RAM_PERMS_ELF ${CMAKE_BINARY_DIR}/xip_ram_perms/xip_ram_perms.elf)
 
     # compile flash_id
-    ExternalProject_Add(flash_id
+    add_embedded_data_project(flash_id
             PREFIX picoboot_flash_id
             SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/picoboot_flash_id
             BINARY_DIR ${CMAKE_BINARY_DIR}/picoboot_flash_id
@@ -130,8 +142,6 @@ if (NOT PICOTOOL_NO_LIBUSB)
                 "-DPICO_SDK_PATH:FILEPATH=${PICO_SDK_PATH}"
                 "-DUSE_PRECOMPILED:BOOL=${USE_PRECOMPILED}"
                 "-DPICO_DEBUG_INFO_IN_RELEASE=OFF"
-            BUILD_ALWAYS 1 # todo remove this
-            INSTALL_COMMAND "${EXTERNAL_PROJECT_INSTALL_COMMAND}"
             )
 
     set(FLASH_ID_BIN ${CMAKE_BINARY_DIR}/picoboot_flash_id/flash_id.bin)
