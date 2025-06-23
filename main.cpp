@@ -115,7 +115,7 @@ static const string rp2350_arm_ns_family_name = "rp2350-arm-ns";
 static const string rp2350_riscv_family_name = "rp2350-riscv";
 
 #if !HAS_LIBUSB
-static const string libusb_not_found_message = "\nThis version of picotool was compiled without USB support. Some commands are not available.\n";
+static const string built_without_libusb_message = "\nThis version of picotool was compiled without USB support. Some commands are not available.\n";
 #endif
 
 static string hex_string(int64_t value, int width=8, bool prefix=true, bool uppercase=false) {
@@ -1391,7 +1391,7 @@ struct version_command : public cmd {
         else {
             std::cout << "picotool v" << PICOTOOL_VERSION << " (" << SYSTEM_VERSION << ", " << COMPILER_INFO << ")\n";
             #if !HAS_LIBUSB
-            std::cout << libusb_not_found_message;
+            std::cout << built_without_libusb_message;
             #endif
         }
         if (!settings.version.version.empty()) {
@@ -1640,7 +1640,7 @@ int parse(const int argc, char **argv) {
                 fos << string("Use \"picotool help ").append(selected_cmd->name()).append("\" for more info\n");
             }
             #if !HAS_LIBUSB
-            fos << libusb_not_found_message;
+            fos << built_without_libusb_message;
             #endif
         } else {
             cli::option_map options;
@@ -1675,7 +1675,7 @@ int parse(const int argc, char **argv) {
             fos << "Use \"picotool help <cmd>\" for more info\n";
             #if !HAS_LIBUSB
             if (!help_mode) {
-                fos << libusb_not_found_message;
+                fos << built_without_libusb_message;
             }
             #endif
         }
