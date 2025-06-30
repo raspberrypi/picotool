@@ -5178,13 +5178,50 @@ bool encrypt_command::execute(device_map &devices) {
         std::random_device rand{};
         assert(rand.max() - rand.min() >= 256);
         for(int i=0; i < 8; i++) {
-            for (int j=0; j < 12; j++) {
-                aes_key_share.bytes[i*16 + j] = rand();
+            // Regenerate the share word until the hamming weights are close to each other
+            while (true) {
+                for (int j=0; j < 12; j++) {
+                    aes_key_share.bytes[i*16 + j] = rand();
+                }
+                aes_key_share.words[i*4 + 3] = aes_key.words[i]
+                                            ^ aes_key_share.words[i*4]
+                                            ^ aes_key_share.words[i*4 + 1]
+                                            ^ aes_key_share.words[i*4 + 2];
+                uint8_t max_weight = 0;
+                uint8_t min_weight = 32;
+                for (int j=0; j < 4; j++) {
+                    uint8_t weight = __builtin_popcount(aes_key_share.words[i*4 + j]);
+                    if (weight > max_weight) {
+                        max_weight = weight;
+                    }
+                    if (weight < min_weight) {
+                        min_weight = weight;
+                    }
+                }
+                if (max_weight - min_weight <= 4) {
+                    break;
+                } else {
+                    printf("Generated share word %d has hamming weights too varied - regenerating\n", i);
+                }
             }
-            aes_key_share.words[i*4 + 3] = aes_key.words[i]
-                                        ^ aes_key_share.words[i*4]
-                                        ^ aes_key_share.words[i*4 + 1]
-                                        ^ aes_key_share.words[i*4 + 2];
+        }
+    } else {
+        // Check the share word hamming weights are close to each other
+        for(int i=0; i < 8; i++) {
+            uint8_t max_weight = 0;
+            uint8_t min_weight = 32;
+            for (int j=0; j < 4; j++) {
+                uint8_t weight = __builtin_popcount(aes_key_share.words[i*4 + j]);
+                if (weight > max_weight) {
+                    max_weight = weight;
+                }
+                if (weight < min_weight) {
+                    min_weight = weight;
+                }
+            }
+            if (max_weight - min_weight > 4) {
+                std::cout << "Key Share Word " << i << " has hamming weights too varied - this may leak information about the key\n";
+            }
         }
     }
 
