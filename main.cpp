@@ -5173,13 +5173,15 @@ bool encrypt_command::execute(device_map &devices) {
         }
     }
 
+    uint8_t max_weight_delta = 1;
+
     if (!keyIsShare) {
         // Generate a random key share from 256-bit key
         std::random_device rand{};
         assert(rand.max() - rand.min() >= 256);
-        for(int i=0; i < 8; i++) {
-            // Regenerate the share word until the hamming weights are close to each other
-            while (true) {
+        // Regenerate the shares until the hamming weights are close to each other
+        while (true) {
+            for(int i=0; i < 8; i++) {
                 for (int j=0; j < 12; j++) {
                     aes_key_share.bytes[i*16 + j] = rand();
                 }
@@ -5187,31 +5189,15 @@ bool encrypt_command::execute(device_map &devices) {
                                             ^ aes_key_share.words[i*4]
                                             ^ aes_key_share.words[i*4 + 1]
                                             ^ aes_key_share.words[i*4 + 2];
-                uint8_t max_weight = 0;
-                uint8_t min_weight = 32;
-                for (int j=0; j < 4; j++) {
-                    uint8_t weight = __builtin_popcount(aes_key_share.words[i*4 + j]);
-                    if (weight > max_weight) {
-                        max_weight = weight;
-                    }
-                    if (weight < min_weight) {
-                        min_weight = weight;
-                    }
-                }
-                if (max_weight - min_weight <= 4) {
-                    break;
-                } else {
-                    printf("Generated share word %d has hamming weights too varied - regenerating\n", i);
-                }
             }
-        }
-    } else {
-        // Check the share word hamming weights are close to each other
-        for(int i=0; i < 8; i++) {
+
             uint8_t max_weight = 0;
-            uint8_t min_weight = 32;
-            for (int j=0; j < 4; j++) {
-                uint8_t weight = __builtin_popcount(aes_key_share.words[i*4 + j]);
+            uint8_t min_weight = 128;
+            for (int i=0; i < 4; i++) {
+                uint8_t weight = 0;
+                for (int j=0; j < 4; j++) {
+                    weight += __builtin_popcount(aes_key_share.words[i + j*4]);
+                }
                 if (weight > max_weight) {
                     max_weight = weight;
                 }
@@ -5219,9 +5205,31 @@ bool encrypt_command::execute(device_map &devices) {
                     min_weight = weight;
                 }
             }
-            if (max_weight - min_weight > 4) {
-                std::cout << "Key Share Word " << i << " has hamming weights too varied - this may leak information about the key\n";
+            if (max_weight - min_weight <= max_weight_delta) {
+                break;
+            } else {
+                printf("Generated shares have hamming weights too varied %d - regenerating\n", max_weight - min_weight);
             }
+        }
+    } else {
+        // Check the share hamming weights are close to each other
+        uint8_t max_weight = 0;
+        uint8_t min_weight = 128;
+        for (int i=0; i < 4; i++) {
+            uint8_t weight = 0;
+            for (int j=0; j < 4; j++) {
+                weight += __builtin_popcount(aes_key_share.words[i + j*4]);
+            }
+            if (weight > max_weight) {
+                max_weight = weight;
+            }
+            if (weight < min_weight) {
+                min_weight = weight;
+            }
+        }
+
+        if (max_weight - min_weight > max_weight_delta) {
+            std::cout << "WARNING: Key Shares have hamming weights too varied (" << (int)max_weight << " -> " << (int)min_weight << ") - this may leak information about the key\n";
         }
     }
 
