@@ -333,6 +333,32 @@ static __force_inline void lock_all(void) {
 #endif
 
 int main() {
+#if HARDENING
+    // lock down OTP_DEBUG_EN so later code cannot enable debugger if it was disabled in OTP,
+    // and thus be able to force a reset of the OTP while in the debugger, giving access
+    // to our secret.
+
+    // note: this is in assembler, since I already had it in hard_entry_point.S, then realized
+    // it was desirable for mbedtls version too, and didn't feel like fighting with GCC
+    pico_default_asm_volatile(
+        "ldr r1, =%[otp_base] + %c[lock_offset]\n"
+        "ldr r2, =%[otp_base]\n"
+        "adds r2, %[lock_offset]\n"
+        "mcrr2 p7, #7, r1, r2, c0\n" // rcp_iequal_nodelay r1, r2
+        "movw r0, %[lock_bits]\n"
+        "str r0, [r1]\n"
+        "ldr r3, [r2]\n"
+        "mcrr2 p7, #7, r0, r3, c0\n"  // rcp_iequal_nodelay r0, r3
+        :
+        : [otp_base] "i" (OTP_BASE),
+          [lock_offset] "i" (OTP_DEBUGEN_LOCK_OFFSET),
+          [lock_bits] "i" (OTP_DEBUGEN_LOCK_BITS)
+        : "r0", "r1", "r2", "r3", "cc"
+    );
+#else
+    otp_hw->debugen_lock = OTP_DEBUGEN_LOCK_BITS;
+#endif
+
 #if USE_LED
 #if ALLOW_DEBUGGING
     reset_block_mask((1u << RESET_IO_BANK0) | (1u << RESET_PADS_BANK0));
