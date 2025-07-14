@@ -5208,7 +5208,7 @@ bool encrypt_command::execute(device_map &devices) {
             if (max_weight - min_weight <= max_weight_delta) {
                 break;
             } else {
-                printf("Generated shares have hamming weights too varied %d - regenerating\n", max_weight - min_weight);
+                DEBUG_LOG("Generated shares have hamming weights too varied %d - regenerating\n", max_weight - min_weight);
             }
         }
     } else {
