@@ -31,10 +31,15 @@ jobs:
           choco install -y .github/workflows/choco_packages.config
           curl -L https://github.com/libusb/libusb/releases/download/v1.0.27/libusb-1.0.27.7z -o libusb.7z
           7z x libusb.7z -olibusb
+          ls libusb
       - name: Set LIBUSB_ROOT (Windows)
         if: runner.os == 'Windows'
-        shell: bash
-        run: echo "LIBUSB_ROOT=$(pwd)/libusb" >> "$GITHUB_ENV"
+        run: |
+          "LIBUSB_ROOT=$(pwd)/libusb" >> $env:GITHUB_ENV
+      - name: Check LIBUSB_ROOT (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          echo $env:LIBUSB_ROOT
 
       - name: Install dependencies (macOS)
         if: runner.os == 'macOS'
