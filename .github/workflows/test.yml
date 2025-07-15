@@ -76,6 +76,13 @@ jobs:
           picotool info -a blink.uf2
           picotool info -a hello_world.uf2
           picotool info -a flash_nuke.uf2
+      
+      - name: Test libusb compiled
+        if: matrix.libusb == 'libusb'
+        run: |
+          picotool help load
+          picotool help save
+          picotool help erase
 
   test-examples:
     # Prevent running twice for PRs from same repo
