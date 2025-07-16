@@ -6363,7 +6363,7 @@ bool partition_create_command::execute(device_map &devices) {
                 fail(ERROR_FORMAT, "Could not parse family ID from %s: %s", family.c_str(), ret.c_str());
             }
             DEBUG_LOG("Got ID %08x\n", id);
-            if (id < DEFAULT_FAMILY_ID_MIN || id > FAMILY_ID_MAX) {
+            if (id < BOOTROM_FAMILY_ID_MIN || id > BOOTROM_FAMILY_ID_MAX) {
                 DEBUG_LOG("Adding extra family\n");
                 new_p.extra_families.push_back(id);
             }
