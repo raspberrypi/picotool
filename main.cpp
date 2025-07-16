@@ -5173,9 +5173,13 @@ bool encrypt_command::execute(device_map &devices) {
         }
     }
 
-    uint8_t max_weight_delta = 1;
+    int min_weight = 6;
+    int max_weight = 10;
+    int min_combined_weight = 28;
+    int max_combined_weight = 36;
 
     if (!keyIsShare) {
+        std::vector<int> num_attempts;
         // Generate a random key share from 256-bit key
         std::random_device rand{};
         assert(rand.max() - rand.min() >= 256);
@@ -5193,50 +5197,52 @@ bool encrypt_command::execute(device_map &devices) {
 
                 pass = true;
                 for (int half=0; half < 2; half++) {
-                    uint8_t max_weight = 0;
-                    uint8_t min_weight = 16;
+                    uint8_t combined_weight = 0;
                     for (int j=0; j < 4; j++) {
                         uint16_t half_word = aes_key_share.words[i*4 + j] >> half*16;
                         uint8_t weight = __builtin_popcount(half_word);
-                        if (weight > max_weight) {
-                            max_weight = weight;
+                        if (weight < min_weight || weight > max_weight) {
+                            DEBUG_LOG("Generated share %d word %d half %d has hamming weights out of range %d -> %d - regenerating attempt %d\n", j, i, half, min_weight, max_weight, attempt);
+                            pass = false;
+                            break;
                         }
-                        if (weight < min_weight) {
-                            min_weight = weight;
-                        }
+                        combined_weight += weight;
                     }
-                    if (max_weight - min_weight > max_weight_delta) {
-                        DEBUG_LOG("Generated share word %d half %d has hamming weights too varied - regenerating attempt %d\n", i, half, attempt);
+                    if (!pass) break;
+                    if (combined_weight < min_combined_weight || combined_weight > max_combined_weight) {
+                        DEBUG_LOG("Generated share word %d half %d has hamming weights out of range %d -> %d - regenerating attempt %d\n", i, half, min_combined_weight, max_combined_weight, attempt);
                         pass = false;
                         break;
                     }
                 }
                 if (pass) {
+                    num_attempts.push_back(attempt);
                     break;
                 }
             }
             if (!pass) {
-                fail(ERROR_INCOMPATIBLE, "Failed to generate a share word with hamming weights within %d", max_weight_delta);
+                fail(ERROR_INCOMPATIBLE, "Failed to generate a share word with hamming weights within %d -> %d", min_weight, max_weight);
             }
         }
+
+        DEBUG_LOG("Average number of attempts: %d\n", std::accumulate(num_attempts.begin(), num_attempts.end(), 0) / num_attempts.size());
+        DEBUG_LOG("Max number of attempts: %d\n", *std::max_element(num_attempts.begin(), num_attempts.end()));
+        DEBUG_LOG("Min number of attempts: %d\n", *std::min_element(num_attempts.begin(), num_attempts.end()));
     } else {
         // Check the share word hamming weights are close to each other
         for(int i=0; i < 8; i++) {
             for (int half=0; half < 2; half++) {
-                uint8_t max_weight = 0;
-                uint8_t min_weight = 16;
+                uint8_t combined_weight = 0;
                 for (int j=0; j < 4; j++) {
                     uint16_t half_word = aes_key_share.words[i*4 + j] >> half*16;
                     uint8_t weight = __builtin_popcount(half_word);
-                    if (weight > max_weight) {
-                        max_weight = weight;
+                    if (weight < min_weight || weight > max_weight) {
+                        std::cout << "WARNING: Key Share " << j << " Word " << i << " half " << half << " has hamming weights out of range " << min_weight << " -> " << max_weight << " - this may leak information about the key\n";
                     }
-                    if (weight < min_weight) {
-                        min_weight = weight;
-                    }
+                    combined_weight += weight;
                 }
-                if (max_weight - min_weight > max_weight_delta) {
-                    std::cout << "WARNING: Key Share Word " << i << " half " << half << " has hamming weights too varied - this may leak information about the key\n";
+                if (combined_weight < min_combined_weight || combined_weight > max_combined_weight) {
+                    std::cout << "WARNING: Key Share Word " << i << " half " << half << " has hamming weights out of range " << min_combined_weight << " -> " << max_combined_weight << " - this may leak information about the key\n";
                 }
             }
         }
