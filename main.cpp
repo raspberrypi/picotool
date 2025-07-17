@@ -1811,24 +1811,24 @@ struct memory_access {
 
     virtual uint32_t get_binary_start() = 0;
 
-    uint32_t read_int(uint32_t addr) {
+    uint32_t read_int(uint32_t addr, bool zero_fill = false) {
         assert(!(addr & 3u));
         uint32_t rc;
-        read(addr, (uint8_t *)&rc, 4);
+        read(addr, (uint8_t *)&rc, 4, zero_fill);
         return rc;
     }
 
-    uint32_t read_short(uint32_t addr) {
+    uint32_t read_short(uint32_t addr, bool zero_fill = false) {
         assert(!(addr & 1u));
         uint16_t rc;
-        read(addr, (uint8_t *)&rc, 2);
+        read(addr, (uint8_t *)&rc, 2, zero_fill);
         return rc;
     }
 
     // read a vector of types that have a raw_type_mapping
-    template <typename T> void read_raw(uint32_t addr, T &v) {
+    template <typename T> void read_raw(uint32_t addr, T &v, bool zero_fill = false) {
         typename raw_type_mapping<T>::access_type& check = v; // ugly check that we aren't trying to read into something we shouldn't
-        read(addr, (uint8_t *)&v, sizeof(typename raw_type_mapping<T>::access_type));
+        read(addr, (uint8_t *)&v, sizeof(typename raw_type_mapping<T>::access_type), zero_fill);
     }
 
     // read a vector of types that have a raw_type_mapping
@@ -4008,8 +4008,8 @@ uint32_t get_access_family_id(memory_access &file_access) {
         // No block, so RP2040 or absolute
         if (file_access.get_binary_start() == FLASH_START) {
             vector<uint8_t> checksum_data = {};
-            file_access.read_into_vector(FLASH_START, 252, checksum_data);
-            uint32_t checksum = file_access.read_int(FLASH_START + 252);
+            file_access.read_into_vector(FLASH_START, 252, checksum_data, true);
+            uint32_t checksum = file_access.read_int(FLASH_START + 252, true);
             if (checksum == calc_checksum(checksum_data)) {
                 // Checksum is correct, so RP2040
                 DEBUG_LOG("Detected family ID %s due to boot2 checksum\n", family_name(RP2040_FAMILY_ID).c_str());
