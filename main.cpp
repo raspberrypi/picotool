@@ -339,7 +339,7 @@ private:
 // Calculate chunk size for load/save/verify
 // Returns size/100 rounded up to FLASH_SECTOR_ERASE_SIZE
 uint32_t calculate_chunk_size(uint32_t size) {
-    return ((size/100 + FLASH_SECTOR_ERASE_SIZE - 1) & ~(FLASH_SECTOR_ERASE_SIZE - 1));
+    return (((size + (100 - 1))/100 + FLASH_SECTOR_ERASE_SIZE - 1) & ~(FLASH_SECTOR_ERASE_SIZE - 1));
 }
 
 
