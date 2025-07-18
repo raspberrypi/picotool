@@ -84,6 +84,18 @@ static __forceinline int __builtin_ctz(unsigned x) {
 #define OTP_ROW_COUNT (OTP_PAGE_COUNT * OTP_PAGE_ROWS)
 #define OTP_SPECIAL_PAGES 3
 
+// Support for SDK 2.1.0 & SDK 2.1.1 -----
+#ifndef CYW43_FIRMWARE_FAMILY_ID
+#define CYW43_FIRMWARE_FAMILY_ID    0xe48bff55u
+#endif
+#ifndef BOOTROM_FAMILY_ID_MIN
+#define BOOTROM_FAMILY_ID_MIN       RP2040_FAMILY_ID
+#endif
+#ifndef BOOTROM_FAMILY_ID_MAX
+#define BOOTROM_FAMILY_ID_MAX       RP2350_ARM_NS_FAMILY_ID
+#endif
+// ------
+
 using std::string;
 using std::vector;
 using std::pair;
