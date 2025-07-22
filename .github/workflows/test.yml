@@ -114,3 +114,36 @@ jobs:
         run: |
           cmake -S pico-examples -B build-examples -G "Ninja" -D PICO_SDK_PATH="${{ github.workspace }}/pico-sdk" -D PICO_BOARD=pico2_w ${{ matrix.compiler == 'clang' && '-D PICO_COMPILER=pico_arm_clang' || '' }}
           cmake --build build-examples
+
+  test-older-sdk:
+    # Due to 2.1.0 and 2.1.1 pointing at the develop tag (https://github.com/raspberrypi/pico-sdk/pull/2401)
+    # This test can be removed once 2.1.0 and 2.1.1 are no longer supported (use 2.1.x-correct-picotool instead)
+    # Prevent running twice for PRs from same repo
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
+    strategy:
+      fail-fast: false
+      matrix:
+        sdk: ["2.1.1", "2.1.0"]
+    name: Test Build with older SDK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install dependencies
+        # No libusb, as that is how the SDK auto-builds picotool
+        run: sudo apt install cmake ninja-build python3 build-essential
+      - name: Checkout Pico SDK
+        uses: actions/checkout@v4
+        with:
+          repository: raspberrypi/pico-sdk
+          ref: ${{ matrix.sdk }}
+          path: pico-sdk
+          submodules: 'recursive'
+      - name: Build and Install
+        run: |
+          cmake -S . -B build -G "Ninja" -D PICO_SDK_PATH="${{ github.workspace }}/pico-sdk" -D PICOTOOL_NO_LIBUSB=1
+          cmake --build build
+          sudo cmake --install build
+      - name: Test
+        run: |
+          picotool version ${{ matrix.sdk }}
