@@ -821,8 +821,8 @@ UF2 CONVERT:
     Convert ELF/BIN to UF2.
 
 SYNOPSIS:
-    picotool uf2 convert [--quiet] [--verbose] <infile> [-t <type>] <outfile> [-t <type>] [-o <offset>] [--family <family_id>]
-                [[--abs-block] [<abs_block_loc>]]
+    picotool uf2 convert [--quiet] [--verbose] <infile> [-t <type>] <outfile> [-t <type>] [-o <offset>] [--family <family_id>] [--platform
+                <platform>] [[--abs-block] [<abs_block_loc>]]
 
 OPTIONS:
         --quiet
@@ -847,6 +847,9 @@ OPTIONS:
     UF2 Family options
         <family_id>
             family ID for UF2
+    Platform options
+        <platform>
+            optional platform for memory verification (eg rp2040, rp2350)
     Errata RP2350-E10 Fix
         --abs-block
             Add an absolute block
