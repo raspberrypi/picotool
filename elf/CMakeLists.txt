@@ -3,4 +3,4 @@ add_library(elf STATIC
 
 target_include_directories(elf PUBLIC ${CMAKE_CURRENT_LIST_DIR})
 
-target_link_libraries(elf PRIVATE model errors)
+target_link_libraries(elf PUBLIC model errors)

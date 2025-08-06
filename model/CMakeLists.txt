@@ -1,9 +1,9 @@
-add_library(model INTERFACE)
-target_sources(model INTERFACE ${CMAKE_CURRENT_LIST_DIR}/model.cpp)
+add_library(model STATIC
+        model.cpp)
 
-target_include_directories(model INTERFACE ${CMAKE_CURRENT_LIST_DIR} ${CMAKE_CURRENT_BINARY_DIR})
+target_include_directories(model PUBLIC ${CMAKE_CURRENT_LIST_DIR} ${CMAKE_CURRENT_BINARY_DIR})
 
-target_link_libraries(model INTERFACE boot_uf2_headers boot_picoboot_headers pico_platform_headers errors)
+target_link_libraries(model PUBLIC boot_uf2_headers boot_picoboot_headers pico_platform_headers errors)
 
 add_custom_target(unreadable_rom_data DEPENDS
         ${CMAKE_CURRENT_BINARY_DIR}/rp2350_a2_rom_end.h
