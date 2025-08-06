@@ -16,5 +16,5 @@ cc_library(
         ],
     }),
     includes = ["."],
-    deps = ["//errors"],
+    deps = ["//model", "//errors"],
 )

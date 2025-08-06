@@ -1,0 +1,17 @@
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "model",
+    srcs = [
+        "model.cpp",
+    ],
+    hdrs = [
+        "model.h",
+    ],
+    includes = ["."],
+    deps = [
+        "//errors",
+        "@pico-sdk//src/common/boot_uf2_headers",
+        "@pico-sdk//src/common/boot_picoboot_headers",
+    ],
+)
