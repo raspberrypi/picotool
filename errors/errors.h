@@ -21,8 +21,8 @@
 #define ERROR_UNKNOWN (-99)
 
 
-struct command_failure : std::exception {
-    command_failure(int code, std::string s) : c(code), s(std::move(s)) {}
+struct failure_error : std::exception {
+    failure_error(int code, std::string s) : c(code), s(std::move(s)) {}
 
     const char *what() const noexcept override {
         return s.c_str();

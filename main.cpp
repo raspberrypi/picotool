@@ -37,7 +37,6 @@
 #include "get_enc_bootloader.h"
 #if HAS_LIBUSB
     #include "picoboot_connection_cxx.h"
-    #include "rp2350.rom.h"
     #include "get_xip_ram_perms.h"
 #else
     #include "picoboot_connection.h"
@@ -49,6 +48,7 @@
 #include "pico/stdio_usb/reset_interface.h"
 #include "elf.h"
 #include "otp.h"
+#include "model.h"
 #include "errors.h"
 #include "hardware/regs/otp_data.h"
 
@@ -105,9 +105,9 @@ using std::ios;
 using json = nlohmann::json;
 
 #if HAS_LIBUSB
-typedef map<enum picoboot_device_result,vector<tuple<model_t, libusb_device *, libusb_device_handle *>>> device_map;
+typedef map<enum picoboot_device_result,vector<tuple<chip_t, libusb_device *, libusb_device_handle *>>> device_map;
 #else
-typedef map<enum picoboot_device_result,vector<tuple<model_t, void *, void *>>> device_map;
+typedef map<enum picoboot_device_result,vector<tuple<chip_t, void *, void *>>> device_map;
 #endif
 
 auto memory_names = map<enum memory_type, string>{
@@ -171,15 +171,9 @@ std::array<std::array<string, 48>, 12> pin_functions_rp2350{{
 std::map<uint32_t, otp_reg> otp_regs;
 
 #if HAS_LIBUSB
-auto bus_device_string = [](struct libusb_device *device, model_t model) {
+auto bus_device_string = [](struct libusb_device *device, chip_t chip) {
     string bus_device;
-    if (model == rp2040) {
-        bus_device = string("RP2040 device at bus ");
-    } else if (model == rp2350) {
-        bus_device = string("RP2350 device at bus ");
-    } else {
-        bus_device = string("Device at bus ");
-    }
+    bus_device = chip_name(chip) + string(" device at bus ");
     return bus_device + std::to_string(libusb_get_bus_number(device)) + ", address " + std::to_string(libusb_get_device_address(device));
 };
 #endif
@@ -426,6 +420,28 @@ string family_name(unsigned int family_id) {
     return hex_string(family_id);
 }
 
+struct platform_model : public cli::value_base<platform_model> {
+    explicit platform_model(string name) : value_base(std::move(name)) {}
+
+    template<typename T>
+    platform_model &set(T &t) {
+        string nm = "<" + name() + ">";
+        // note we cannot capture "this"
+        on_action([&t, nm](string value) {
+            auto ovalue = value;
+            if (value == "rp2040") {
+                t = std::make_shared<model_rp2040>();
+            } else if (value == "rp2350") {
+                t = std::make_shared<model_rp2350>();
+            } else {
+                return value + " is not a valid platform";
+            }
+            return string("");
+        });
+        return *this;
+    }
+};
+
 struct cmd {
     explicit cmd(string name) : _name(std::move(name)) {}
     virtual ~cmd() = default;
@@ -478,6 +494,7 @@ struct _settings {
     bool force_no_reboot = false;
     string switch_cpu;
     uint32_t family_id = 0;
+    model_t model = nullptr;
     bool quiet = false;
     bool verbose = false;
     bool use_flash_cache = false;
@@ -573,7 +590,7 @@ struct _settings {
 
     struct {
         bool abs_block = false;
-        #if SUPPORT_A2
+        #if SUPPORT_RP2350_A2
         uint32_t abs_block_loc = 0x11000000 - UF2_PAGE_SIZE;
         #else
         uint32_t abs_block_loc = 0;
@@ -582,7 +599,7 @@ struct _settings {
 };
 _settings settings;
 std::shared_ptr<cmd> selected_cmd;
-model_t selected_model = unknown;
+chip_t selected_chip = unknown;
 
 auto device_selection =
     (
@@ -1034,7 +1051,7 @@ struct partition_create_command : public cmd {
                 #endif
                     (option("--singleton").set(settings.partition.singleton) % "Singleton partition table")
                 ).min(0).force_expand_help(true) % "Partition Table Options"
-            #if SUPPORT_A2
+            #if SUPPORT_RP2350_A2
                 + (
                     option("--abs-block").set(settings.uf2.abs_block) % "Enforce support for an absolute block" +
                         hex("abs_block_loc").set(settings.uf2.abs_block_loc).min(0) % "absolute block location (default to 0x10ffff00)"
@@ -1330,8 +1347,11 @@ struct uf2_convert_command : public cmd {
                 ).force_expand_help(true) % "Packaging Options" + 
                 (
                     option("--family") & family_id("family_id").set(settings.family_id) % "family ID for UF2"
-                ).force_expand_help(true) % "UF2 Family options"
-            #if SUPPORT_A2
+                ).force_expand_help(true) % "UF2 Family options" +
+                (
+                    option("--platform") & platform_model("platform").set(settings.model) % "optional platform for memory verification (eg rp2040, rp2350)"
+                ).force_expand_help(true) % "Platform options"
+            #if SUPPORT_RP2350_A2
                 + (
                     option("--abs-block").set(settings.uf2.abs_block) % "Add an absolute block" +
                         hex("abs_block_loc").set(settings.uf2.abs_block_loc).min(0) % "absolute block location (default to 0x10ffff00)"
@@ -1867,25 +1887,21 @@ struct memory_access {
     }
 
     template <typename T> void read_into_vector(uint32_t addr, unsigned int count, vector<T> &v, bool zero_fill = false) {
-        v.clear();
+            v.clear();
         v.resize(count);
         if (count) {
             read(addr, (uint8_t *)v.data(), count * sizeof(typename raw_type_mapping<T>::access_type), zero_fill);
         }
     }
-};
 
-static model_t get_model(memory_access &raw_access) {
-    auto magic = raw_access.read_int(BOOTROM_MAGIC_ADDR);
-    magic &= 0xffffff; // ignore bootrom version
-    if (magic == BOOTROM_MAGIC_RP2040) {
-        return rp2040;
-    } else if (magic == BOOTROM_MAGIC_RP2350) {
-        return rp2350;
-    } else {
-        return unknown;
+    model_t get_model() {
+        assert(model);
+        return model;
     }
-}
+
+protected:
+    model_t model = models::unknown; // something we can read from the start of ROM with
+};
 
 template<typename T>
 bool get_int(const std::string& s, T& out) {
@@ -1915,10 +1931,10 @@ bool get_json_int(json value, T& out) {
     }
 }
 
-uint32_t bootrom_func_lookup(memory_access& access, uint16_t tag) {
-    model_t model = get_model(access);
+uint32_t bootrom_func_lookup_rp2040(memory_access& access, uint16_t tag) {
+    model_t model = access.get_model();
     // we are only used on RP2040
-    if (model != rp2040) {
+    if (model->chip() != rp2040) {
         fail(ERROR_INCOMPATIBLE, "RP2040 BOOT ROM not found");
     }
 
@@ -1937,11 +1953,11 @@ uint32_t bootrom_func_lookup(memory_access& access, uint16_t tag) {
     return 0;
 }
 
-uint32_t bootrom_table_lookup_rp2350(memory_access& access, uint16_t tag, uint16_t flags) {
-    model_t model = get_model(access);
+uint32_t bootrom_table_lookup_v2(memory_access& access, uint16_t tag, uint16_t flags) {
+    model_t model = access.get_model();
     // we are only used on RP2350
-    if (model != rp2350) {
-        fail(ERROR_INCOMPATIBLE, "RP2350 BOOT ROM not found");
+    if (model->rom_table_version() != 2) {
+        fail(ERROR_INCOMPATIBLE, "BOOT ROM TABLE (v2) not found");
     }
 
     // dereference the table pointer
@@ -1983,24 +1999,83 @@ uint32_t bootrom_table_lookup_rp2350(memory_access& access, uint16_t tag, uint16
     return 0;
 }
 
-static uint32_t get_rom_git_revision(memory_access &raw_access) {
-    unsigned int addr = bootrom_table_lookup_rp2350(raw_access, rom_table_code('G','R'), RT_FLAG_DATA);
+static uint32_t get_rom_git_revision_v2(memory_access &raw_access) {
+    unsigned int addr = bootrom_table_lookup_v2(raw_access, rom_table_code('G','R'), RT_FLAG_DATA);
     return raw_access.read_int(addr);
 }
 
-static rp2350_version_t get_rp2350_version(memory_access &raw_access) {
-    switch (get_rom_git_revision(raw_access)) {
-        case 0x312e22fa:
-            return rp2350_a2;
-        default:
-            return rp2350_unknown;
+static model_t determine_model(memory_access &raw_access) {
+    auto raw = raw_access.read_int(BOOTROM_MAGIC_ADDR);
+    auto magic = raw & 0xf0ffffff; // ignoring bootrom version
+    if (magic == BOOTROM_MAGIC_RP2040) {
+        return std::make_shared<model_rp2040>();
+    } else if (magic == BOOTROM_MAGIC_RP2350) {
+        uint32_t table_entry = raw_access.read_short(BOOTROM_MAGIC_ADDR + 4);
+        static_assert(ROM_END_RP2350 == 0x8000);
+        if (table_entry < 0x8000) {
+            return std::make_shared<model_rp2350>();
+        } else {
+            return std::make_shared<model_rp2350>(0x10000);
+        }
     }
+    return models::unknown;
+}
+
+static inline bool is_transfer_aligned(uint32_t addr, const model_t& model) {
+    enum memory_type t = get_memory_type(addr, model);
+    return t != invalid && !(t == flash && addr & (PAGE_SIZE-1));
+}
+
+// this must be called after the right model is set on raw_access whihc is why it isn't
+// part of init_model
+static chip_revision_t determine_chip_revision(memory_access &raw_access) {
+    chip_revision_t chip_revision = unknown_revision;
+    model_t model = raw_access.get_model();
+    uint8_t rom_version;
+    raw_access.read_raw(0x13, rom_version);
+    if (model->chip() == rp2040) {
+        switch (rom_version) {
+            case 1:
+                chip_revision = rp2040_b0;
+                break;
+            case 2:
+                chip_revision = rp2040_b1;
+                break;
+            case 3:
+                chip_revision = rp2040_b2;
+                break;
+            default:
+                break;
+        };
+    } else if (model->chip() == rp2350) {
+        // switch (get_rom_git_revision_v2(raw_access)) {
+        //     default:
+        //         break;
+        // }
+        switch (rom_version) {
+            case 2:
+                chip_revision = rp2350_a2;
+                break;
+            case 3:
+                chip_revision = rp2350_a3;
+                break;
+            case 4:
+                chip_revision = rp2350_a4;
+                break;
+            default:
+                break;
+        };
+    }
+    return chip_revision;
 }
 #if HAS_LIBUSB
 struct picoboot_memory_access : public memory_access {
-    model_t model = unknown; // must be initialized to something up front as it is referenced before it is set to its final value
     explicit picoboot_memory_access(picoboot::connection &connection) : connection(connection) {
-        model = get_model(*this);
+        // todo remove me temp hack so we can read a larger amount of ROM
+        model = std::make_shared<model_info>(unknown, "hack", 0x10000);
+        model = determine_model(*this);
+        if (model->chip() != unknown)
+            model->set_chip_revision(determine_chip_revision(*this));
     }
 
     bool is_device() override {
@@ -2078,7 +2153,7 @@ struct picoboot_memory_access : public memory_access {
         if (flash == get_memory_type(address, model)) {
             connection.exit_xip();
         }
-        if (model == rp2040 && rom == get_memory_type(address, model) && (address+size) >= 0x2000) {
+        if (model->chip() == rp2040 && rom == get_memory_type(address, model) && (address+size) >= 0x2000) {
             // read by memcpy instead
             unsigned int program_base = SRAM_START + 0x4000;
             // program is "return memcpy(SRAM_BASE, 0, 0x4000);"
@@ -2086,22 +2161,26 @@ struct picoboot_memory_access : public memory_access {
                     0x07482101, // movs r1, #1;       lsls r0, r1, #29
                     0x2100038a, // lsls r2, r1, #14;  movs r1, #0
                     0x47184b00, // ldr  r3, [pc, #0]; bx r3
-                    bootrom_func_lookup(*this, rom_table_code('M','C'))
+                    bootrom_func_lookup_rp2040(*this, rom_table_code('M','C'))
             };
             write_vector(program_base, program);
             connection.exec(program_base);
             // 4k is copied into the start of RAM
             connection.read(SRAM_START + address, (uint8_t *) buffer, size);
-        } else if (model == rp2350 && rom == get_memory_type(address, model) && (address+size) > 0x7e00) {
-            // Cannot read end section of rom from device
-            uint16_t unreadable_start = MAX(address, 0x7e00);
-            uint16_t unreadable_end = MIN(address+size, 0x8000);
+        } else if (contains_unreadable_rom(address, size, model)) {
+            // Cannot read end section of rom from device, so use the saved header for the chip
+            const unsigned char *unreadable_data = model->unreadable_rom_data();
+            if (unreadable_data == nullptr) {
+                fail(ERROR_INCOMPATIBLE, "Cannot read unreadable ROM data for %s revision %s", model->name().c_str(), model->revision_name().c_str());
+            }
+            uint16_t unreadable_start = MAX(address, model->unreadable_rom_start());
+            uint16_t unreadable_end = MIN(address+size, model->unreadable_rom_end());
             uint16_t idx = 0;
             if (address < unreadable_start) {
                 connection.read(address, (uint8_t *) buffer, unreadable_start - address);
                 idx += unreadable_start - address;
             }
-            memcpy(buffer+idx, rp2350_rom+(unreadable_start-0x7e00), unreadable_end - unreadable_start);
+            memcpy(buffer+idx, unreadable_data+(unreadable_start-(model->unreadable_rom_start())), unreadable_end - unreadable_start);
             idx += unreadable_end - unreadable_start;
             if (address + size > unreadable_end) {
                 connection.read(unreadable_end, (uint8_t *) buffer+idx, size - idx);
@@ -2198,10 +2277,10 @@ struct iostream_memory_access : public memory_access {
     void read(uint32_t address, uint8_t *buffer, uint32_t size, bool zero_fill) override {
         if (address == BOOTROM_MAGIC_ADDR && size == 4) {
             // return the memory model
-            if (model == rp2040) {
+            if (model->chip()== rp2040) {
                 *(uint32_t*)buffer = BOOTROM_MAGIC_RP2040;
                 return;
-            } else if (model == rp2350) {
+            } else if (model->chip() == rp2350) {
                 *(uint32_t*)buffer = BOOTROM_MAGIC_RP2350;
                 return;
             } else {
@@ -2257,7 +2336,6 @@ private:
     std::shared_ptr<std::iostream>file;
     range_map<size_t> rmap;
     uint32_t binary_start;
-    model_t model = unknown;
 };
 
 
@@ -2323,7 +2401,7 @@ private:
 
 struct partition_memory_access : public memory_access {
     partition_memory_access(memory_access &wrap, uint32_t partition_start) : wrap(wrap), partition_start(partition_start) {
-        model = get_model(wrap);
+        model = wrap.get_model();
     }
 
     void read(uint32_t address, uint8_t *buffer, unsigned int size, bool zero_fill) override {
@@ -2350,7 +2428,6 @@ struct partition_memory_access : public memory_access {
 private:
     memory_access& wrap;
     uint32_t partition_start;
-    model_t model;
 };
 
 static void read_and_check_elf32_header(std::shared_ptr<std::iostream>in, elf32_header& eh_out) {
@@ -2360,7 +2437,7 @@ static void read_and_check_elf32_header(std::shared_ptr<std::iostream>in, elf32_
     }
     try {
         rp_check_elf_header(eh_out);
-    } catch (command_failure &e) {
+    } catch (failure_error &e) {
         fail(e.code(), "'" + settings.filenames[0] +"' failed validation - " + e.what());
     }
 }
@@ -2380,12 +2457,12 @@ struct binary_info_header {
 
 bool find_binary_info(memory_access& access, binary_info_header &hdr) {
     uint32_t base = access.get_binary_start();
-    model_t model = get_model(access);
+    model_t model = access.get_model();
     if (!base) {
         fail(ERROR_FORMAT, "UF2 file does not contain a valid RP2 executable image");
     }
     uint32_t max_dist = 256;
-    if (model == rp2040) {
+    if (model->chip() == rp2040) {
         max_dist = 64;
         if (base == FLASH_START) base += 0x100; // skip the boot2
     }
@@ -2470,9 +2547,9 @@ struct bi_visitor_base {
 
     void visit(memory_access& access, const binary_info_header& hdr) {
         try {
-            model = get_model(access);
+            chip = access.get_model()->chip();
         } catch (not_mapped_exception&) {
-            model = rp2040;
+            chip = rp2040;
         }
         for (const auto &a : hdr.bi_addr) {
             visit(access, a);
@@ -2580,7 +2657,7 @@ struct bi_visitor_base {
     }
 
     virtual void pins(uint64_t pin_mask, int func, string name) {
-        if (model == rp2350) {
+        if (chip == rp2350) {
             pins(pin_mask, func, name, pin_functions_rp2350);
         } else {
             pins(pin_mask, func, name, pin_functions_rp2040);
@@ -2632,7 +2709,7 @@ struct bi_visitor_base {
 
     }
 
-    model_t model = model_t::unknown;
+    chip_t chip = chip_t::unknown;
 };
 
 struct bi_visitor : public bi_visitor_base {
@@ -2906,7 +2983,7 @@ uint32_t build_rmap_uf2(std::shared_ptr<std::iostream>file, range_map<size_t>& r
             if (block.flags & UF2_FLAG_FAMILY_ID_PRESENT &&
                 !(block.flags & UF2_FLAG_NOT_MAIN_FLASH) && block.payload_size == PAGE_SIZE &&
                 (!family_id || block.file_size == family_id)) {
-                #if SUPPORT_A2
+                #if SUPPORT_RP2350_A2
                 // ignore the absolute block, but save the address
                 if (check_abs_block(block)) {
                     DEBUG_LOG("Ignoring RP2350-E10 absolute block\n");
@@ -2922,11 +2999,11 @@ uint32_t build_rmap_uf2(std::shared_ptr<std::iostream>file, range_map<size_t>& r
                 next_family_id = 0;
                 #endif
             } else if (block.file_size != family_id && family_id && !next_family_id) {
-                #if SUPPORT_A2
+                #if SUPPORT_RP2350_A2
                 if (!check_abs_block(block)) {
                 #endif
                     next_family_id = block.file_size;
-                #if SUPPORT_A2
+                #if SUPPORT_RP2350_A2
                 }
                 #endif
             }
@@ -2943,7 +3020,7 @@ void build_rmap_load_map(std::shared_ptr<load_map_item>load_map, range_map<uint3
         if (e.storage_address != 0) {
             try {
                 rmap.insert(range(e.runtime_address, e.runtime_address + e.size), e.storage_address);
-            } catch (command_failure&) {
+            } catch (failure_error&) {
                 // Overlapping memory ranges are permitted in a load_map, so overwrite overlapping range
                 rmap.insert_overwrite(range(e.runtime_address, e.runtime_address + e.size), e.storage_address);
             }
@@ -2966,7 +3043,7 @@ uint32_t find_binary_start(range_map<size_t>& rmap) {
             }
         }
     }
-    if (get_memory_type(binary_start, rp2350) == invalid) { // pick biggest (rp2350) here for now
+    if (get_memory_type(binary_start, models::largest) == invalid) { // pick biggest (rp2350) here for now
         return 0;
     }
     return binary_start;
@@ -3190,6 +3267,12 @@ void insert_default_families(uint32_t flags_and_permissions, vector<std::string>
     if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_DATA_BITS) family_ids.emplace_back(family_name(DATA_FAMILY_ID));
 }
 
+static chip_t image_type_exe_chip_to_chip(uint image_type_exe_chip) {
+    static_assert((int)chip_rp2040 == (int)rp2040, "");
+    static_assert((int)chip_rp2350 == (int)rp2350, "");
+    return (chip_t)image_type_exe_chip;
+}
+
 #if HAS_LIBUSB
 void info_guts(memory_access &raw_access, picoboot::connection *con) {
 #else
@@ -3253,31 +3336,25 @@ void info_guts(memory_access &raw_access, void *con) {
             if (image_def != nullptr) {
                 if (verbose_metadata) info_pair("block type", "image def");
                 if (image_def->image_type() == type_exe) {
-                    switch (image_def->chip()) {
-                        case chip_rp2040:
-                            info_pair("target chip", "RP2040");
-                            break;
-                        case chip_rp2350:
-                            info_pair("target chip", "RP2350");
-                            switch (image_def->cpu()) {
-                                case cpu_riscv:
-                                    info_pair("image type", "RISC-V");
-                                    break;
-                                case cpu_varmulet:
-                                    info_pair("image type", "Varmulet");
-                                    break;
-                                case cpu_arm:
-                                    if (image_def->security() == sec_s) {
-                                        info_pair("image type", "ARM Secure");
-                                    } else if (image_def->security() == sec_ns) {
-                                        info_pair("image type", "ARM Non-Secure");
-                                    } else if (image_def->security() == sec_unspecified) {
-                                        info_pair("image type", "ARM");
-                                    }
-                            }
-                            break;
-                        default:
-                            break;
+                    info_pair("target chip", chip_name(image_type_exe_chip_to_chip(image_def->chip())));
+                    if (image_def->chip() != chip_rp2040) {
+                        switch (image_def->cpu()) {
+                            case cpu_riscv:
+                                info_pair("image type", "RISC-V");
+                                break;
+                            case cpu_varmulet:
+                                info_pair("image type", "Varmulet");
+                                break;
+                            case cpu_arm:
+                                if (image_def->security() == sec_s) {
+                                    info_pair("image type", "ARM Secure");
+                                } else if (image_def->security() == sec_ns) {
+                                    info_pair("image type", "ARM Non-Secure");
+                                } else if (image_def->security() == sec_unspecified) {
+                                    info_pair("image type", "ARM");
+                                }
+                                break;
+                        }
                     }
                 } else if (image_def->image_type() == type_data) {
                     info_pair("image type", "data");
@@ -3368,7 +3445,8 @@ void info_guts(memory_access &raw_access, void *con) {
                             ss << "Clear 0x" << std::hex << e.runtime_address;
                             ss << "->0x" << std::hex << e.runtime_address + e.size;
                         } else if (e.storage_address != e.runtime_address) {
-                            if (is_address_initialized(rp2350_address_ranges_flash, e.runtime_address)) {
+                            address_ranges ranges_flash = address_ranges_flash(raw_access.get_model());
+                            if (is_address_initialized(ranges_flash, e.runtime_address)) {
                                 ss << "ERROR: COPY TO FLASH NOT PERMITTED ";
                             }
                             ss << "Copy 0x" << std::hex << e.storage_address;
@@ -3640,8 +3718,8 @@ void info_guts(memory_access &raw_access, void *con) {
             if (best_block && (settings.info.show_basic || settings.info.all)) {
                 select_group(program_info);
                 info_metadata(best_block.get());
-            } else if (!best_block && has_binary_info && get_model(raw_access) == rp2350) {
-                fos << "WARNING: Binary on RP2350 device does not contain a block loop - this binary will not boot\n";
+            } else if (!best_block && has_binary_info && raw_access.get_model()->requires_block_loop()) {
+                fos << "WARNING: Binary on " << raw_access.get_model()->name() << " device does not contain a block loop - this binary will not boot\n";
             }
         } catch (std::invalid_argument &e) {
             fos << "Error reading binary info\n";
@@ -3655,29 +3733,14 @@ void info_guts(memory_access &raw_access, void *con) {
         std::vector<std::pair<string,string>> device_state_pairs;
         if ((settings.info.show_device || settings.info.all) && raw_access.is_device()) {
             select_group(device_info);
-            model_t model = get_model(raw_access);
+            model_t model = raw_access.get_model();
             uint8_t rom_version;
             raw_access.read_raw(0x13, rom_version);
-            if (model == rp2040) {
-                info_pair("type", "RP2040");
-                if (settings.info.show_debug || settings.info.all) {
-                    switch (rom_version) {
-                        case 1:
-                            info_pair("revision", "B0");
-                            break;
-                        case 2:
-                            info_pair("revision", "B1");
-                            break;
-                        case 3:
-                            info_pair("revision", "B2");
-                            break;
-                        default:
-                            info_pair("revision", "Unknown");
-                            break;
-                    }
-                }
-            } else if (model == rp2350) {
-                info_pair("type", "RP2350");
+            info_pair("type", model->name());
+            if (settings.info.show_debug || settings.info.all) {
+                info_pair("revision", model->revision_name());
+            }
+            if (model->supports_picoboot_cmd(PC_GET_INFO)) {
                 assert(con);
                 struct picoboot_get_info_cmd info_cmd;
                 info_cmd.bType = PICOBOOT_GET_INFO_SYS,
@@ -3688,38 +3751,30 @@ void info_guts(memory_access &raw_access, void *con) {
                                                           SYS_INFO_CHIP_INFO | SYS_INFO_CRITICAL |
                                                           SYS_INFO_CPU_INFO | SYS_INFO_FLASH_DEV_INFO);
                 uint32_t word_buf[64];
-                auto version = get_rp2350_version(raw_access);
-                if (settings.info.show_debug || settings.info.all) {
-                    switch (version) {
-                        case rp2350_a2:
-                            info_pair("revision", "A2");
-                            break;
-                        default:
-                            info_pair("revision", "Unknown");
-                            break;
-                    }
-                }
                 con->get_info(&info_cmd, (uint8_t *) word_buf, sizeof(word_buf));
                 uint32_t *data = word_buf;
                 unsigned int word_count = *data++;
                 unsigned int included = *data++;
                 if (included & SYS_INFO_CHIP_INFO) {
                     // package_id, device_id, wafer_id
-                    struct picoboot_otp_cmd otp_cmd;
-                    uint16_t num_gpios = 0;
-                    otp_cmd.wRow = OTP_DATA_NUM_GPIOS_ROW;
-                    otp_cmd.wRowCount = 1;
-                    otp_cmd.bEcc = 1;
-                    con->otp_read(&otp_cmd, (uint8_t *)&num_gpios, sizeof(num_gpios));
-                    if (num_gpios == 30) {
-                        info_pair("package", "QFN60");
-                    } else if (num_gpios == 48) {
-                        info_pair("package", "QFN80");
+                    if (model->chip_revision() == rp2350_a2) {
+                        // On A2, package_id is incorrect, so we use num_gpios instead
+                        struct picoboot_otp_cmd otp_cmd;
+                        uint16_t num_gpios = 0;
+                        otp_cmd.wRow = OTP_DATA_NUM_GPIOS_ROW;
+                        otp_cmd.wRowCount = 1;
+                        otp_cmd.bEcc = 1;
+                        con->otp_read(&otp_cmd, (uint8_t *)&num_gpios, sizeof(num_gpios));
+                        if (num_gpios == 30) {
+                            info_pair("package", "QFN60");
+                        } else if (num_gpios == 48) {
+                            info_pair("package", "QFN80");
+                        } else {
+                            info_pair("package", "unknown");
+                        }
                     } else {
-                        info_pair("package", "unknown");
+                        info_pair("package", data[0] ? "QFN60" : "QFN80");
                     }
-                    // Not correct on A2
-                    // info_pair("package", data[0] ? "QFN60" : "QFN80");
                     info_pair("chipid", hex_string(data[1] | (uint64_t)data[2] << 32, 16));
                     data += 3;
                 }
@@ -3792,7 +3847,7 @@ void info_guts(memory_access &raw_access, void *con) {
                     }
                 }
                 if (settings.info.show_debug || settings.info.all) {
-                    info_pair("rom gitrev", hex_string(get_rom_git_revision(raw_access)));
+                    info_pair("rom gitrev", hex_string(get_rom_git_revision_v2(raw_access)));
                 }
                 select_group(device_info);
             }
@@ -3801,7 +3856,7 @@ void info_guts(memory_access &raw_access, void *con) {
                 int32_t size_guess = guess_flash_size(raw_access);
                 if (size_guess > 0) {
                     info_pair("flash size", std::to_string(size_guess/1024) + "K");
-                    if (model == rp2040) {
+                    if (model->chip() == rp2040) {
                         uint64_t flash_id = 0;
                         con->flash_id(flash_id);
                         info_pair("flash id", hex_string(flash_id, 16, true, true));
@@ -4016,8 +4071,7 @@ bool help_command::execute(device_map &devices) {
     return false;
 }
 
-uint32_t get_access_family_id(memory_access &file_access) {
-    uint32_t family_id = 0;
+model_t get_access_model(memory_access &file_access) {
     vector<uint8_t> bin;
     std::unique_ptr<block> best_block = find_best_block(file_access, bin);
     if (best_block == NULL) {
@@ -4029,36 +4083,40 @@ uint32_t get_access_family_id(memory_access &file_access) {
             if (checksum == calc_checksum(checksum_data)) {
                 // Checksum is correct, so RP2040
                 DEBUG_LOG("Detected family ID %s due to boot2 checksum\n", family_name(RP2040_FAMILY_ID).c_str());
-                return RP2040_FAMILY_ID;
+                return std::make_shared<model_rp2040>();
             } else {
                 // Checksum incorrect, so absolute
                 DEBUG_LOG("Assumed family ID %s\n", family_name(ABSOLUTE_FAMILY_ID).c_str());
-                return ABSOLUTE_FAMILY_ID;
+                model_t ret = std::make_shared<model_rp_generic>();
+                ret->set_family_id(ABSOLUTE_FAMILY_ID);
+                return ret;
             }
         } else {
             // no_flash RP2040 binaries have no checksum
             DEBUG_LOG("Assumed family ID %s\n", family_name(RP2040_FAMILY_ID).c_str());
-            return RP2040_FAMILY_ID;
+            return std::make_shared<model_rp2040>();
         }
     }
     auto first_item = best_block->items[0].get();
     if (first_item->type() != PICOBIN_BLOCK_ITEM_1BS_IMAGE_TYPE) {
         // This will apply for partition tables
         DEBUG_LOG("Assumed family ID %s due to block with no IMAGE_DEF\n", family_name(ABSOLUTE_FAMILY_ID).c_str());
-        return ABSOLUTE_FAMILY_ID;
+        model_t ret = std::make_shared<model_rp_generic>();
+        ret->set_family_id(ABSOLUTE_FAMILY_ID);
+        return ret;
     }
     auto image_def = dynamic_cast<image_type_item*>(first_item);
     if (image_def->image_type() == type_exe) {
         if (image_def->chip() == chip_rp2040) {
-            family_id = RP2040_FAMILY_ID;
+            return std::make_shared<model_rp2040>();
         } else if (image_def->chip() == chip_rp2350) {
             if (image_def->cpu() == cpu_riscv) {
-                family_id = RP2350_RISCV_FAMILY_ID;
+                return std::make_shared<model_rp2350_riscv>();
             } else if (image_def->cpu() == cpu_arm) {
                 if (image_def->security() == sec_s) {
-                    family_id = RP2350_ARM_S_FAMILY_ID;
+                    return std::make_shared<model_rp2350_arm_s>();
                 } else if (image_def->security() == sec_ns) {
-                    family_id = RP2350_ARM_NS_FAMILY_ID;
+                    return std::make_shared<model_rp2350_arm_ns>();
                 } else {
                     fail(ERROR_INCOMPATIBLE, "Cannot autodetect UF2 family: Unsupported security level %x\n", image_def->security());
                 }
@@ -4069,12 +4127,14 @@ uint32_t get_access_family_id(memory_access &file_access) {
             fail(ERROR_INCOMPATIBLE, "Cannot autodetect UF2 family: Unsupported chip %x\n", image_def->chip());
         }
     } else if (image_def->image_type() == type_data) {
-        family_id = DATA_FAMILY_ID;
+        model_t ret = std::make_shared<model_rp_generic>();
+        ret->set_family_id(DATA_FAMILY_ID);
+        return ret;
     } else {
         fail(ERROR_INCOMPATIBLE, "Cannot autodetect UF2 family: Unsupported image type %x\n", image_def->image_type());
     }
 
-    return family_id;
+    return models::unknown;
 }
 
 uint32_t get_family_id(uint8_t file_idx) {
@@ -4083,12 +4143,12 @@ uint32_t get_family_id(uint8_t file_idx) {
         family_id = settings.family_id;
     } else if (get_file_type_idx(file_idx) == filetype::elf || get_file_type_idx(file_idx) == filetype::bin) {
         auto file_access = get_file_memory_access(file_idx);
-        family_id = get_access_family_id(file_access);
+        family_id = get_access_model(file_access)->family_id();
     } else if (get_file_type_idx(file_idx) == filetype::uf2) {
         auto file = get_file_idx(ios::in|ios::binary, file_idx);
         uf2_block block;
         file->read((char*)&block, sizeof(block));
-        #if SUPPORT_A2
+        #if SUPPORT_RP2350_A2
         // ignore the absolute block
         if (check_abs_block(block)) {
             DEBUG_LOG("Ignoring RP2350-E10 absolute block\n");
@@ -4104,17 +4164,29 @@ uint32_t get_family_id(uint8_t file_idx) {
     return family_id;
 }
 
+model_t get_model(uint8_t file_idx) {
+    model_t model;
+    if (settings.model) {
+        model = settings.model;
+    } else {
+        auto file_access = get_file_memory_access(file_idx);
+        model = get_access_model(file_access);
+    }
+    // Clear the family ID, as get_family_id should be used for that, to allow command line override
+    model->set_family_id(0);
+    return model;
+}
+
 #if HAS_LIBUSB
 std::shared_ptr<vector<tuple<uint32_t, uint32_t>>> get_partitions(picoboot::connection &con) {
     picoboot_memory_access raw_access(con);
-    if (get_model(raw_access) != rp2350) {
-        // Not an rp2350, so no partitions
+    auto model = raw_access.get_model();
+    if (!model->supports_partition_table()) {
+        // no partition table
         return nullptr;
     }
 
-#if SUPPORT_A2
-    con.exit_xip();
-#endif
+    if (model->chip_revision() == rp2350_a2) con.exit_xip();
 
     uint8_t loc_flags_id_buf[256];
     uint8_t family_id_name_buf[256];
@@ -4142,7 +4214,6 @@ std::shared_ptr<vector<tuple<uint32_t, uint32_t>>> get_partitions(picoboot::conn
     }
 
     if (has_pt) {
-        auto rp2350_version = get_rp2350_version(raw_access);
         for (unsigned int i = 0; i < partition_count; i++) {
             uint32_t location_and_permissions = loc_flags_id_buf_32[lfi_pos++];
             uint32_t flags_and_permissions = loc_flags_id_buf_32[lfi_pos++];
@@ -4183,7 +4254,7 @@ bool config_command::execute(device_map &devices) {
             fos << "Multiple RP-series devices in BOOTSEL mode found:\n";
         }
         for (auto handles : devices[dr_vidpid_bootrom_ok]) {
-            selected_model = std::get<0>(handles);
+            selected_chip = std::get<0>(handles);
             fos.first_column(0); fos.hanging_indent(0);
             if (size > 1) {
                 auto s = bus_device_string(std::get<1>(handles), std::get<0>(handles));
@@ -4220,18 +4291,18 @@ bool config_command::execute(device_map &devices) {
     return false;
 }
 
+void set_model_from_metadata(file_memory_access& access) {
+    auto model = get_access_model(access);
+    access.set_model(model);
+}
+
 bool info_command::execute(device_map &devices) {
     fos.first_column(0); fos.hanging_indent(0);
     if (!settings.filenames[0].empty()) {
         uint32_t next_id = 0;
         auto access = get_file_memory_access(0, false, &next_id);
-        uint32_t id = 0;
-        id = get_family_id(0);
-        if (id == RP2040_FAMILY_ID) {
-            access.set_model(rp2040);
-        } else if (id >= RP2350_ARM_S_FAMILY_ID && id <= RP2350_ARM_NS_FAMILY_ID) {
-            access.set_model(rp2350);
-        }
+        set_model_from_metadata(access);
+        uint32_t id = get_family_id(0);
         if (next_id) {
             next_id = id;
             while (next_id) {
@@ -4264,7 +4335,7 @@ bool info_command::execute(device_map &devices) {
             fos << "Multiple RP-series devices in BOOTSEL mode found:\n";
         }
         for (auto handles : devices[dr_vidpid_bootrom_ok]) {
-            selected_model = std::get<0>(handles);
+            selected_chip = std::get<0>(handles);
             fos.first_column(0); fos.hanging_indent(0);
             if (size > 1) {
                 auto s = bus_device_string(std::get<1>(handles), std::get<0>(handles));
@@ -4341,18 +4412,19 @@ bool info_command::execute(device_map &devices) {
 static picoboot::connection get_single_bootsel_device_connection(device_map& devices, bool exclusive = true) {
     assert(devices[dr_vidpid_bootrom_ok].size() == 1);
     auto device = devices[dr_vidpid_bootrom_ok][0];
-    selected_model = std::get<0>(device);
+    selected_chip = std::get<0>(device);
     libusb_device_handle *rc = std::get<2>(device);
     if (!rc) fail(ERROR_USB, "Unable to connect to device");
     return picoboot::connection(rc, std::get<0>(device), exclusive);
 }
 
-static picoboot::connection get_single_rp2350_bootsel_device_connection(device_map& devices, bool exclusive = true) {
+static picoboot::connection get_single_picoboot_cmd_compatible_device_connection(const std::string& cmd_name, device_map& devices, std::set<picoboot_cmd_id> picoboot_cmds, bool exclusive = true) {
     auto con = get_single_bootsel_device_connection(devices, exclusive);
     // todo amy we may have a different VID PID?
     picoboot_memory_access raw_access(con);
-    if (get_model(raw_access) != rp2350) {
-        fail(ERROR_INCOMPATIBLE, "RP2350 command cannot be used with a non RP2350 device");
+    std::string failed_device_name;
+    if (!raw_access.get_model()->supports_picoboot_cmds(picoboot_cmds, failed_device_name)) {
+        fail(ERROR_INCOMPATIBLE, "'%s' command cannot be used with a %s device", cmd_name.c_str(), failed_device_name.c_str());
     }
     return con;
 }
@@ -4475,7 +4547,7 @@ bool save_command::execute(device_map &devices) {
         }
     }
 
-    model_t model = get_model(raw_access);
+    model_t model = raw_access.get_model();
     enum memory_type t1 = get_memory_type(start , model);
     enum memory_type t2 = get_memory_type(end, model);
     if (t1 != t2 || t1 == invalid || t1 == sram_unstriped) {
@@ -4508,7 +4580,7 @@ bool save_command::execute(device_map &devices) {
             block.flags = UF2_FLAG_FAMILY_ID_PRESENT;
             block.payload_size = PAGE_SIZE;
             block.num_blocks = (size + PAGE_SIZE - 1)/PAGE_SIZE;
-            block.file_size = settings.family_id ? settings.family_id : get_access_family_id(raw_access);
+            block.file_size = settings.family_id ? settings.family_id : get_access_model(raw_access)->family_id();
             block.magic_end = UF2_MAGIC_END;
             writer256 = [&](FILE *out, const uint8_t *buffer, unsigned int size, unsigned int offset) {
                 static_assert(512 == sizeof(block), "");
@@ -4523,7 +4595,7 @@ bool save_command::execute(device_map &devices) {
             };
             break;
         default:
-            throw command_failure(-1, "Unsupported output file type");
+            throw failure_error(-1, "Unsupported output file type");
     }
     FILE *out = fopen(settings.filenames[0].c_str(), "wb");
     if (out) {
@@ -4556,7 +4628,7 @@ bool save_command::execute(device_map &devices) {
     if (settings.save.verify) {
         raw_access.clear_cache();
         auto file_access = get_file_memory_access(0);
-        model_t model = get_model(raw_access);
+        model_t model = raw_access.get_model();
         auto ranges = get_coalesced_ranges(file_access, model);
         for (auto mem_range : ranges) {
             enum memory_type type = get_memory_type(mem_range.from, model);
@@ -4647,7 +4719,7 @@ bool erase_command::execute(device_map &devices) {
         }
     }
 
-    model_t model = get_model(raw_access);
+    model_t model = raw_access.get_model();
     enum memory_type t1 = get_memory_type(start , model);
     enum memory_type t2 = get_memory_type(end, model);
     if (t1 != flash || t1 != t2) {
@@ -4670,9 +4742,9 @@ bool erase_command::execute(device_map &devices) {
 
 #if HAS_LIBUSB
 bool get_target_partition(picoboot::connection &con, uint32_t* start = nullptr, uint32_t* end = nullptr) {
-#if SUPPORT_A2
-    con.exit_xip();
-#endif
+    picoboot_memory_access raw_access(con);
+    auto model = raw_access.get_model();
+    if (model->chip_revision() == rp2350_a2) con.exit_xip();
 
     uint8_t loc_flags_id_buf[256];
     uint32_t *loc_flags_id_buf_32 = (uint32_t *)loc_flags_id_buf;
@@ -4721,7 +4793,7 @@ bool load_guts(picoboot::connection con, iostream_memory_access &file_access) {
             visitor.visit(access, hdr);
         }
     }
-    model_t model = get_model(raw_access);
+    model_t model = raw_access.get_model();
     auto ranges = get_coalesced_ranges(file_access, model);
     bool uses_flash = false;
     uint32_t flash_min = std::numeric_limits<uint32_t>::max();
@@ -4860,7 +4932,7 @@ bool load_guts(picoboot::connection con, iostream_memory_access &file_access) {
         if (!start) {
             fail(ERROR_FORMAT, "Cannot execute as file does not contain a valid RP2 executable image");
         }
-        if (get_model(raw_access) == rp2350) {
+        if (raw_access.get_model()->supports_picoboot_cmd(PC_REBOOT2)) {
             struct picoboot_reboot2_cmd cmd;
             auto mt = get_memory_type(start, model);
             if (mt == flash) {
@@ -4872,13 +4944,13 @@ bool load_guts(picoboot::connection con, iostream_memory_access &file_access) {
                 unsigned int end;
                 switch (mt) {
                     case sram:
-                        end = SRAM_END_RP2350;
+                        end = model->sram_end();
                         break;
                     case xip_sram:
-                        end = XIP_SRAM_END_RP2350;
+                        end = model->xip_sram_end();
                         break;
                     default:
-                        end = SRAM_END_RP2350;
+                        end = model->sram_end();
                 }
                 cmd.dParam1 = end - start;
                 cmd.dFlags = REBOOT2_FLAG_REBOOT_TYPE_RAM_IMAGE;
@@ -4888,7 +4960,7 @@ bool load_guts(picoboot::connection con, iostream_memory_access &file_access) {
             con.reboot2(&cmd);
         } else {
             con.reboot(flash == get_memory_type(start, model) ? 0 : start,
-                       model == rp2040 ? SRAM_END_RP2040 : SRAM_END_RP2350, 500);
+                       model->sram_end(), 500);
         }
         std::cout << "\nThe device was rebooted to start the application.\n";
         return true;
@@ -4920,7 +4992,7 @@ bool load_command::execute(device_map &devices) {
         settings.family_id = family_id;
         uint32_t start;
         uint32_t end;
-        if (get_model(raw_access) != rp2040) {
+        if (raw_access.get_model()->supports_partition_table()) {
             if (get_target_partition(con, &start, &end)) {
                 settings.offset = start + FLASH_START;
                 settings.offset_set = true;
@@ -4937,7 +5009,7 @@ bool load_command::execute(device_map &devices) {
         }
     }
     auto file_access = get_file_memory_access(0);
-    if (settings.offset_set && get_file_type() != filetype::bin && get_model(raw_access) == rp2040) {
+    if (settings.offset_set && get_file_type() != filetype::bin && raw_access.get_model()->chip() == rp2040) {
         fail(ERROR_ARGS, "Offset only valid for BIN files");
     }
     bool ret = load_guts(con, file_access);
@@ -5327,7 +5399,8 @@ bool encrypt_command::execute(device_map &devices) {
             *tmp << file->rdbuf();
 
             auto program = get_iostream_memory_access<iostream_memory_access>(tmp, filetype::elf, true);
-            program.set_model(rp2350);
+            // todo should be determined from image_def
+            program.set_model(std::make_shared<model_rp2350>());
 
             // data_start_addr
             settings.config.key = "data_start_addr";
@@ -5675,7 +5748,7 @@ bool seal_command::execute(device_map &devices) {
         auto tmp = std::make_shared<std::stringstream>();
         tmp->write(reinterpret_cast<const char*>(sig_data.data()), sig_data.size());
         auto out = get_file_idx(ios::out|ios::binary, 1);
-        bin2uf2(tmp, out, bin_start, family_id, settings.uf2.abs_block_loc);
+        bin2uf2(tmp, out, bin_start, family_id, access.get_model(), settings.uf2.abs_block_loc);
         out->close();
     } else {
         fail(ERROR_ARGS, "Must be ELF or BIN");
@@ -5719,13 +5792,7 @@ bool seal_command::execute(device_map &devices) {
 
     if (!settings.quiet) {
         auto access = get_file_memory_access(1);
-        uint32_t id = 0;
-        id = get_family_id(1);
-        if (id == RP2040_FAMILY_ID) {
-            access.set_model(rp2040);
-        } else if (id >= RP2350_ARM_S_FAMILY_ID && id <= RP2350_ARM_NS_FAMILY_ID) {
-            access.set_model(rp2350);
-        }
+        set_model_from_metadata(access);
         fos << "Output File " << settings.filenames[1] << ":\n\n";
         settings.info.show_basic = true;
         info_guts(access, nullptr);
@@ -5851,8 +5918,8 @@ bool verify_command::execute(device_map &devices) {
     auto file_access = get_file_memory_access(0);
     auto con = get_single_bootsel_device_connection(devices);
     picoboot_memory_access raw_access(con);
-    model_t model = get_model(raw_access);
-    if (settings.offset_set && get_file_type() != filetype::bin && get_model(raw_access) == rp2040) {
+    model_t model = raw_access.get_model();
+    if (settings.offset_set && get_file_type() != filetype::bin && model->chip() == rp2040) {
         fail(ERROR_ARGS, "Offset only valid for BIN files");
     }
     auto ranges = get_coalesced_ranges(file_access, model);
@@ -6226,11 +6293,11 @@ std::map<std::pair<uint32_t,uint32_t>, otp_match> filter_otp(std::vector<string>
 
 #if HAS_LIBUSB
 bool partition_info_command::execute(device_map &devices) {
-    auto con = get_single_rp2350_bootsel_device_connection(devices, false);
+    auto con = get_single_picoboot_cmd_compatible_device_connection("partition info", devices, {PC_GET_INFO}, false);
 
-#if SUPPORT_A2
-    con.exit_xip();
-#endif
+    picoboot_memory_access raw_access(con);
+    model_t model = raw_access.get_model();
+    if (model->chip_revision() == rp2350_a2) con.exit_xip();
 
     uint8_t loc_flags_id_buf[256];
     uint8_t family_id_name_buf[256];
@@ -6263,7 +6330,6 @@ bool partition_info_command::execute(device_map &devices) {
 
     if (has_pt) {
         picoboot_memory_access raw_access(con);
-        auto rp2350_version = get_rp2350_version(raw_access);
         printf("partitions:\n");
         for (unsigned int i = 0; i < partition_count; i++) {
             uint32_t location_and_permissions = loc_flags_id_buf_32[lfi_pos++];
@@ -6418,7 +6484,8 @@ bool partition_create_command::execute(device_map &devices) {
     uint32_t unpartitioned_flags = permissions_to_flags(pt_json["unpartitioned"]["permissions"]) | families_to_flags(pt_json["unpartitioned"]["families"]);
     partition_table_item pt(unpartitioned_flags, settings.partition.singleton);
 
-#if SUPPORT_A2
+#if SUPPORT_RP2350_A2
+    // todo fix test
     if (!(unpartitioned_flags & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_ABSOLUTE_BITS)) {
         fail(ERROR_INCOMPATIBLE, "Unpartitioned space must accept the absolute family, for the RP2350-E10 fix to work");
     }
@@ -6442,7 +6509,7 @@ bool partition_create_command::execute(device_map &devices) {
         }
 
         cur_pos = start + size;
-    #if SUPPORT_A2
+    #if SUPPORT_RP2350_A2
         if (start <= (settings.uf2.abs_block_loc - FLASH_START)/0x1000 && start + size > (settings.uf2.abs_block_loc - FLASH_START)/0x1000) {
             fail(ERROR_INCOMPATIBLE, "The address %" PRIx32 " cannot be in a partition for the RP2350-E10 fix to work", settings.uf2.abs_block_loc);
         }
@@ -6542,7 +6609,7 @@ bool partition_create_command::execute(device_map &devices) {
             uint32_t address = settings.offset_set ? settings.offset : FLASH_START;
             auto tmp = std::make_shared<std::stringstream>();
             tmp->write(reinterpret_cast<const char*>(data.data()), data.size());
-            bin2uf2(tmp, out, address, family_id);
+            bin2uf2(tmp, out, address, family_id, models::largest);
         } else {
             out->write(reinterpret_cast<const char*>(data.data()), data.size());
         }
@@ -6569,7 +6636,7 @@ bool partition_create_command::execute(device_map &devices) {
 
 #if HAS_LIBUSB
 bool uf2_info_command::execute(device_map &devices) {
-    auto con = get_single_rp2350_bootsel_device_connection(devices, false);
+    auto con = get_single_picoboot_cmd_compatible_device_connection("uf2 info", devices, {PC_GET_INFO}, false);
     uint32_t buf[5];
     picoboot_get_info_cmd cmd;
     cmd.bType = PICOBOOT_GET_INFO_UF2_STATUS;
@@ -6626,10 +6693,11 @@ bool uf2_convert_command::execute(device_map &devices) {
     }
 
     uint32_t family_id = get_family_id(0);
+    model_t model = get_model(0);
 
     auto in = get_file(ios::in|ios::binary);
     auto out = get_file_idx(ios::out|ios::binary, 1);
-    #if SUPPORT_A2
+    #if SUPPORT_RP2350_A2
     // RP2350-E10 : add absolute block
     if (settings.uf2.abs_block) {
         fos << "RP2350-E10: Adding absolute block to UF2 targeting " << hex_string(settings.uf2.abs_block_loc) << "\n";
@@ -6639,10 +6707,10 @@ bool uf2_convert_command::execute(device_map &devices) {
     #endif
     if (get_file_type() == filetype::elf) {
         uint32_t package_address = settings.offset_set ? settings.offset : 0;
-        elf2uf2(in, out, family_id, package_address, settings.uf2.abs_block_loc, settings.verbose);
+        elf2uf2(in, out, family_id, model, package_address, settings.uf2.abs_block_loc, settings.verbose);
     } else if (get_file_type() == filetype::bin) {
         uint32_t address = settings.offset_set ? settings.offset : FLASH_START;
-        bin2uf2(in, out, address, family_id, settings.uf2.abs_block_loc, settings.verbose);
+        bin2uf2(in, out, address, family_id, model, settings.uf2.abs_block_loc, settings.verbose);
     } else {
         fail(ERROR_ARGS, "Convert currently only from ELF/BIN to UF2\n");
     }
@@ -7393,9 +7461,18 @@ static void check_otp_write_error(picoboot::command_failure &e, bool ecc) {
     }
 }
 
+bool settings_select_ecc(void) {
+    return settings.otp.ecc && !settings.otp.raw;
+}
+
+uint8_t otp_cmd_max_bits(void) {
+    return settings_select_ecc() ? 16 : 24;
+}
+
 typedef std::function<void(uint8_t *buffer, uint32_t len, picoboot_otp_cmd &otp_cmd)> otp_read_func_t;
 typedef std::function<void(uint8_t *buffer, uint32_t len, picoboot_otp_cmd &otp_cmd)> otp_write_func_t;
-void process_otp_json(json &otp_json, otp_read_func_t read_func, otp_write_func_t write_func) {
+void process_otp_json(json &otp_json, model_t model, otp_read_func_t read_func, otp_write_func_t write_func) {
+    int raw_max_bits = otp_cmd_max_bits();
     for (auto row : otp_json.items()) {
         fos.first_column(0);
         string row_key = row.key();
@@ -7404,13 +7481,13 @@ void process_otp_json(json &otp_json, otp_read_func_t read_func, otp_write_func_
 
         // Find matching OTP row
         bool is_sequence = false;
-        auto row_matches = filter_otp({row_key}, 24, true);
-        if (row_matches.size() == 0) {
+        auto row_matches = filter_otp({row_key}, raw_max_bits, true);
+        if (row_matches.empty()) {
             fail(ERROR_INCOMPATIBLE, "%s does not match an otp row", row_key.c_str());
         } else if (row_matches.size() != 1) {
             // Check if it is a sequence
-            auto row_seq0_matches = filter_otp({row_key + "0"}, 24, false);
-            auto row_seq_0_matches = filter_otp({row_key + "_0"}, 24, false);
+            auto row_seq0_matches = filter_otp({row_key + "0"}, raw_max_bits, false);
+            auto row_seq_0_matches = filter_otp({row_key + "_0"}, raw_max_bits, false);
             if (row_seq0_matches.size() == 1) {
                 row_matches = row_seq0_matches;
             } else if (row_seq_0_matches.size() == 1) {
@@ -7458,7 +7535,7 @@ void process_otp_json(json &otp_json, otp_read_func_t read_func, otp_write_func_
                     }
 
                     // Find matching OTP field
-                    auto field_matches = filter_otp({row_key + "." + key}, 24, false);
+                    auto field_matches = filter_otp({row_key + "." + key}, raw_max_bits, false);
                     if (field_matches.size() != 1) {
                         fail(ERROR_INCOMPATIBLE, "%s is not a single otp field", key.c_str());
                     }
@@ -7557,9 +7634,11 @@ static void hack_init_otp_regs() {
 
 
 bool otp_get_command::execute(device_map &devices) {
-    auto con = get_single_rp2350_bootsel_device_connection(devices);
+    auto con = get_single_picoboot_cmd_compatible_device_connection("otp get", devices, {PC_OTP_READ}, false);
     hack_init_otp_regs();
-    auto matches = filter_otp(settings.otp.selectors, settings.otp.ecc ? 16 : 24, settings.otp.fuzzy);
+    picoboot_memory_access raw_access(con);
+    auto model = raw_access.get_model();
+    auto matches = filter_otp(settings.otp.selectors, otp_cmd_max_bits(), settings.otp.fuzzy);
     uint32_t last_reg_row = 1; // invalid
     bool first = true;
     char buf[512];
@@ -7567,7 +7646,6 @@ bool otp_get_command::execute(device_map &devices) {
     memset(raw_buffer, 0xaa, sizeof(raw_buffer));
     int indent0 = settings.otp.list_pages ? 18 : 8;
     uint32_t last_page = -1;
-    picoboot_memory_access raw_access(con);
     for (const auto& e : matches) {
         const auto &m = e.second;
         bool do_ecc = settings.otp.ecc;
@@ -7650,7 +7728,7 @@ bool otp_get_command::execute(device_map &devices) {
                 corrected_val = otp_calculate_ecc(raw_value &0xffff);
                 snprintf(buf, sizeof(buf), "\nVALUE 0x%06x\n", corrected_val);
                 fos << buf;
-                // todo more clarity over ECC settigns
+                // todo more clarity over ECC settings
                 // todo recovery
                 if (corrected_val != raw_value) {
                     fos << raw_buf;
@@ -7743,7 +7821,9 @@ bool otp_dump_command::execute(device_map &devices) {
 
         // Prevent outputting to the console
         fos_ptr = fos_null_ptr;
-        process_otp_json(otp_json,
+        auto model = models::largest;
+
+        process_otp_json(otp_json, model,
             [&](uint8_t *buffer, uint32_t len, picoboot_otp_cmd &otp_cmd) {
                 memset(buffer, 0, len);
             }, [&](uint8_t *buffer, uint32_t len, picoboot_otp_cmd &otp_cmd) {
@@ -7767,7 +7847,7 @@ bool otp_dump_command::execute(device_map &devices) {
         );
         fos_ptr = fos_base_ptr;
     } else {
-        auto con = get_single_rp2350_bootsel_device_connection(devices, false);
+        auto con = get_single_picoboot_cmd_compatible_device_connection("otp dump", devices, {PC_OTP_READ}, false);
         struct picoboot_otp_cmd otp_cmd;
         otp_cmd.bEcc = do_ecc;
         // Read most pages by page, as permissions are per page
@@ -7836,7 +7916,9 @@ bool otp_dump_command::execute(device_map &devices) {
 }
 
 bool otp_load_command::execute(device_map &devices) {
-    auto con = get_single_rp2350_bootsel_device_connection(devices, false);
+    auto con = get_single_picoboot_cmd_compatible_device_connection("otp load", devices, {PC_OTP_READ, PC_OTP_WRITE});
+    picoboot_memory_access raw_access(con);
+    auto model = raw_access.get_model();
     // todo pre-check page lock
     struct picoboot_otp_cmd otp_cmd;
     std::shared_ptr<std::fstream> file = get_file(ios::in|ios::binary);
@@ -7844,7 +7926,7 @@ bool otp_load_command::execute(device_map &devices) {
         hack_init_otp_regs();
         json otp_json = json::parse(*file);
         // todo validation on json
-        process_otp_json(otp_json,
+        process_otp_json(otp_json, model,
             [&](uint8_t *buffer, uint32_t len, picoboot_otp_cmd &otp_cmd) {
                 picoboot_memory_access raw_access(con);
                 con.otp_read(&otp_cmd, buffer, len);
@@ -7861,7 +7943,7 @@ bool otp_load_command::execute(device_map &devices) {
         return false;
     }
     otp_cmd.wRow = settings.otp.row;
-    otp_cmd.bEcc = settings.otp.ecc && !settings.otp.raw;
+    otp_cmd.bEcc = settings_select_ecc();
     unsigned int row_size = otp_cmd.bEcc ? 2 : 4;
     file->seekg(0, ios::end);
     uint32_t file_size = file->tellg();
@@ -7887,7 +7969,6 @@ bool otp_load_command::execute(device_map &devices) {
 
     std::unique_ptr<uint8_t[]> unique_verify_buffer(new uint8_t[file_size]());
     uint8_t* verify_buffer = unique_verify_buffer.get();
-    picoboot_memory_access raw_access(con);
     con.otp_read(&otp_cmd, (uint8_t *)verify_buffer, file_size);
     unsigned int i;
     for(i=0;i<file_size;i++) {
@@ -7987,9 +8068,10 @@ bool otp_list_command::execute(device_map &devices) {
 
 #if HAS_LIBUSB
 bool otp_set_command::execute(device_map &devices) {
-    auto con = get_single_rp2350_bootsel_device_connection(devices, false);
+    auto con = get_single_picoboot_cmd_compatible_device_connection("otp set", devices, {PC_OTP_READ, PC_OTP_WRITE});
     hack_init_otp_regs();
-    auto matches = filter_otp(settings.otp.selectors, settings.otp.ecc ? 16 : 24, settings.otp.fuzzy);
+    picoboot_memory_access raw_access(con);
+    auto matches = filter_otp(settings.otp.selectors, otp_cmd_max_bits(), settings.otp.fuzzy);
     // baing lazy to count
     std::set<uint32_t> unique_rows;
     std::transform(matches.begin(), matches.end(), std::inserter(unique_rows, unique_rows.begin()), [](const auto&e) { return e.first.first; });
@@ -8016,7 +8098,6 @@ bool otp_set_command::execute(device_map &devices) {
     otp_cmd.wRowCount = 1;
     otp_cmd.bEcc = 0;
     uint32_t old_raw_value;
-    picoboot_memory_access raw_access(con);
     con.otp_read(&otp_cmd, (uint8_t *)&old_raw_value, sizeof(old_raw_value));
     fos.first_column(0);
     fos.hanging_indent(7);
@@ -8102,15 +8183,14 @@ bool otp_set_command::execute(device_map &devices) {
         // OR with current value, to ignore any already-set bits
         settings.otp.value |= old_raw_value;
     }
-    // todo check for clearing bits
-    if (old_raw_value && settings.otp.ecc) {
-        fail(ERROR_NOT_POSSIBLE, "Cannot modify OTP ECC row(s)\n");
-    }
     if (~settings.otp.value & old_raw_value) {
         fail(ERROR_NOT_POSSIBLE, "Cannot clear bits in OTP row(s): current value %06x, new value %06x\n", old_raw_value, settings.otp.value);
     }
-    // todo this is currently crappy, incorrect and generally evil
-    otp_cmd.bEcc = settings.otp.ecc;
+    otp_cmd.bEcc = settings_select_ecc();
+    // todo check for clearing bits instead
+    if (old_raw_value && otp_cmd.bEcc) {
+        fail(ERROR_NOT_POSSIBLE, "Cannot modify OTP ECC row(s)\n");
+    }
     try {
         if (otp_cmd.bEcc) {
             uint16_t write_value = settings.otp.value;
@@ -8133,7 +8213,7 @@ bool otp_set_command::execute(device_map &devices) {
 }
 
 bool otp_permissions_command::execute(device_map &devices) {
-    auto con = get_single_rp2350_bootsel_device_connection(devices, false);
+    auto con = get_single_picoboot_cmd_compatible_device_connection("otp permissions", devices, {PC_OTP_READ, PC_OTP_WRITE});
 
     json perms_json = json::parse(*get_file(ios::in|ios::binary));
 
@@ -8142,7 +8222,8 @@ bool otp_permissions_command::execute(device_map &devices) {
     *tmp << file->rdbuf();
 
     auto program = get_iostream_memory_access<iostream_memory_access>(tmp, filetype::elf, true);
-    program.set_model(rp2350);
+    // todo what do we need from this model - if it is generic, we should make a generic one
+    program.set_model(std::make_unique<model_rp2350>());
 
     settings.config.group = "otp_page_permissions";
     for (auto it = perms_json.begin(); it != perms_json.end(); ++it) {
@@ -8277,7 +8358,7 @@ void wl_do_field(json json_data, vector<uint16_t>& data, uint32_t& flags, const 
 }
 
 bool otp_white_label_command::execute(device_map &devices) {
-    auto con = get_single_rp2350_bootsel_device_connection(devices, false);
+    auto con = get_single_picoboot_cmd_compatible_device_connection("otp white-label", devices, {PC_OTP_READ, PC_OTP_WRITE});
     hack_init_otp_regs();
     const otp_reg* flags_reg;
     const otp_reg* addr_reg;
@@ -8442,7 +8523,7 @@ bool reboot_command::execute(device_map &devices) {
         if (!settings.switch_cpu.empty()) {
             fail(ERROR_ARGS, "--cpu may not be specified for forced reboot");
         }
-        selected_model = std::get<0>(devices[dr_vidpid_stdio_usb][0]);
+        selected_chip = std::get<0>(devices[dr_vidpid_stdio_usb][0]);
         reboot_device(std::get<1>(devices[dr_vidpid_stdio_usb][0]), std::get<2>(devices[dr_vidpid_stdio_usb][0]), settings.reboot_usb);
         if (!quiet) {
             if (settings.reboot_usb) {
@@ -8456,8 +8537,8 @@ bool reboot_command::execute(device_map &devices) {
         // care what else is happening.
         auto con = get_single_bootsel_device_connection(devices, false);
         picoboot_memory_access raw_access(con);
-        model_t model = get_model(raw_access);
-        if (model == rp2350) {
+        model_t model = raw_access.get_model();
+        if (model->supports_picoboot_cmd(PC_REBOOT2)) {
             struct picoboot_reboot2_cmd cmd = {
                     .dFlags = (uint8_t)(settings.reboot_usb ? REBOOT2_FLAG_REBOOT_TYPE_BOOTSEL : REBOOT2_FLAG_REBOOT_TYPE_NORMAL),
                     .dDelayMS = 500,
@@ -8489,7 +8570,7 @@ bool reboot_command::execute(device_map &devices) {
             std::vector<uint32_t> program = {
                     0x20002100, // movs r0, #0;       movs r1, #0
                     0x47104a00, // ldr  r2, [pc, #0]; bx r2
-                    bootrom_func_lookup(raw_access, rom_table_code('U', 'B'))
+                    bootrom_func_lookup_rp2040(raw_access, rom_table_code('U', 'B'))
             };
 
             raw_access.write_vector(program_base, program);
@@ -8616,13 +8697,13 @@ int main(int argc, char **argv) {
                     if (settings.bus != -1 && settings.bus != libusb_get_bus_number(*dev)) continue;
                     if (settings.address != -1 && settings.address != libusb_get_device_address(*dev)) continue;
                     libusb_device_handle *handle = nullptr;
-                    model_t model = unknown;
-                    auto result = picoboot_open_device(*dev, &handle, &model, settings.vid, settings.pid, settings.ser.c_str());
+                    chip_t chip = unknown;
+                    auto result = picoboot_open_device(*dev, &handle, &chip, settings.vid, settings.pid, settings.ser.c_str());
                     if (handle) {
                         to_close.push_back(handle);
                     }
                     if (result != dr_error) {
-                        devices[result].emplace_back(std::make_tuple(model, *dev, handle));
+                        devices[result].emplace_back(std::make_tuple(chip, *dev, handle));
                     }
                 }
             }
@@ -8783,27 +8864,15 @@ int main(int argc, char **argv) {
                 break;
             }
         }
-    } catch (command_failure &e) {
+    } catch (failure_error &e) {
         std::cout << "ERROR: " << e.what() << "\n";
         rc = e.code();
     } catch (picoboot::command_failure& e) {
-        // todo rp2350/rp2040
-        string device = "RP-series";
-        if (selected_model == rp2040) {
-            device = "RP2040";
-        } else if (selected_model == rp2350) {
-            device = "RP2350";
-        }
+        std::string device = chip_name(selected_chip);
         std::cout << "ERROR: The " << device << " device returned an error: " << e.what() << "\n";
         rc = ERROR_UNKNOWN;
     } catch (picoboot::connection_error&) {
-        // todo rp2350/rp2040
-        string device = "RP-series";
-        if (selected_model == rp2040) {
-            device = "RP2040";
-        } else if (selected_model == rp2350) {
-            device = "RP2350";
-        }
+        std::string device = chip_name(selected_chip);
         std::cout << "ERROR: Communication with " << device << " device failed\n";
         rc = ERROR_CONNECTION;
     } catch (cancelled_exception&) {
@@ -8827,7 +8896,7 @@ int main(int argc, char **argv) {
     }
     try {
         rc = selected_cmd->execute(devices);
-    } catch (command_failure &e) {
+    } catch (failure_error &e) {
         std::cout << "ERROR: " << e.what() << "\n";
         rc = e.code();
     } catch (cancelled_exception&) {

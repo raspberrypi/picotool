@@ -59,13 +59,13 @@ unsigned int interface;
 unsigned int out_ep;
 unsigned int in_ep;
 
-enum picoboot_device_result picoboot_open_device(libusb_device *device, libusb_device_handle **dev_handle, model_t *model, int vid, int pid, const char* ser) {
+enum picoboot_device_result picoboot_open_device(libusb_device *device, libusb_device_handle **dev_handle, chip_t *chip, int vid, int pid, const char* ser) {
     struct libusb_device_descriptor desc;
     struct libusb_config_descriptor *config;
 
     definitely_exclusive = false;
     *dev_handle = NULL;
-    *model = unknown;
+    *chip = unknown;
     int ret = libusb_get_device_descriptor(device, &desc);
     enum picoboot_device_result res = dr_vidpid_unknown;
     if (ret && verbose) {
@@ -88,18 +88,18 @@ enum picoboot_device_result picoboot_open_device(libusb_device *device, libusb_d
                 case PRODUCT_ID_PICOPROBE:
                     return dr_vidpid_picoprobe;
                 case PRODUCT_ID_RP2040_STDIO_USB:
-                    *model = rp2040;
+                    *chip = rp2040;
                     res = dr_vidpid_stdio_usb;
                     break;
                 case PRODUCT_ID_STDIO_USB:
-                    *model = rp2350;
+                    *chip = rp2350;
                     res = dr_vidpid_stdio_usb;
                     break;
                 case PRODUCT_ID_RP2040_USBBOOT:
-                    *model = rp2040;
+                    *chip = rp2040;
                     break;
                 case PRODUCT_ID_RP2350_USBBOOT:
-                    *model = rp2350;
+                    *chip = rp2350;
                     break;
                 default:
                     return dr_vidpid_unknown;
@@ -179,7 +179,7 @@ enum picoboot_device_result picoboot_open_device(libusb_device *device, libusb_d
     }
 
     if (!ret) {
-        if (*model == unknown) {
+        if (*chip == unknown) {
             struct picoboot_get_info_cmd info_cmd;
             info_cmd.bType = PICOBOOT_GET_INFO_SYS,
             info_cmd.dParams[0] = (uint32_t) (SYS_INFO_CHIP_INFO);
@@ -187,13 +187,13 @@ enum picoboot_device_result picoboot_open_device(libusb_device *device, libusb_d
             // RP2040 doesn't have this function, so returns non-zero
             int info_ret = picoboot_get_info(*dev_handle, &info_cmd, (uint8_t*)word_buf, sizeof(word_buf));
             if (info_ret) {
-                *model = rp2040;
+                *chip = rp2040;
             } else {
-                *model = rp2350;
+                *chip = rp2350;
             }
         }
         if (strlen(ser) != 0) {
-            if (*model == rp2040) {
+            if (*chip == rp2040) {
                 // Check flash ID, as USB serial number is not unique
                 uint64_t ser_num = strtoull(ser, NULL, 16);
                 uint64_t id = 0;

@@ -14,8 +14,7 @@
 #include <libusb.h>
 #endif
 #include "boot/picoboot.h"
-
-#include "addresses.h"
+#include "model.h"
 
 #define VENDOR_ID_RASPBERRY_PI 0x2e8au
 #define PRODUCT_ID_RP2040_USBBOOT 0x0003u
@@ -41,20 +40,10 @@ enum picoboot_device_result {
     dr_vidpid_stdio_usb_cant_connect,
 };
 
-typedef enum {
-    rp2040,
-    rp2350,
-    unknown
-} model_t;
-
-typedef enum {
-    rp2350_a2,
-    rp2350_unknown
-} rp2350_version_t;
 
 #if HAS_LIBUSB
 // note that vid and pid are filters, unless both are specified in which case a device with that VID and PID is allowed for RP2350
-enum picoboot_device_result picoboot_open_device(libusb_device *device, libusb_device_handle **dev_handle, model_t *model, int vid, int pid, const char* ser);
+enum picoboot_device_result picoboot_open_device(libusb_device *device, libusb_device_handle **dev_handle, chip_t *chip, int vid, int pid, const char* ser);
 
 int picoboot_reset(libusb_device_handle *usb_device);
 int picoboot_cmd_status_verbose(libusb_device_handle *usb_device, struct picoboot_cmd_status *status,
@@ -86,57 +75,6 @@ int picoboot_flash_id(libusb_device_handle *usb_device, uint64_t *data);
 #endif
 #define PAGE_SIZE (1u << LOG2_PAGE_SIZE)
 #define FLASH_SECTOR_ERASE_SIZE 4096u
-
-enum memory_type {
-    rom,
-    flash,
-    sram,
-    sram_unstriped,
-    xip_sram,
-    invalid,
-};
-
-// inclusive of ends
-static inline enum memory_type get_memory_type(uint32_t addr, model_t model) {
-    if (addr >= FLASH_START && addr <= FLASH_END_RP2040) {
-        return flash;
-    }
-    if (addr >= ROM_START && addr <= ROM_END_RP2040) {
-        return rom;
-    }
-    if (addr >= SRAM_START && addr <= SRAM_END_RP2040) {
-        return sram;
-    }
-    if (model == rp2350) {
-        if (addr >= FLASH_START && addr <= FLASH_END_RP2350) {
-            return flash;
-        }
-        if (addr >= ROM_START && addr <= ROM_END_RP2350) {
-            return rom;
-        }
-        if (addr >= SRAM_START && addr <= SRAM_END_RP2350) {
-            return sram;
-        }
-    }
-    if (addr >= MAIN_RAM_BANKED_START && addr <= MAIN_RAM_BANKED_END) {
-        return sram_unstriped;
-    }
-    if (model == rp2040) {
-        if (addr >= XIP_SRAM_START_RP2040 && addr <= XIP_SRAM_END_RP2040) {
-            return xip_sram;
-        }
-    } else if (model == rp2350) {
-        if (addr >= XIP_SRAM_START_RP2350 && addr <= XIP_SRAM_END_RP2350) {
-            return xip_sram;
-        }
-    }
-    return invalid;
-}
-
-static inline bool is_transfer_aligned(uint32_t addr, model_t model) {
-    enum memory_type t = get_memory_type(addr, model);
-    return t != invalid && !(t == flash && addr & (PAGE_SIZE-1));
-}
 
 static inline bool is_size_aligned(uint32_t addr, int size) {
 #ifndef _MSC_VER

@@ -11,7 +11,6 @@
 #include <vector>
 
 namespace picoboot {
-
     struct command_failure : public std::exception {
         explicit command_failure(int code) : code(code) {}
 
@@ -28,7 +27,7 @@ namespace picoboot {
     };
 
     struct connection {
-        explicit connection(libusb_device_handle *device, model_t model, bool exclusive = true) : device(device), model(model), exclusive(exclusive) {
+        explicit connection(libusb_device_handle *device, chip_t chip, bool exclusive = true) : device(device), exclusive(exclusive) {
             // do a device reset in case it was left in a bad state
             reset();
             if (exclusive) exclusive_access(EXCLUSIVE);
@@ -61,7 +60,6 @@ namespace picoboot {
         void otp_read(struct picoboot_otp_cmd *otp_cmd, uint8_t *buffer, uint32_t len);
         void flash_id(uint64_t &data);
 
-        model_t get_model() const { return model; }
         std::vector<uint8_t> read_bytes(uint32_t addr, uint32_t len) {
             std::vector<uint8_t> bytes(len);
             read(addr, bytes.data(), len);
@@ -70,7 +68,6 @@ namespace picoboot {
     private:
         template <typename F> void wrap_call(F&& func);
         libusb_device_handle *device;
-        model_t model;
         bool exclusive;
     };
 

@@ -14,6 +14,7 @@
 #include "boot/uf2.h"
 
 #include "elf_file.h"
+#include "model.h"
 
 // we require 256 (as this is the page size supported by the device)
 #define LOG2_PAGE_SIZE 8u
@@ -21,8 +22,8 @@
 
 
 bool check_abs_block(uf2_block block);
-int bin2uf2(std::shared_ptr<std::iostream> in, std::shared_ptr<std::iostream> out, uint32_t address, uint32_t family_id, uint32_t abs_block_loc=0, bool verbose=false);
-int elf2uf2(std::shared_ptr<std::iostream> in, std::shared_ptr<std::iostream> out, uint32_t family_id, uint32_t package_addr=0, uint32_t abs_block_loc=0, bool verbose=false);
+int bin2uf2(std::shared_ptr<std::iostream> in, std::shared_ptr<std::iostream> out, uint32_t address, uint32_t family_id, model_t model, uint32_t abs_block_loc=0, bool verbose=false);
+int elf2uf2(std::shared_ptr<std::iostream> in, std::shared_ptr<std::iostream> out, uint32_t family_id, model_t model, uint32_t package_addr=0, uint32_t abs_block_loc=0, bool verbose=false);
 
 
 #endif

@@ -217,16 +217,8 @@ else()
 endif()
 
 add_custom_target(embedded_data DEPENDS
-        ${CMAKE_CURRENT_BINARY_DIR}/rp2350.rom.h
         ${CMAKE_CURRENT_BINARY_DIR}/xip_ram_perms_elf.h
         ${CMAKE_CURRENT_BINARY_DIR}/flash_id_bin.h)
-add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/rp2350.rom.h
-        COMMAND ${CMAKE_COMMAND}
-            -D BINARY_FILE=${CMAKE_CURRENT_LIST_DIR}/bootrom.end.bin
-            -D OUTPUT_NAME=rp2350.rom
-            -P ${CMAKE_CURRENT_LIST_DIR}/cmake/binh.cmake
-        COMMENT "Configuring rp2350.rom.h"
-        VERBATIM)
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/xip_ram_perms_elf.h
         COMMAND ${CMAKE_COMMAND}
             -D BINARY_FILE=${XIP_RAM_PERMS_ELF}
@@ -260,6 +252,7 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/flash_id_bin.h
         COMMENT "Configuring flash_id_bin.h"
         VERBATIM)
 
+add_subdirectory(model)
 add_subdirectory(errors)
 
 add_subdirectory(picoboot_connection)
@@ -305,7 +298,7 @@ target_compile_definitions(picotool PRIVATE
         PICOTOOL_VERSION="${PICOTOOL_VERSION}"
         SYSTEM_VERSION="${SYSTEM_VERSION}"
         COMPILER_INFO="${COMPILER_INFO}"
-        SUPPORT_A2=1
+        SUPPORT_RP2350_A2=1
         CODE_OTP=${PICOTOOL_CODE_OTP}
         )
 # for OTP info
@@ -321,6 +314,7 @@ target_link_libraries(picotool
         pico_platform_headers
         pico_usb_reset_interface_headers
         regs_headers
+        model
         bintool
         elf2uf2
         errors

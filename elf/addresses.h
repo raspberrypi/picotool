@@ -21,7 +21,6 @@
 #define MAIN_RAM_BANKED_START   0x21000000
 #define MAIN_RAM_BANKED_END     0x21040000
 
-
 #ifdef __cplusplus
 
 #include <cstdint>
@@ -46,31 +45,6 @@ struct address_range {
 };
 
 typedef std::vector<address_range> address_ranges;
-
-
-const address_ranges rp2040_address_ranges_flash {
-    address_range(FLASH_START, FLASH_END_RP2040, address_range::type::CONTENTS),
-    address_range(SRAM_START, SRAM_END_RP2040, address_range::type::NO_CONTENTS),
-    address_range(MAIN_RAM_BANKED_START, MAIN_RAM_BANKED_END, address_range::type::NO_CONTENTS)
-};
-
-const address_ranges rp2040_address_ranges_ram {
-    address_range(SRAM_START, SRAM_END_RP2040, address_range::type::CONTENTS),
-    address_range(XIP_SRAM_START_RP2040, XIP_SRAM_END_RP2040, address_range::type::CONTENTS),
-    address_range(ROM_START, ROM_END_RP2040, address_range::type::IGNORE) // for now we ignore the bootrom if present
-};
-
-const address_ranges rp2350_address_ranges_flash {
-    address_range(FLASH_START, FLASH_END_RP2350, address_range::type::CONTENTS),
-    address_range(SRAM_START, SRAM_END_RP2350, address_range::type::NO_CONTENTS),
-    address_range(MAIN_RAM_BANKED_START, MAIN_RAM_BANKED_END, address_range::type::NO_CONTENTS)
-};
-
-const address_ranges rp2350_address_ranges_ram {
-    address_range(SRAM_START, SRAM_END_RP2350, address_range::type::CONTENTS),
-    address_range(XIP_SRAM_START_RP2350, XIP_SRAM_END_RP2350, address_range::type::CONTENTS),
-    address_range(ROM_START, ROM_END_RP2350, address_range::type::IGNORE) // for now we ignore the bootrom if present
-};
 
 static bool is_address_valid(const address_ranges& valid_ranges, uint32_t addr) {
     for(const auto& range : valid_ranges) {

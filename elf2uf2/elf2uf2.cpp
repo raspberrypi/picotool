@@ -17,6 +17,7 @@
 
 #include "elf2uf2.h"
 #include "errors.h"
+#include "model.h"
 
 #define FLASH_SECTOR_ERASE_SIZE 4096u
 
@@ -156,11 +157,11 @@ bool check_abs_block(uf2_block block) {
         !(block.flags & UF2_FLAG_EXTENSION_FLAGS_PRESENT && *(uint32_t*)&(block.data[UF2_PAGE_SIZE]) != UF2_EXTENSION_RP2_IGNORE_BLOCK);
 }
 
-int pages2uf2(std::map<uint32_t, std::vector<page_fragment>>& pages, std::shared_ptr<std::iostream> in, std::shared_ptr<std::iostream> out, uint32_t family_id, uint32_t abs_block_loc=0) {
+int pages2uf2(std::map<uint32_t, std::vector<page_fragment>>& pages, std::shared_ptr<std::iostream> in, std::shared_ptr<std::iostream> out, uint32_t family_id, model_t model, uint32_t abs_block_loc=0) {
     // RP2350-E10: add absolute block to start of flash UF2s, targeting end of flash by default
-    if (family_id != ABSOLUTE_FAMILY_ID && family_id != RP2040_FAMILY_ID && abs_block_loc) {
+    if (family_id != ABSOLUTE_FAMILY_ID && model->chip() == rp2350 && abs_block_loc) {
         uint32_t base_addr = pages.begin()->first;
-        address_ranges flash_range = rp2350_address_ranges_flash;
+        address_ranges flash_range = address_ranges_flash(model);
         if (is_address_initialized(flash_range, base_addr)) {
             uf2_block block = gen_abs_block(abs_block_loc);
             out->write((char*)&block, sizeof(uf2_block));
@@ -196,7 +197,7 @@ int pages2uf2(std::map<uint32_t, std::vector<page_fragment>>& pages, std::shared
     return 0;
 }
 
-int bin2uf2(std::shared_ptr<std::iostream> in, std::shared_ptr<std::iostream> out, uint32_t address, uint32_t family_id, uint32_t abs_block_loc, bool verbose) {
+int bin2uf2(std::shared_ptr<std::iostream> in, std::shared_ptr<std::iostream> out, uint32_t address, uint32_t family_id, model_t model, uint32_t abs_block_loc, bool verbose) {
     g_verbose = verbose;
     std::map<uint32_t, std::vector<page_fragment>> pages;
 
@@ -232,10 +233,10 @@ int bin2uf2(std::shared_ptr<std::iostream> in, std::shared_ptr<std::iostream> ou
         remaining -= len;
     }
 
-    return pages2uf2(pages, in, out, family_id, abs_block_loc);
+    return pages2uf2(pages, in, out, family_id, model, abs_block_loc);
 }
 
-int elf2uf2(std::shared_ptr<std::iostream> in, std::shared_ptr<std::iostream> out, uint32_t family_id, uint32_t package_addr, uint32_t abs_block_loc, bool verbose) {
+int elf2uf2(std::shared_ptr<std::iostream> in, std::shared_ptr<std::iostream> out, uint32_t family_id, model_t model, uint32_t package_addr, uint32_t abs_block_loc, bool verbose) {
     elf_file source_file(verbose);
     g_verbose = verbose;
     elf_file *elf = &source_file;
@@ -244,14 +245,8 @@ int elf2uf2(std::shared_ptr<std::iostream> in, std::shared_ptr<std::iostream> ou
     int rc = elf->read_file(in);
     bool ram_style = false;
     address_ranges valid_ranges = {};
-    address_ranges flash_range; address_ranges ram_range;
-    if (family_id == RP2040_FAMILY_ID) {
-        flash_range = rp2040_address_ranges_flash;
-        ram_range = rp2040_address_ranges_ram;
-    } else {
-        flash_range = rp2350_address_ranges_flash;
-        ram_range = rp2350_address_ranges_ram;
-    }
+    address_ranges flash_range = address_ranges_flash(model);
+    address_ranges ram_range = address_ranges_ram(model);
     if (!rc) {
         rc = rp_determine_binary_type(elf->header(), elf->segments(), flash_range, ram_range, &ram_style);
         if (!rc) {
@@ -284,9 +279,9 @@ int elf2uf2(std::shared_ptr<std::iostream> in, std::shared_ptr<std::iostream> ou
             }
         }
         uint32_t expected_ep = (UINT32_MAX != expected_ep_main_ram) ? expected_ep_main_ram : expected_ep_xip_sram;
-        if (eh.entry == expected_ep_xip_sram && family_id == RP2040_FAMILY_ID) {
+        if (eh.entry == expected_ep_xip_sram && model->chip() == rp2040) {
             fail(ERROR_INCOMPATIBLE, "RP2040 B0/B1/B2 Boot ROM does not support direct entry into XIP_SRAM\n");
-        } else if (eh.entry != expected_ep && family_id == RP2040_FAMILY_ID) {
+        } else if (eh.entry != expected_ep && model->chip() == rp2040) {
             fail(ERROR_INCOMPATIBLE, "A RP2040 RAM binary should have an entry point at the beginning: %08x (not %08x)\n", expected_ep, eh.entry);
         }
         static_assert(0 == (SRAM_START & (UF2_PAGE_SIZE - 1)), "");
@@ -344,5 +339,5 @@ int elf2uf2(std::shared_ptr<std::iostream> in, std::shared_ptr<std::iostream> ou
         }
     }
 
-    return pages2uf2(pages, in, out, family_id, abs_block_loc);
+    return pages2uf2(pages, in, out, family_id, model, abs_block_loc);
 }

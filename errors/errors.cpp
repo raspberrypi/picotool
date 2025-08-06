@@ -3,7 +3,7 @@
 #include "errors.h"
 
 void fail(int code, std::string msg) {
-    throw command_failure(code, std::move(msg));
+    throw failure_error(code, std::move(msg));
 }
 
 void fail(int code, const char *format, ...) {
