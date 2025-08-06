@@ -1887,7 +1887,7 @@ struct memory_access {
     }
 
     template <typename T> void read_into_vector(uint32_t addr, unsigned int count, vector<T> &v, bool zero_fill = false) {
-            v.clear();
+        v.clear();
         v.resize(count);
         if (count) {
             read(addr, (uint8_t *)v.data(), count * sizeof(typename raw_type_mapping<T>::access_type), zero_fill);
@@ -2026,7 +2026,7 @@ static inline bool is_transfer_aligned(uint32_t addr, const model_t& model) {
     return t != invalid && !(t == flash && addr & (PAGE_SIZE-1));
 }
 
-// this must be called after the right model is set on raw_access whihc is why it isn't
+// this must be called after the right model is set on raw_access which is why it isn't
 // part of init_model
 static chip_revision_t determine_chip_revision(memory_access &raw_access) {
     chip_revision_t chip_revision = unknown_revision;
