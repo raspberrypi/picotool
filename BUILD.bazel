@@ -4,12 +4,6 @@ package(default_visibility = ["//visibility:public"])
 
 PICOTOOL_SDK_VERSION_STRING = module_version() if module_version() != None else "0.0.1-WORKSPACE"
 
-picotool_binary_data_header(
-    name = "rp2350_rom",
-    src = "bootrom.end.bin",
-    out = "rp2350.rom.h",
-)
-
 # TODO: Make it possible to build the prebuilt from source.
 picotool_binary_data_header(
     name = "xip_ram_perms_elf",

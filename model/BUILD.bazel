@@ -1,5 +1,23 @@
 package(default_visibility = ["//visibility:public"])
 
+picotool_binary_data_header(
+    name = "rp2350_a2_rom_end_bin",
+    src = "rp2350_a2_rom_end.bin",
+    out = "rp2350_a2_rom_end.h",
+)
+
+picotool_binary_data_header(
+    name = "rp2350_a3_rom_end_bin",
+    src = "rp2350_a3_rom_end.bin",
+    out = "rp2350_a3_rom_end.h",
+)
+
+picotool_binary_data_header(
+    name = "rp2350_a4_rom_end_bin",
+    src = "rp2350_a4_rom_end.bin",
+    out = "rp2350_a4_rom_end.h",
+)
+
 cc_library(
     name = "model",
     srcs = [
@@ -7,6 +25,9 @@ cc_library(
     ],
     hdrs = [
         "model.h",
+        "rp2350_a2_rom_end.h",
+        "rp2350_a3_rom_end.h",
+        "rp2350_a4_rom_end.h",
     ],
     includes = ["."],
     deps = [
