@@ -4,7 +4,6 @@ cc_library(
     name = "elf",
     srcs = ["elf_file.cpp"],
     hdrs = [
-        "addresses.h",
         "elf.h",
         "elf_file.h",
         "portable_endian.h",
