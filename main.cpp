@@ -4316,6 +4316,7 @@ bool info_command::execute(device_map &devices) {
                 }
                 fos << s.str() << "\n\n";
                 auto tmp_access = get_file_memory_access(0, false, &next_id);
+                set_model_from_metadata(tmp_access);
                 info_guts(tmp_access, nullptr);
             }
         } else {
