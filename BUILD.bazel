@@ -100,7 +100,6 @@ cc_binary(
         "main.cpp",
         "otp.cpp",
         "otp.h",
-        "rp2350.rom.h",
         "get_xip_ram_perms.cpp",
         "get_enc_bootloader.cpp",
     ] + select({
