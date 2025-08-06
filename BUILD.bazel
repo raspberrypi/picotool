@@ -32,6 +32,24 @@ picotool_binary_data_header(
     out = "flash_id_bin.h",
 )
 
+picotool_binary_data_header(
+    name = "rp2350_a2_rom_end",
+    src = "//model:rp2350_a2_rom_end_bin",
+    out = "rp2350_a2_rom_end.h",
+)
+
+picotool_binary_data_header(
+    name = "rp2350_a3_rom_end",
+    src = "//model:rp2350_a3_rom_end_bin",
+    out = "rp2350_a3_rom_end.h",
+)
+
+picotool_binary_data_header(
+    name = "rp2350_a4_rom_end",
+    src = "//model:rp2350_a4_rom_end_bin",
+    out = "rp2350_a4_rom_end.h",
+)
+
 cc_library(
     name = "xip_ram_perms",
     srcs = ["get_xip_ram_perms.cpp"],
