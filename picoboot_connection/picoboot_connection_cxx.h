@@ -27,7 +27,7 @@ namespace picoboot {
     };
 
     struct connection {
-        explicit connection(libusb_device_handle *device, chip_t chip, bool exclusive = true) : device(device), exclusive(exclusive) {
+        explicit connection(libusb_device_handle *device, bool exclusive = true) : device(device), exclusive(exclusive) {
             // do a device reset in case it was left in a bad state
             reset();
             if (exclusive) exclusive_access(EXCLUSIVE);

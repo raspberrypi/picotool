@@ -4416,7 +4416,7 @@ static picoboot::connection get_single_bootsel_device_connection(device_map& dev
     selected_chip = std::get<0>(device);
     libusb_device_handle *rc = std::get<2>(device);
     if (!rc) fail(ERROR_USB, "Unable to connect to device");
-    return picoboot::connection(rc, std::get<0>(device), exclusive);
+    return picoboot::connection(rc, exclusive);
 }
 
 static picoboot::connection get_single_picoboot_cmd_compatible_device_connection(const std::string& cmd_name, device_map& devices, std::set<picoboot_cmd_id> picoboot_cmds, bool exclusive = true) {
