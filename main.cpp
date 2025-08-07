@@ -7470,7 +7470,7 @@ uint8_t otp_cmd_max_bits(void) {
 typedef std::function<void(uint8_t *buffer, uint32_t len, picoboot_otp_cmd &otp_cmd)> otp_read_func_t;
 typedef std::function<void(uint8_t *buffer, uint32_t len, picoboot_otp_cmd &otp_cmd)> otp_write_func_t;
 void process_otp_json(json &otp_json, model_t model, otp_read_func_t read_func, otp_write_func_t write_func) {
-    int raw_max_bits = 24
+    int raw_max_bits = 24;
     for (auto row : otp_json.items()) {
         fos.first_column(0);
         string row_key = row.key();
