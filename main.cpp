@@ -2011,7 +2011,7 @@ static model_t determine_model(memory_access &raw_access) {
         return std::make_shared<model_rp2040>();
     } else if (magic == BOOTROM_MAGIC_RP2350) {
         uint32_t table_entry = raw_access.read_short(BOOTROM_MAGIC_ADDR + 4);
-        static_assert(ROM_END_RP2350 == 0x8000);
+        static_assert(ROM_END_RP2350 == 0x8000, "");
         if (table_entry < 0x8000) {
             return std::make_shared<model_rp2350>();
         } else {
