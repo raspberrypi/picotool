@@ -15,7 +15,6 @@ cc_library(
     deps = [
         "//elf",
         "//errors",
-        "//model",
         "@pico-sdk//src/common/boot_uf2_headers",
     ],
 )
