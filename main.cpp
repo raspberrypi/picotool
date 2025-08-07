@@ -2071,8 +2071,6 @@ static chip_revision_t determine_chip_revision(memory_access &raw_access) {
 #if HAS_LIBUSB
 struct picoboot_memory_access : public memory_access {
     explicit picoboot_memory_access(picoboot::connection &connection) : connection(connection) {
-        // todo remove me temp hack so we can read a larger amount of ROM
-        model = std::make_shared<model_info>(unknown, "hack", 0x10000);
         model = determine_model(*this);
         if (model->chip() != unknown)
             model->set_chip_revision(determine_chip_revision(*this));
@@ -6330,7 +6328,6 @@ bool partition_info_command::execute(device_map &devices) {
     printf(", uf2 { %s }\n", cli::join(family_ids, ", ").c_str());
 
     if (has_pt) {
-        picoboot_memory_access raw_access(con);
         printf("partitions:\n");
         for (unsigned int i = 0; i < partition_count; i++) {
             uint32_t location_and_permissions = loc_flags_id_buf_32[lfi_pos++];
@@ -7473,7 +7470,7 @@ uint8_t otp_cmd_max_bits(void) {
 typedef std::function<void(uint8_t *buffer, uint32_t len, picoboot_otp_cmd &otp_cmd)> otp_read_func_t;
 typedef std::function<void(uint8_t *buffer, uint32_t len, picoboot_otp_cmd &otp_cmd)> otp_write_func_t;
 void process_otp_json(json &otp_json, model_t model, otp_read_func_t read_func, otp_write_func_t write_func) {
-    int raw_max_bits = otp_cmd_max_bits();
+    int raw_max_bits = 24
     for (auto row : otp_json.items()) {
         fos.first_column(0);
         string row_key = row.key();
@@ -8869,12 +8866,10 @@ int main(int argc, char **argv) {
         std::cout << "ERROR: " << e.what() << "\n";
         rc = e.code();
     } catch (picoboot::command_failure& e) {
-        std::string device = chip_name(selected_chip);
-        std::cout << "ERROR: The " << device << " device returned an error: " << e.what() << "\n";
+        std::cout << "ERROR: The " << chip_name(selected_chip) << " device returned an error: " << e.what() << "\n";
         rc = ERROR_UNKNOWN;
     } catch (picoboot::connection_error&) {
-        std::string device = chip_name(selected_chip);
-        std::cout << "ERROR: Communication with " << device << " device failed\n";
+        std::cout << "ERROR: Communication with " << chip_name(selected_chip) << " device failed\n";
         rc = ERROR_CONNECTION;
     } catch (cancelled_exception&) {
         rc = ERROR_CANCELLED;
