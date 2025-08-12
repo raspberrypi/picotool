@@ -3697,15 +3697,15 @@ void info_guts(memory_access &raw_access, void *con) {
                 bin = raw_access.read_vector<uint8_t>(raw_access.get_binary_start(), read_size, true);
                 std::unique_ptr<block> first_block = find_first_block(bin, raw_access.get_binary_start());
                 if (first_block) {
-                    // verify stuff
-                    auto all_blocks = get_all_blocks(bin, raw_access.get_binary_start(), first_block, more_cb);
-
                     int block_i = 0;
                     select_group(metadata_info[block_i++], true);
                     info_metadata(first_block.get(), true);
-                    for (auto &block : all_blocks) {
-                        select_group(metadata_info[block_i++], true);
-                        info_metadata(block.get(), true);
+                    if (first_block->next_block_rel != 0) { // if there is more than one block
+                        auto all_blocks = get_all_blocks(bin, raw_access.get_binary_start(), first_block, more_cb);
+                        for (auto &block : all_blocks) {
+                            select_group(metadata_info[block_i++], true);
+                            info_metadata(block.get(), true);
+                        }
                     }
                 } else {
                     // This displays that there are no metadata blocks
