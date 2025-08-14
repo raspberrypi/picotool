@@ -45,7 +45,7 @@
 #include "elf2uf2.h"
 #include "boot/bootrom_constants.h"
 #include "pico/binary_info.h"
-#include "pico/stdio_usb/reset_interface.h"
+#include "pico/usb_reset_interface.h"
 #include "elf.h"
 #include "otp.h"
 #include "model.h"

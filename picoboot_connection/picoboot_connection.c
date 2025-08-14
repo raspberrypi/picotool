@@ -11,7 +11,7 @@
 
 #include "picoboot_connection.h"
 #include "boot/bootrom_constants.h"
-#include "pico/stdio_usb/reset_interface.h"
+#include "pico/usb_reset_interface.h"
 
 #if ENABLE_DEBUG_LOG
 #include <stdio.h>
