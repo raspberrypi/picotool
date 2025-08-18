@@ -176,6 +176,7 @@ struct image_type_item : public single_byte_size_item {
     image_type_exe_cpu cpu() const { return static_cast<image_type_exe_cpu>((flags & PICOBIN_IMAGE_TYPE_EXE_CPU_BITS) >> PICOBIN_IMAGE_TYPE_EXE_CPU_LSB); }
     image_type_exe_chip chip() const { return static_cast<image_type_exe_chip>((flags & PICOBIN_IMAGE_TYPE_EXE_CHIP_BITS) >> PICOBIN_IMAGE_TYPE_EXE_CHIP_LSB); }
     bool tbyb() const { return flags & PICOBIN_IMAGE_TYPE_EXE_TBYB_BITS; }
+    bool extra_security() const { return flags & PICOBIN_IMAGE_TYPE_EXE_EXTRA_SECURITY_BITS; }
 
     uint16_t flags;
 };

@@ -3361,6 +3361,10 @@ void info_guts(memory_access &raw_access, void *con) {
                 if (image_def->tbyb()) {
                     info_pair("tbyb", "not bought");
                 }
+
+                if (image_def->extra_security()) {
+                    info_pair("extra security", "enabled");
+                }
             }
 
             // Partition Table
@@ -5078,9 +5082,11 @@ void sign_guts_elf(elf_file* elf, private_t private_key, public_t public_key) {
         new_block.items.push_back(version);
     }
 
-    // Add entry point when signing Arm images
+    // Add entry point and vector table when signing Arm images, and set PICOBIN_IMAGE_TYPE_EXE_EXTRA_SECURITY_BITS
     std::shared_ptr<image_type_item> image_type = new_block.get_item<image_type_item>();
     if (settings.seal.sign && image_type != nullptr && image_type->image_type() == type_exe && image_type->cpu() == cpu_arm) {
+        // Set PICOBIN_IMAGE_TYPE_EXE_EXTRA_SECURITY_BITS
+        image_type->flags |= PICOBIN_IMAGE_TYPE_EXE_EXTRA_SECURITY_BITS;
         std::shared_ptr<entry_point_item> entry_point = new_block.get_item<entry_point_item>();
         if (entry_point == nullptr) {
             std::shared_ptr<vector_table_item> vtor = new_block.get_item<vector_table_item>();
@@ -5099,6 +5105,9 @@ void sign_guts_elf(elf_file* elf, private_t private_key, public_t public_key) {
                         vtor_loc += rwd->addr;
                     }
                 }
+
+                vtor = std::make_shared<vector_table_item>(vtor_loc);
+                new_block.items.push_back(vtor);
             }
             auto segment = elf->segment_from_virtual_address(vtor_loc);
             if (segment == nullptr) {
@@ -5159,15 +5168,20 @@ vector<uint8_t> sign_guts_bin(iostream_memory_access in, private_t private_key, 
         new_block.items.push_back(version);
     }
 
-    // Add entry point when signing Arm images
+    // Add entry point and vector table when signing Arm images, and set PICOBIN_IMAGE_TYPE_EXE_EXTRA_SECURITY_BITS
     std::shared_ptr<image_type_item> image_type = new_block.get_item<image_type_item>();
     if (settings.seal.sign && image_type != nullptr && image_type->image_type() == type_exe && image_type->cpu() == cpu_arm) {
+        // Set PICOBIN_IMAGE_TYPE_EXE_EXTRA_SECURITY_BITS
+        image_type->flags |= PICOBIN_IMAGE_TYPE_EXE_EXTRA_SECURITY_BITS;
         std::shared_ptr<entry_point_item> entry_point = new_block.get_item<entry_point_item>();
         if (entry_point == nullptr) {
             std::shared_ptr<vector_table_item> vtor = new_block.get_item<vector_table_item>();
             uint32_t vtor_loc = bin_start;
             if (vtor != nullptr) {
                 vtor_loc = vtor->addr;
+            } else {
+                vtor = std::make_shared<vector_table_item>(vtor_loc);
+                new_block.items.push_back(vtor);
             }
             auto offset = vtor_loc - bin_start;
             uint32_t ep;
