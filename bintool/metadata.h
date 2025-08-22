@@ -16,6 +16,12 @@
 #define DEBUG_LOG(...) ((void)0)
 #endif
 
+// Support for SDK 2.1.0 & SDK 2.1.1 -----
+#ifndef PICOBIN_IMAGE_TYPE_EXE_EXTRA_SECURITY_BITS
+#define PICOBIN_IMAGE_TYPE_EXE_EXTRA_SECURITY_BITS _u(0x0800)
+#endif
+// ------
+
 struct item;
 
 template<typename InputIterator> std::vector<uint32_t> lsb_bytes_to_words(InputIterator begin, InputIterator end) {
