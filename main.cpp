@@ -3362,8 +3362,8 @@ void info_guts(memory_access &raw_access, void *con) {
                     info_pair("tbyb", "not bought");
                 }
 
-                if (image_def->extra_security() && verbose_metadata) {
-                    info_pair("extra security", "enabled");
+                if (verbose_metadata) {
+                    info_pair("extra security", image_def->extra_security() ? "enabled" : "not enabled");
                 }
             }
 
