@@ -1295,7 +1295,7 @@ struct otp_white_label_command : public cmd {
 
 
 vector<std::shared_ptr<cmd>> otp_sub_commands {
-        std::shared_ptr<cmd>( new otp_list_command()),
+        std::shared_ptr<cmd>(new otp_list_command()),
     #if HAS_LIBUSB
         std::shared_ptr<cmd>(new otp_get_command()),
         std::shared_ptr<cmd>(new otp_set_command()),
