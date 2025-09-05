@@ -16,10 +16,10 @@ SYNOPSIS:
     picotool config [-s <key> <value>] [-g <group>] <filename> [-t <type>]
     picotool load [--ignore-partitions] [--family <family_id>] [-p <partition>] [-n] [-N] [-u] [-v] [-x] <filename> [-t <type>] [-o
                 <offset>] [device-selection]
-    picotool encrypt [--quiet] [--verbose] [--embed] [--fast-rosc] [--use-mbedtls] [--otp-key-page <page>] [--hash] [--sign] <infile> [-t
-                <type>] [-o <offset>] <outfile> [-t <type>] <aes_key> <iv_salt> <signing_key> <otp>
-    picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] <key> <otp>
-                [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
+    picotool encrypt [--quiet] [--verbose] [--embed] [--fast-rosc] [--use-mbedtls] [--otp-key-page <page>] [--hash] [--sign] [--clear]
+                [--pin-xip-sram] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] <aes_key> <iv_salt> <signing_key> <otp>
+    picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] [--pin-xip-sram] <infile> [-t <type>] [-o <offset>] <outfile> [-t
+                <type>] <key> <otp> [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
     picotool link [--quiet] [--verbose] <outfile> [-t <type>] <infile1> [-t <type>] <infile2> [-t <type>] [<infile3>] [-t <type>] [-p <pad>]
     picotool save [-p] [-v] [--family <family_id>] <filename> [-t <type>] [device-selection]
     picotool save -a [-v] [--family <family_id>] <filename> [-t <type>] [device-selection]
@@ -621,8 +621,8 @@ SEAL:
     Add final metadata to a binary, optionally including a hash and/or signature.
 
 SYNOPSIS:
-    picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] <key> <otp>
-                [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
+    picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] [--pin-xip-sram] <infile> [-t <type>] [-o <offset>] <outfile> [-t
+                <type>] <key> <otp> [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
 
 OPTIONS:
         --quiet
@@ -646,6 +646,8 @@ OPTIONS:
             Sign the file
         --clear
             Clear all of SRAM on load
+        --pin-xip-sram
+            Pin XIP SRAM on load
     File to load from
         <infile>
             The file name
@@ -691,8 +693,8 @@ ENCRYPT:
     Encrypt the program.
 
 SYNOPSIS:
-    picotool encrypt [--quiet] [--verbose] [--embed] [--fast-rosc] [--use-mbedtls] [--otp-key-page <page>] [--hash] [--sign] <infile> [-t
-                <type>] [-o <offset>] <outfile> [-t <type>] <aes_key> <iv_salt> <signing_key> <otp>
+    picotool encrypt [--quiet] [--verbose] [--embed] [--fast-rosc] [--use-mbedtls] [--otp-key-page <page>] [--hash] [--sign] [--clear]
+                [--pin-xip-sram] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] <aes_key> <iv_salt> <signing_key> <otp>
 
 OPTIONS:
         --quiet
@@ -722,6 +724,10 @@ OPTIONS:
             Hash the encrypted file
         --sign
             Sign the encrypted file
+        --clear
+            Clear all of SRAM on load
+        --pin-xip-sram
+            Pin XIP SRAM on load
     File to load from
         <infile>
             The file name
