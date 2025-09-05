@@ -687,22 +687,52 @@ void hash_andor_sign_block(block *new_block, const public_t public_key, const pr
 }
 
 
-std::vector<uint8_t> get_lm_hash_data(elf_file *elf, block *new_block, bool clear_sram = false) {
+bool check_generic_load_map(std::shared_ptr<load_map_item> load_map, model_t model, bool &pin_xip_sram) {
+    if (load_map == nullptr) {
+        return false;
+    }
+
+    // generic xip pinning from the SDK
+    pin_xip_sram = load_map->entries.size() == 1
+        && load_map->entries[0].storage_address == 0x0
+        && load_map->entries[0].runtime_address == model->xip_sram_end() - 0x4
+        && load_map->entries[0].size == 0x4;
+    return pin_xip_sram;
+}
+
+
+std::vector<uint8_t> get_lm_hash_data(elf_file *elf, block *new_block, model_t model, bool clear_sram = false, bool pin_xip_sram = false) {
     std::vector<uint8_t> to_hash;
     std::shared_ptr<load_map_item> load_map = new_block->get_item<load_map_item>();
+    if (check_generic_load_map(load_map, model, pin_xip_sram)) {
+        new_block->items.erase(std::remove(new_block->items.begin(), new_block->items.end(), load_map), new_block->items.end());
+        load_map = nullptr;
+    }
     if (load_map == nullptr) {
         std::vector<load_map_item::entry> entries;
         if (clear_sram) {
             // todo tidy up this way of hashing the uint32_t
-            std::vector<uint32_t> sram_size_vec = {SRAM_END_RP2350 - SRAM_START};
+            std::vector<uint32_t> sram_size_vec = {model->sram_end() - model->sram_start()};
             entries.push_back({
                 0x0,
-                SRAM_START,
+                model->sram_start(),
                 sram_size_vec[0]
             });
             auto sram_size_data = words_to_lsb_bytes(sram_size_vec.begin(), sram_size_vec.end());
             std::copy(sram_size_data.begin(), sram_size_data.end(), std::back_inserter(to_hash));
-            DEBUG_LOG("CLEAR %08x + %08x\n", (int)SRAM_START, (int)sram_size_vec[0]);
+            DEBUG_LOG("CLEAR %08x + %08x\n", (int)model->sram_start(), (int)sram_size_vec[0]);
+        }
+        if (pin_xip_sram) {
+            // todo tidy up this way of hashing the uint32_t
+            std::vector<uint32_t> xip_pin_size_vec = {0x4};
+            entries.push_back({
+                0x0,
+                model->xip_sram_end() - 0x4,
+                xip_pin_size_vec[0]
+            });
+            auto xip_pin_size_data = words_to_lsb_bytes(xip_pin_size_vec.begin(), xip_pin_size_vec.end());
+            std::copy(xip_pin_size_data.begin(), xip_pin_size_data.end(), std::back_inserter(to_hash));
+            DEBUG_LOG("PIN XIP SRAM %08x + %08x\n", (int)model->xip_sram_end() - 0x4, (int)xip_pin_size_vec[0]);
         }
         for(const auto &seg : sorted_segs(elf)) {
             if (!seg->is_load()) continue;
@@ -761,24 +791,41 @@ std::vector<uint8_t> get_lm_hash_data(elf_file *elf, block *new_block, bool clea
 }
 
 
-std::vector<uint8_t> get_lm_hash_data(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *new_block, get_more_bin_cb more_cb, bool clear_sram = false) {
+std::vector<uint8_t> get_lm_hash_data(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *new_block, get_more_bin_cb more_cb, model_t model, bool clear_sram = false, bool pin_xip_sram = false) {
     std::vector<uint8_t> to_hash;
     std::shared_ptr<load_map_item> load_map = new_block->get_item<load_map_item>();
+    if (check_generic_load_map(load_map, model, pin_xip_sram)) {
+        new_block->items.erase(std::remove(new_block->items.begin(), new_block->items.end(), load_map), new_block->items.end());
+        load_map = nullptr;
+    }
     if (load_map == nullptr) {
-        to_hash.insert(to_hash.begin(), bin.begin(), bin.end());
         std::vector<load_map_item::entry> entries;
         if (clear_sram) {
             // todo gate this clearing of SRAM
-            std::vector<uint32_t> sram_size_vec = {0x00082000};
+            std::vector<uint32_t> sram_size_vec = {model->sram_end() - model->sram_start()};
             assert(sram_size_vec[0] % 4 == 0);
             entries.push_back({
                 0x0,
-                0x20000000,
+                model->sram_start(),
                 sram_size_vec[0]
             });
             auto sram_size_data = words_to_lsb_bytes(sram_size_vec.begin(), sram_size_vec.end());
-            to_hash.insert(to_hash.begin(), sram_size_data.begin(), sram_size_data.end());
+            std::copy(sram_size_data.begin(), sram_size_data.end(), std::back_inserter(to_hash));
+            DEBUG_LOG("CLEAR %08x + %08x\n", (int)model->sram_start(), (int)sram_size_vec[0]);
         }
+        if (pin_xip_sram) {
+            // todo tidy up this way of hashing the uint32_t
+            std::vector<uint32_t> xip_pin_size_vec = {0x4};
+            entries.push_back({
+                0x0,
+                model->xip_sram_end() - 0x4,
+                xip_pin_size_vec[0]
+            });
+            auto xip_pin_size_data = words_to_lsb_bytes(xip_pin_size_vec.begin(), xip_pin_size_vec.end());
+            std::copy(xip_pin_size_data.begin(), xip_pin_size_data.end(), std::back_inserter(to_hash));
+            DEBUG_LOG("PIN XIP SRAM %08x + %08x\n", (int)model->xip_sram_end() - 0x4, (int)xip_pin_size_vec[0]);
+        }
+        to_hash.insert(to_hash.begin(), bin.begin(), bin.end());
         DEBUG_LOG("HASH %08x + %08x\n", (int)storage_addr, (int)bin.size());
         entries.push_back(
             {
@@ -823,8 +870,8 @@ std::vector<uint8_t> get_lm_hash_data(std::vector<uint8_t> bin, uint32_t storage
 }
 
 
-int hash_andor_sign(elf_file *elf, block *new_block, const public_t public_key, const private_t private_key, bool hash_value, bool sign, bool clear_sram) {
-    std::vector<uint8_t> to_hash = get_lm_hash_data(elf, new_block, clear_sram);
+int hash_andor_sign(elf_file *elf, block *new_block, const public_t public_key, const private_t private_key, model_t model, bool hash_value, bool sign, bool clear_sram, bool pin_xip_sram) {
+    std::vector<uint8_t> to_hash = get_lm_hash_data(elf, new_block, model, clear_sram, pin_xip_sram);
 
     hash_andor_sign_block(new_block, public_key, private_key, hash_value, sign, to_hash);
     
@@ -858,8 +905,8 @@ int hash_andor_sign(elf_file *elf, block *new_block, const public_t public_key, 
 }
 
 
-std::vector<uint8_t> hash_andor_sign(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *new_block, const public_t public_key, const private_t private_key, bool hash_value, bool sign, bool clear_sram) {
-    std::vector<uint8_t> to_hash = get_lm_hash_data(bin, storage_addr, runtime_addr, new_block, nullptr, clear_sram);
+std::vector<uint8_t> hash_andor_sign(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *new_block, const public_t public_key, const private_t private_key, model_t model, bool hash_value, bool sign, bool clear_sram, bool pin_xip_sram) {
+    std::vector<uint8_t> to_hash = get_lm_hash_data(bin, storage_addr, runtime_addr, new_block, nullptr, model, clear_sram, pin_xip_sram);
 
     hash_andor_sign_block(new_block, public_key, private_key, hash_value, sign, to_hash);
 
@@ -872,7 +919,7 @@ std::vector<uint8_t> hash_andor_sign(std::vector<uint8_t> bin, uint32_t storage_
 }
 
 
-void verify_block(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *block, verified_t &hash_verified, verified_t &sig_verified, get_more_bin_cb more_cb) {
+void verify_block(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *block, model_t model, verified_t &hash_verified, verified_t &sig_verified, get_more_bin_cb more_cb) {
     std::shared_ptr<load_map_item> load_map = block->get_item<load_map_item>();
     std::shared_ptr<hash_def_item> hash_def = block->get_item<hash_def_item>();
     hash_verified = none;
@@ -880,7 +927,7 @@ void verify_block(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runt
     if (load_map == nullptr || hash_def == nullptr) {
         return;
     }
-    std::vector<uint8_t> to_hash = get_lm_hash_data(bin, storage_addr, runtime_addr, block, more_cb, false);
+    std::vector<uint8_t> to_hash = get_lm_hash_data(bin, storage_addr, runtime_addr, block, more_cb, model);
 
     // auto it = std::find(block->items.begin(), block->items.end(), hash_def);
     // assert (it != block->items.end());
@@ -941,8 +988,8 @@ void verify_block(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runt
 }
 
 
-void encrypt_guts(elf_file *elf, block *new_block, const aes_key_t aes_key, std::vector<uint8_t> &iv_data, std::vector<uint8_t> &enc_data) {
-    std::vector<uint8_t> to_enc = get_lm_hash_data(elf, new_block);
+void encrypt_guts(elf_file *elf, block *new_block, const aes_key_t aes_key, model_t model, std::vector<uint8_t> &iv_data, std::vector<uint8_t> &enc_data) {
+    std::vector<uint8_t> to_enc = get_lm_hash_data(elf, new_block, model);
 
     std::random_device rand{};
     assert(rand.max() - rand.min() >= 256);
@@ -966,11 +1013,11 @@ void encrypt_guts(elf_file *elf, block *new_block, const aes_key_t aes_key, std:
 }
 
 
-int encrypt(elf_file *elf, block *new_block, const aes_key_t aes_key, const public_t public_key, const private_t private_key, std::vector<uint8_t> iv_salt, bool hash_value, bool sign) {
+int encrypt(elf_file *elf, block *new_block, const aes_key_t aes_key, const public_t public_key, const private_t private_key, model_t model, std::vector<uint8_t> iv_salt, bool hash_value, bool sign) {
 
     std::vector<uint8_t> iv_data;
     std::vector<uint8_t> enc_data;
-    encrypt_guts(elf, new_block, aes_key, iv_data, enc_data);
+    encrypt_guts(elf, new_block, aes_key, model, iv_data, enc_data);
 
     // Salt IV
     assert(iv_data.size() == iv_salt.size());
@@ -1054,13 +1101,13 @@ int encrypt(elf_file *elf, block *new_block, const aes_key_t aes_key, const publ
         new_block->items.erase(std::remove(new_block->items.begin(), new_block->items.end(), load_map), new_block->items.end());
     }
 
-    hash_andor_sign(elf, new_block, public_key, private_key, hash_value, sign);
+    hash_andor_sign(elf, new_block, public_key, private_key, model, hash_value, sign);
 
     return 0;
 }
 
 
-std::vector<uint8_t> encrypt(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *new_block, const aes_key_t aes_key, const public_t public_key, const private_t private_key, std::vector<uint8_t> iv_salt, bool hash_value, bool sign) {
+std::vector<uint8_t> encrypt(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *new_block, const aes_key_t aes_key, const public_t public_key, const private_t private_key, model_t model, std::vector<uint8_t> iv_salt, bool hash_value, bool sign) {
     std::random_device rand{};
     assert(rand.max() - rand.min() >= 256);
 
@@ -1114,6 +1161,6 @@ std::vector<uint8_t> encrypt(std::vector<uint8_t> bin, uint32_t storage_addr, ui
         new_block->items.erase(std::remove(new_block->items.begin(), new_block->items.end(), load_map), new_block->items.end());
     }
 
-    return hash_andor_sign(bin, storage_addr, runtime_addr, new_block, public_key, private_key, hash_value, sign);;
+    return hash_andor_sign(bin, storage_addr, runtime_addr, new_block, public_key, private_key, model, hash_value, sign);
 }
 #endif
