@@ -695,8 +695,8 @@ bool check_generic_load_map(std::shared_ptr<load_map_item> load_map, model_t mod
     // generic xip pinning from the SDK
     pin_xip_sram = load_map->entries.size() == 1
         && load_map->entries[0].storage_address == 0x0
-        && load_map->entries[0].runtime_address == model->xip_sram_end() - 0x4
-        && load_map->entries[0].size == 0x4;
+        && load_map->entries[0].runtime_address == model->xip_sram_start()
+        && load_map->entries[0].size == 0x0;
     return pin_xip_sram;
 }
 
@@ -724,15 +724,15 @@ std::vector<uint8_t> get_lm_hash_data(elf_file *elf, block *new_block, model_t m
         }
         if (pin_xip_sram) {
             // todo tidy up this way of hashing the uint32_t
-            std::vector<uint32_t> xip_pin_size_vec = {0x4};
+            std::vector<uint32_t> xip_pin_size_vec = {0x0};
             entries.push_back({
                 0x0,
-                model->xip_sram_end() - 0x4,
+                model->xip_sram_start(),
                 xip_pin_size_vec[0]
             });
             auto xip_pin_size_data = words_to_lsb_bytes(xip_pin_size_vec.begin(), xip_pin_size_vec.end());
             std::copy(xip_pin_size_data.begin(), xip_pin_size_data.end(), std::back_inserter(to_hash));
-            DEBUG_LOG("PIN XIP SRAM %08x + %08x\n", (int)model->xip_sram_end() - 0x4, (int)xip_pin_size_vec[0]);
+            DEBUG_LOG("PIN XIP SRAM %08x + %08x\n", (int)model->xip_sram_start(), (int)xip_pin_size_vec[0]);
         }
         for(const auto &seg : sorted_segs(elf)) {
             if (!seg->is_load()) continue;
@@ -815,15 +815,15 @@ std::vector<uint8_t> get_lm_hash_data(std::vector<uint8_t> bin, uint32_t storage
         }
         if (pin_xip_sram) {
             // todo tidy up this way of hashing the uint32_t
-            std::vector<uint32_t> xip_pin_size_vec = {0x4};
+            std::vector<uint32_t> xip_pin_size_vec = {0x0};
             entries.push_back({
                 0x0,
-                model->xip_sram_end() - 0x4,
+                model->xip_sram_start(),
                 xip_pin_size_vec[0]
             });
             auto xip_pin_size_data = words_to_lsb_bytes(xip_pin_size_vec.begin(), xip_pin_size_vec.end());
             std::copy(xip_pin_size_data.begin(), xip_pin_size_data.end(), std::back_inserter(to_hash));
-            DEBUG_LOG("PIN XIP SRAM %08x + %08x\n", (int)model->xip_sram_end() - 0x4, (int)xip_pin_size_vec[0]);
+            DEBUG_LOG("PIN XIP SRAM %08x + %08x\n", (int)model->xip_sram_start(), (int)xip_pin_size_vec[0]);
         }
         to_hash.insert(to_hash.begin(), bin.begin(), bin.end());
         DEBUG_LOG("HASH %08x + %08x\n", (int)storage_addr, (int)bin.size());
