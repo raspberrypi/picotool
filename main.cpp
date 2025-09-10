@@ -7474,10 +7474,17 @@ bool coprodis_command::execute(device_map &devices) {
 }
 
 #if HAS_LIBUSB
-static void check_otp_write_error(picoboot::command_failure &e, bool ecc) {
+static void check_otp_write_error(picoboot::command_failure &e, struct picoboot_otp_cmd *otp_cmd, model_t model) {
     if (e.get_code() == PICOBOOT_UNSUPPORTED_MODIFICATION) {
-        if (ecc) fail(ERROR_NOT_POSSIBLE, "Attempted to modify OTP ECC row(s)\n");
+        if (otp_cmd->bEcc) fail(ERROR_NOT_POSSIBLE, "Attempted to modify OTP ECC row(s)\n");
         else     fail(ERROR_NOT_POSSIBLE, "Attempted to clear bits in OTP row(s)\n");
+    } else if (
+        e.get_code() == PICOBOOT_NOT_PERMITTED
+        && model->chip() == rp2350
+        && model->chip_revision() == rp2350_a2
+        && otp_cmd->wRow >= OTP_PAGE_COUNT * (OTP_PAGE_ROWS - 1)
+    ) {
+        fail(ERROR_NOT_POSSIBLE, "Cannot write to page locks for pages 32-63 on RP2350 A2 due to errata RP2350-E15 - use otp permissions command instead\n");
     }
 }
 
@@ -7954,7 +7961,7 @@ bool otp_load_command::execute(device_map &devices) {
                 try {
                     con.otp_write(&otp_cmd, buffer, len);
                 } catch (picoboot::command_failure &e) {
-                    check_otp_write_error(e, otp_cmd.bEcc);
+                    check_otp_write_error(e, &otp_cmd, model);
                     throw e;
                 }
         });
@@ -7983,7 +7990,7 @@ bool otp_load_command::execute(device_map &devices) {
     try {
         con.otp_write(&otp_cmd, (uint8_t *)file_buffer, file_size);
     } catch (picoboot::command_failure &e) {
-        check_otp_write_error(e, otp_cmd.bEcc);
+        check_otp_write_error(e, &otp_cmd, model);
         throw e;
     }
 
@@ -8091,6 +8098,7 @@ bool otp_set_command::execute(device_map &devices) {
     auto con = get_single_picoboot_cmd_compatible_device_connection("otp set", devices, {PC_OTP_READ, PC_OTP_WRITE});
     hack_init_otp_regs();
     picoboot_memory_access raw_access(con);
+    auto model = raw_access.get_model();
     auto matches = filter_otp(settings.otp.selectors, otp_cmd_max_bits(), settings.otp.fuzzy);
     // baing lazy to count
     std::set<uint32_t> unique_rows;
@@ -8225,7 +8233,7 @@ bool otp_set_command::execute(device_map &devices) {
             con.otp_write(&otp_cmd, (uint8_t *)&write_value, sizeof(write_value));
         }
     } catch (picoboot::command_failure &e) {
-        check_otp_write_error(e, otp_cmd.bEcc);
+        check_otp_write_error(e, &otp_cmd, model);
         throw e;
     }
 
@@ -8234,6 +8242,8 @@ bool otp_set_command::execute(device_map &devices) {
 
 bool otp_permissions_command::execute(device_map &devices) {
     auto con = get_single_picoboot_cmd_compatible_device_connection("otp permissions", devices, {PC_OTP_READ, PC_OTP_WRITE});
+    picoboot_memory_access raw_access(con);
+    auto model = raw_access.get_model();
 
     json perms_json = json::parse(*get_file(ios::in|ios::binary));
 
@@ -8380,6 +8390,8 @@ void wl_do_field(json json_data, vector<uint16_t>& data, uint32_t& flags, const 
 bool otp_white_label_command::execute(device_map &devices) {
     auto con = get_single_picoboot_cmd_compatible_device_connection("otp white-label", devices, {PC_OTP_READ, PC_OTP_WRITE});
     hack_init_otp_regs();
+    picoboot_memory_access raw_access(con);
+    auto model = raw_access.get_model();
     const otp_reg* flags_reg;
     const otp_reg* addr_reg;
     {
@@ -8468,7 +8480,7 @@ bool otp_white_label_command::execute(device_map &devices) {
     try {
         con.otp_write(&otp_cmd, (uint8_t*)data.data(), data.size()*sizeof(data[0]));
     } catch (picoboot::command_failure &e) {
-        check_otp_write_error(e, otp_cmd.bEcc);
+        check_otp_write_error(e, &otp_cmd, model);
         throw e;
     }
 
@@ -8479,7 +8491,7 @@ bool otp_white_label_command::execute(device_map &devices) {
     try {
         con.otp_write(&otp_cmd, (uint8_t*)&struct_row, sizeof(struct_row));
     } catch (picoboot::command_failure &e) {
-        check_otp_write_error(e, otp_cmd.bEcc);
+        check_otp_write_error(e, &otp_cmd, model);
         throw e;
     }
 
@@ -8495,7 +8507,7 @@ bool otp_white_label_command::execute(device_map &devices) {
     try {
         con.otp_write(&otp_cmd, (uint8_t*)tmp_data.data(), tmp_data.size()*sizeof(flags));
     } catch (picoboot::command_failure &e) {
-        check_otp_write_error(e, otp_cmd.bEcc);
+        check_otp_write_error(e, &otp_cmd, model);
         throw e;
     }
 
