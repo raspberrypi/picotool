@@ -4686,6 +4686,10 @@ bool erase_command::execute(device_map &devices) {
     auto con = get_single_bootsel_device_connection(devices);
     picoboot_memory_access raw_access(con);
 
+    // Errata RP2350-E10 fix
+    auto model = raw_access.get_model();
+    if (model->chip_revision() == rp2350_a2) con.exit_xip();
+
     uint32_t end = 0;
     uint32_t binary_end = 0;
     binary_info_header hdr;
@@ -4730,7 +4734,6 @@ bool erase_command::execute(device_map &devices) {
         }
     }
 
-    model_t model = raw_access.get_model();
     enum memory_type t1 = get_memory_type(start , model);
     enum memory_type t2 = get_memory_type(end, model);
     if (t1 != flash || t1 != t2) {
