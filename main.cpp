@@ -1370,11 +1370,41 @@ struct uf2_convert_command : public cmd {
     }
 };
 
+struct uf2_combine_command : public cmd {
+    uf2_combine_command() : cmd("combine") {}
+    bool execute(device_map &devices) override;
+    virtual device_support get_device_support() override { return none; }
+
+    group get_cli() override {
+        return (
+                option("--quiet").set(settings.quiet) % "Don't print any output" +
+                option("--verbose").set(settings.verbose) % "Print verbose output" +
+                named_typed_file_selection_x("infile1", 0, "uf2") % "First file to combine" +
+                named_typed_file_selection_x("infile1", 1, "uf2") % "Second file to combine" +
+                named_typed_file_selection_x("outfile", 2, "uf2") % "File to save output to" +
+                (
+                    option("--family") & family_id("family_id").set(settings.family_id) % "family ID for combined UF2 (defaults to first one)"
+                ).force_expand_help(true) % "UF2 Family options"
+            #if SUPPORT_RP2350_A2
+                + (
+                    option("--abs-block").set(settings.uf2.abs_block) % "Add an absolute block" +
+                        hex("abs_block_loc").set(settings.uf2.abs_block_loc).min(0) % "absolute block location (default to 0x10ffff00)"
+                ).force_expand_help(true).min(0) % "Errata RP2350-E10 Fix"
+            #endif
+        );
+    }
+
+    string get_doc() const override {
+        return "Combine multiple UF2 files.";
+    }
+};
+
 vector<std::shared_ptr<cmd>> uf2_sub_commands {
     #if HAS_LIBUSB
         std::shared_ptr<cmd>(new uf2_info_command()),
     #endif
         std::shared_ptr<cmd>(new uf2_convert_command()),
+        std::shared_ptr<cmd>(new uf2_combine_command()),
 };
 
 struct uf2_command : public multi_cmd {
@@ -6770,6 +6800,86 @@ bool uf2_convert_command::execute(device_map &devices) {
     } else {
         fail(ERROR_ARGS, "Convert currently only from ELF/BIN to UF2\n");
     }
+    out->close();
+
+    return false;
+}
+
+bool uf2_combine_command::execute(device_map &devices) {
+    if (get_file_type_idx(0) != filetype::uf2 || get_file_type_idx(1) != filetype::uf2 || get_file_type_idx(0) != filetype::uf2) {
+        fail(ERROR_ARGS, "All files must be UF2 files\n");
+    }
+
+    auto file1 = get_file_idx(ios::in|ios::binary, 0);
+    auto file2 = get_file_idx(ios::in|ios::binary, 1);
+    auto out = get_file_idx(ios::out|ios::binary, 2);
+
+    out->seekp(0, ios::beg);
+
+    unsigned int num_blocks = 0;    
+    for (auto file : {file1, file2}) {
+        uf2_block block;
+        // Seek to 2nd block, in case 1st is abs_block
+        file->seekg(0, ios::beg);
+        file->read((char*)&block, sizeof(uf2_block));
+        if (file->fail()) {
+            fail(ERROR_READ_FAILED, "unexpected end of input file");
+        }
+
+    #if SUPPORT_RP2350_A2
+        if (check_abs_block(block)) {
+            // save abs block address
+            settings.uf2.abs_block = true;
+            settings.uf2.abs_block_loc = block.target_addr;
+            file->read((char*)&block, sizeof(uf2_block));
+        }
+    #endif
+
+        num_blocks += block.num_blocks;
+
+        if (!settings.family_id) {
+            settings.family_id = block.file_size;
+        }
+    }
+
+#if SUPPORT_RP2350_A2
+    if (settings.uf2.abs_block) {
+        uf2_block block = gen_abs_block(settings.uf2.abs_block_loc);
+        out->write((char*)&block, sizeof(uf2_block));
+    }
+#endif
+
+    unsigned int block_no = 0;
+    for (auto file : {file1, file2}) {
+        file->seekg(0, ios::beg);
+        uf2_block block;
+        unsigned int pos = 0;
+        uint32_t next_family_id = 0;
+        do {
+            file->read((char*)&block, sizeof(uf2_block));
+            if (file->fail()) {
+                if (file->eof()) { file->clear(); break; }
+                fail(ERROR_READ_FAILED, "unexpected end of input file");
+            }
+            if (block.magic_start0 == UF2_MAGIC_START0 && block.magic_start1 == UF2_MAGIC_START1 &&
+                block.magic_end == UF2_MAGIC_END) {
+                if (block.flags & UF2_FLAG_FAMILY_ID_PRESENT &&
+                    !(block.flags & UF2_FLAG_NOT_MAIN_FLASH) && block.payload_size == PAGE_SIZE) {
+                    // ignore the absolute block
+                    if (check_abs_block(block)) {
+                        DEBUG_LOG("Ignoring RP2350-E10 absolute block\n");
+                    } else {
+                        block.block_no = block_no; block_no++;
+                        block.num_blocks = num_blocks;
+                        block.file_size = settings.family_id;
+                        out->write((char*)&block, sizeof(uf2_block));
+                    }
+                }
+            }
+            pos += sizeof(uf2_block);
+        } while (true);
+    }
+
     out->close();
 
     return false;
