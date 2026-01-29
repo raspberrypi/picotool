@@ -29,17 +29,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Install compilers (Windows mingw)
+      - name: Install mingw (Windows mingw)
         if: runner.os == 'Windows' && matrix.generator == 'Ninja'
         run: |
-          choco install -y .github/workflows/choco_packages_mingw.config
-      - name: Install compilers (Windows msvc)
-        if: runner.os == 'Windows' && matrix.generator == 'Visual Studio 17 2022'
-        run: |
-          choco install -y .github/workflows/choco_packages_msvc.config
+          choco install -y mingw --version=12.2.0
       - name: Install dependencies (Windows)
         if: runner.os == 'Windows'
         run: |
+          choco install -y gcc-arm-embedded
           curl -L https://github.com/libusb/libusb/releases/download/v1.0.27/libusb-1.0.27.7z -o libusb.7z
           7z x libusb.7z -olibusb
           ls libusb
