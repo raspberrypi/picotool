@@ -24,9 +24,6 @@ jobs:
             generator: "Visual Studio 17 2022"
           - libusb: ""
             compile: "compile"
-          - os: 'windows-latest'
-            # currently skipping compile for Windows, as gcc-arm-embedded package has broken links
-            compile: "compile"
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -36,10 +33,14 @@ jobs:
         if: runner.os == 'Windows' && matrix.generator == 'Ninja'
         run: |
           choco install -y mingw --version=12.2.0
+      - name: Install arm-none-eabi-gcc (Windows & MacOS)
+        if: runner.os == 'Windows' || runner.os == 'macOS'
+        uses: carlosperate/arm-none-eabi-gcc-action@v1
+        with:
+          release: 14.3.Rel1
       - name: Install dependencies (Windows)
         if: runner.os == 'Windows'
         run: |
-          choco install -y gcc-arm-embedded
           curl -L https://github.com/libusb/libusb/releases/download/v1.0.27/libusb-1.0.27.7z -o libusb.7z
           7z x libusb.7z -olibusb
           ls libusb
@@ -56,7 +57,6 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           brew install libusb ninja
-          brew install --cask gcc-arm-embedded
 
       - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
