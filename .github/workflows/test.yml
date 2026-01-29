@@ -24,6 +24,10 @@ jobs:
             generator: "Visual Studio 17 2022"
           - libusb: ""
             compile: "compile"
+          - os: 'windows-latest'
+            # only precompiled ELFs supported for Windows MSVC
+            compile: "compile"
+            generator: "Visual Studio 17 2022"
     runs-on: ${{ matrix.os }}
 
     steps:
