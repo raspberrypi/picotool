@@ -24,6 +24,9 @@ jobs:
             generator: "Visual Studio 17 2022"
           - libusb: ""
             compile: "compile"
+          - os: 'windows-latest'
+            # currently skipping compile for Windows, as gcc-arm-embedded package has broken links
+            compile: "compile"
     runs-on: ${{ matrix.os }}
 
     steps:
