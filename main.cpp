@@ -597,6 +597,10 @@ struct _settings {
         #else
         uint32_t abs_block_loc = 0;
         #endif
+        uint32_t offset = 0;
+        bool offset_set = false;
+        int partition = -1;
+        bool partition_set = false;
     } uf2;
 };
 _settings settings;
@@ -1384,7 +1388,15 @@ struct uf2_combine_command : public cmd {
                 named_typed_file_selection_x("outfile", 2, "uf2") % "File to save output to" +
                 (
                     option("--family") & family_id("family_id").set(settings.family_id) % "family ID for combined UF2 (defaults to first one)"
-                ).force_expand_help(true) % "UF2 Family options"
+                ).force_expand_help(true) % "UF2 Family options" +
+                (
+                    option("--offset").set(settings.uf2.offset_set) % "Offset second UF2 by amount" &
+                        hex("offset").set(settings.uf2.offset) % "offset amount (default to 0)"
+                ).force_expand_help(true) % "Offset options" +
+                (
+                    option("--partition").set(settings.uf2.partition_set) % "Place second UF2 in partition (first UF2 must contain a partition table)" &
+                        integer("partition").min_value(0).max_value(PARTITION_TABLE_MAX_PARTITIONS-1).set(settings.uf2.partition) % "partition number (default to 0)"
+                ).force_expand_help(true) % "Partition options"
             #if SUPPORT_RP2350_A2
                 + (
                     option("--abs-block").set(settings.uf2.abs_block) % "Add an absolute block" +
@@ -3267,6 +3279,25 @@ std::unique_ptr<block> find_last_block(memory_access &raw_access, vector<uint8_t
     }
 
     return nullptr;
+}
+
+std::vector<std::unique_ptr<block>> find_all_blocks(memory_access &raw_access, vector<uint8_t> &bin) {
+    // todo read the right amount
+    uint32_t read_size = 0x1000;
+    DEBUG_LOG("Reading from %x size %x\n", raw_access.get_binary_start(), read_size);
+    bin = raw_access.read_vector<uint8_t>(raw_access.get_binary_start(), read_size, true);
+
+    std::unique_ptr<block> first_block = find_first_block(bin, raw_access.get_binary_start());
+    if (first_block) {
+        // verify stuff
+        get_more_bin_cb more_cb = [&raw_access](std::vector<uint8_t> &bin, uint32_t offset, uint32_t size) {
+            DEBUG_LOG("Now reading from %x size %x\n", offset, size);
+            bin = raw_access.read_vector<uint8_t>(offset, size, true);
+        };
+        return get_all_blocks(bin, raw_access.get_binary_start(), first_block, more_cb);
+    }
+
+    return std::vector<std::unique_ptr<block>>();
 }
 
 std::shared_ptr<memory_access> get_bi_access(memory_access &raw_access) {
@@ -6810,13 +6841,42 @@ bool uf2_combine_command::execute(device_map &devices) {
         fail(ERROR_ARGS, "All files must be UF2 files\n");
     }
 
+    if (settings.uf2.partition_set && settings.uf2.offset_set) {
+        fail(ERROR_ARGS, "Cannot use both partition and offset options together\n");
+    }
+
     auto file1 = get_file_idx(ios::in|ios::binary, 0);
     auto file2 = get_file_idx(ios::in|ios::binary, 1);
     auto out = get_file_idx(ios::out|ios::binary, 2);
 
+    if (settings.uf2.partition_set) {
+        auto access = get_file_memory_access(0);
+
+        vector<uint8_t> bin;
+        auto blocks = find_all_blocks(access, bin);
+        for (auto &block : blocks) {
+            auto partition_table = block->get_item<partition_table_item>();
+            if (partition_table == nullptr) {
+                continue;
+            }
+
+            if (settings.uf2.partition < 0 || settings.uf2.partition >= partition_table->partitions.size()) {
+                fail(ERROR_ARGS, "Partition table only contains partitions 0 -> %d\n", partition_table->partitions.size() - 1);
+            }
+
+            settings.uf2.offset = partition_table->partitions[settings.uf2.partition].first_sector * 4096;
+            settings.uf2.offset_set = true;
+            break;
+        }
+
+        if (!settings.uf2.offset_set) {
+            fail(ERROR_ARGS, "No partition table found in first UF2\n");
+        }
+    }
+
     out->seekp(0, ios::beg);
 
-    unsigned int num_blocks = 0;    
+    unsigned int num_blocks = 0;
     for (auto file : {file1, file2}) {
         uf2_block block;
         // Seek to 2nd block, in case 1st is abs_block
@@ -6850,6 +6910,7 @@ bool uf2_combine_command::execute(device_map &devices) {
 #endif
 
     unsigned int block_no = 0;
+    unsigned int file_no = 0;
     for (auto file : {file1, file2}) {
         file->seekg(0, ios::beg);
         uf2_block block;
@@ -6872,12 +6933,16 @@ bool uf2_combine_command::execute(device_map &devices) {
                         block.block_no = block_no; block_no++;
                         block.num_blocks = num_blocks;
                         block.file_size = settings.family_id;
+                        if (settings.uf2.offset_set && file_no == 1) {
+                            block.target_addr += settings.uf2.offset;
+                        }
                         out->write((char*)&block, sizeof(uf2_block));
                     }
                 }
             }
             pos += sizeof(uf2_block);
         } while (true);
+        file_no++;
     }
 
     out->close();
