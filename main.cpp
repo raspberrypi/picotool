@@ -1939,6 +1939,15 @@ bool get_json_int(json value, T& out) {
     }
 }
 
+bool get_json_bool(json value, bool& out) {
+    if (value.is_boolean()) {
+        out = value;
+        return true;
+    } else {
+        return false;
+    }
+}
+
 uint32_t bootrom_func_lookup_rp2040(memory_access& access, uint16_t tag) {
     model_t model = access.get_model();
     // we are only used on RP2040
@@ -6587,10 +6596,23 @@ bool partition_create_command::execute(device_map &devices) {
             else {string p_id = p["id"]; fail(ERROR_INCOMPATIBLE, "Partition ID \"%s\" is not a valid 64bit integer\n", p_id.c_str());}
         }
 
-        if(p.contains("no_reboot_on_uf2_download")) new_p.flags |= PICOBIN_PARTITION_FLAGS_UF2_DOWNLOAD_NO_REBOOT_BITS;
-        if(p.contains("ab_non_bootable_owner_affinity")) new_p.flags |= PICOBIN_PARTITION_FLAGS_UF2_DOWNLOAD_AB_NON_BOOTABLE_OWNER_AFFINITY;
-        if(p.contains("ignored_during_riscv_boot")) new_p.flags |= PICOBIN_PARTITION_FLAGS_IGNORED_DURING_RISCV_BOOT_BITS;
-        if(p.contains("ignored_during_arm_boot")) new_p.flags |= PICOBIN_PARTITION_FLAGS_IGNORED_DURING_ARM_BOOT_BITS;
+        bool tmp_bool;
+        if(p.contains("no_reboot_on_uf2_download")) {
+            if (get_json_bool(p["no_reboot_on_uf2_download"], tmp_bool)) {new_p.flags |= (tmp_bool ? PICOBIN_PARTITION_FLAGS_UF2_DOWNLOAD_NO_REBOOT_BITS : 0);}
+            else {fail(ERROR_INCOMPATIBLE, "Partition %d no_reboot_on_uf2_download value is not a valid boolean\n", pt.partitions.size());}
+        }
+        if(p.contains("ab_non_bootable_owner_affinity")) {
+            if (get_json_bool(p["ab_non_bootable_owner_affinity"], tmp_bool)) {new_p.flags |= (tmp_bool ? PICOBIN_PARTITION_FLAGS_UF2_DOWNLOAD_AB_NON_BOOTABLE_OWNER_AFFINITY : 0);}
+            else {fail(ERROR_INCOMPATIBLE, "Partition %d ab_non_bootable_owner_affinity value is not a valid boolean\n", pt.partitions.size());}
+        }
+        if(p.contains("ignored_during_riscv_boot")) {
+            if (get_json_bool(p["ignored_during_riscv_boot"], tmp_bool)) {new_p.flags |= (tmp_bool ? PICOBIN_PARTITION_FLAGS_IGNORED_DURING_RISCV_BOOT_BITS : 0);}
+            else {fail(ERROR_INCOMPATIBLE, "Partition %d ignored_during_riscv_boot value is not a valid boolean\n", pt.partitions.size());}
+        }
+        if(p.contains("ignored_during_arm_boot")) {
+            if (get_json_bool(p["ignored_during_arm_boot"], tmp_bool)) {new_p.flags |= (tmp_bool ? PICOBIN_PARTITION_FLAGS_IGNORED_DURING_ARM_BOOT_BITS : 0);}
+            else {fail(ERROR_INCOMPATIBLE, "Partition %d ignored_during_arm_boot value is not a valid boolean\n", pt.partitions.size());}
+        }
         pt.partitions.push_back(new_p);
     }
 
