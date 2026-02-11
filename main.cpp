@@ -6597,21 +6597,21 @@ bool partition_create_command::execute(device_map &devices) {
         }
 
         bool tmp_bool;
-        if(p.contains("no_reboot_on_uf2_download")) {
-            if (get_json_bool(p["no_reboot_on_uf2_download"], tmp_bool)) {new_p.flags |= (tmp_bool ? PICOBIN_PARTITION_FLAGS_UF2_DOWNLOAD_NO_REBOOT_BITS : 0);}
-            else {fail(ERROR_INCOMPATIBLE, "Partition %d no_reboot_on_uf2_download value is not a valid boolean\n", pt.partitions.size());}
-        }
-        if(p.contains("ab_non_bootable_owner_affinity")) {
-            if (get_json_bool(p["ab_non_bootable_owner_affinity"], tmp_bool)) {new_p.flags |= (tmp_bool ? PICOBIN_PARTITION_FLAGS_UF2_DOWNLOAD_AB_NON_BOOTABLE_OWNER_AFFINITY : 0);}
-            else {fail(ERROR_INCOMPATIBLE, "Partition %d ab_non_bootable_owner_affinity value is not a valid boolean\n", pt.partitions.size());}
-        }
-        if(p.contains("ignored_during_riscv_boot")) {
-            if (get_json_bool(p["ignored_during_riscv_boot"], tmp_bool)) {new_p.flags |= (tmp_bool ? PICOBIN_PARTITION_FLAGS_IGNORED_DURING_RISCV_BOOT_BITS : 0);}
-            else {fail(ERROR_INCOMPATIBLE, "Partition %d ignored_during_riscv_boot value is not a valid boolean\n", pt.partitions.size());}
-        }
-        if(p.contains("ignored_during_arm_boot")) {
-            if (get_json_bool(p["ignored_during_arm_boot"], tmp_bool)) {new_p.flags |= (tmp_bool ? PICOBIN_PARTITION_FLAGS_IGNORED_DURING_ARM_BOOT_BITS : 0);}
-            else {fail(ERROR_INCOMPATIBLE, "Partition %d ignored_during_arm_boot value is not a valid boolean\n", pt.partitions.size());}
+        for (const auto& pair : std::vector<std::pair<std::string, uint32_t>>{
+            {"no_reboot_on_uf2_download", PICOBIN_PARTITION_FLAGS_UF2_DOWNLOAD_NO_REBOOT_BITS},
+            {"ab_non_bootable_owner_affinity", PICOBIN_PARTITION_FLAGS_UF2_DOWNLOAD_AB_NON_BOOTABLE_OWNER_AFFINITY},
+            {"ignored_during_riscv_boot", PICOBIN_PARTITION_FLAGS_IGNORED_DURING_RISCV_BOOT_BITS},
+            {"ignored_during_arm_boot", PICOBIN_PARTITION_FLAGS_IGNORED_DURING_ARM_BOOT_BITS},
+        }) {
+            const std::string json_flag = pair.first;
+            const uint32_t FLAG_BITS = pair.second;
+            if(p.contains(json_flag)) {  
+                if (get_json_bool(p[json_flag], tmp_bool)) {  
+                    new_p.flags |= (tmp_bool ? FLAG_BITS : 0);  
+                } else {  
+                    fail(ERROR_INCOMPATIBLE, "Partition %d %s value is not a valid boolean\n", pt.partitions.size(), json_flag.c_str());  
+                }  
+            }  
         }
         pt.partitions.push_back(new_p);
     }
