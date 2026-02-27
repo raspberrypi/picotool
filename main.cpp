@@ -8260,6 +8260,8 @@ bool otp_permissions_command::execute(device_map &devices) {
 
     settings.config.group = "otp_page_permissions";
     for (auto it = perms_json.begin(); it != perms_json.end(); ++it) {
+        settings.otp.lock0 = 0;
+        settings.otp.lock1 = 0;
         std::stringstream ss;
         ss << "page" << it.key();
         settings.config.key = ss.str();
