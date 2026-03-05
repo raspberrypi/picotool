@@ -12,6 +12,14 @@
 #include "rp2350_a3_rom_end.h"
 #include "rp2350_a4_rom_end.h"
 
+// tsk namespace is polluted on windows
+#ifdef _WIN32
+#undef min
+#undef max
+
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+
 enum memory_type {
     rom,
     flash,
