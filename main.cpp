@@ -7669,7 +7669,7 @@ bool otp_get_command::execute(device_map &devices) {
     picoboot_memory_access raw_access(con);
     auto model = raw_access.get_model();
     auto matches = filter_otp(settings.otp.selectors, otp_cmd_max_bits(), settings.otp.fuzzy);
-    uint32_t last_reg_row = 1; // invalid
+    uint32_t last_reg_row = UINT32_MAX; // invalid
     bool first = true;
     char buf[512];
     uint32_t raw_buffer[OTP_PAGE_ROWS];
@@ -8018,7 +8018,7 @@ bool otp_list_command::execute(device_map &devices) {
     init_otp(otp_regs, settings.otp.extra_files);
 
     auto matches = filter_otp(settings.otp.selectors.empty() ? std::vector<string>({":"}) : settings.otp.selectors, 24, true);
-    uint32_t last_reg_row = 1; // invalid
+    uint32_t last_reg_row = UINT32_MAX; // invalid
     bool first = true;
     char buf[512];
     int indent0 = settings.otp.list_pages ? 18 : 8;
