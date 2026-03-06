@@ -1939,6 +1939,15 @@ bool get_json_int(json value, T& out) {
     }
 }
 
+bool get_json_bool(json value, bool& out) {
+    if (value.is_boolean()) {
+        out = value;
+        return true;
+    } else {
+        return false;
+    }
+}
+
 uint32_t bootrom_func_lookup_rp2040(memory_access& access, uint16_t tag) {
     model_t model = access.get_model();
     // we are only used on RP2040
@@ -6587,10 +6596,23 @@ bool partition_create_command::execute(device_map &devices) {
             else {string p_id = p["id"]; fail(ERROR_INCOMPATIBLE, "Partition ID \"%s\" is not a valid 64bit integer\n", p_id.c_str());}
         }
 
-        if(p.contains("no_reboot_on_uf2_download")) new_p.flags |= PICOBIN_PARTITION_FLAGS_UF2_DOWNLOAD_NO_REBOOT_BITS;
-        if(p.contains("ab_non_bootable_owner_affinity")) new_p.flags |= PICOBIN_PARTITION_FLAGS_UF2_DOWNLOAD_AB_NON_BOOTABLE_OWNER_AFFINITY;
-        if(p.contains("ignored_during_riscv_boot")) new_p.flags |= PICOBIN_PARTITION_FLAGS_IGNORED_DURING_RISCV_BOOT_BITS;
-        if(p.contains("ignored_during_arm_boot")) new_p.flags |= PICOBIN_PARTITION_FLAGS_IGNORED_DURING_ARM_BOOT_BITS;
+        bool tmp_bool;
+        for (const auto& pair : std::vector<std::pair<std::string, uint32_t>>{
+            {"no_reboot_on_uf2_download", PICOBIN_PARTITION_FLAGS_UF2_DOWNLOAD_NO_REBOOT_BITS},
+            {"ab_non_bootable_owner_affinity", PICOBIN_PARTITION_FLAGS_UF2_DOWNLOAD_AB_NON_BOOTABLE_OWNER_AFFINITY},
+            {"ignored_during_riscv_boot", PICOBIN_PARTITION_FLAGS_IGNORED_DURING_RISCV_BOOT_BITS},
+            {"ignored_during_arm_boot", PICOBIN_PARTITION_FLAGS_IGNORED_DURING_ARM_BOOT_BITS},
+        }) {
+            const std::string json_flag = pair.first;
+            const uint32_t FLAG_BITS = pair.second;
+            if(p.contains(json_flag)) {  
+                if (get_json_bool(p[json_flag], tmp_bool)) {  
+                    new_p.flags |= (tmp_bool ? FLAG_BITS : 0);  
+                } else {  
+                    fail(ERROR_INCOMPATIBLE, "Partition %d %s value is not a valid boolean\n", pt.partitions.size(), json_flag.c_str());  
+                }  
+            }  
+        }
         pt.partitions.push_back(new_p);
     }
 
