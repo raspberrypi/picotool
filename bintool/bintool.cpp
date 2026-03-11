@@ -801,7 +801,7 @@ std::vector<uint8_t> get_lm_hash_data(std::vector<uint8_t> bin, uint32_t storage
     if (load_map == nullptr) {
         std::vector<load_map_item::entry> entries;
         if (clear_sram) {
-            // todo gate this clearing of SRAM
+            // todo tidy up this way of hashing the uint32_t
             std::vector<uint32_t> sram_size_vec = {model->sram_end() - model->sram_start()};
             assert(sram_size_vec[0] % 4 == 0);
             entries.push_back({
