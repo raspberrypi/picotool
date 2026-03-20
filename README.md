@@ -561,6 +561,48 @@ Partition 1
   none
 ```
 
+## reboot
+
+`reboot` allows you to reboot a device that is in BOOTSEL mode, or in application mode running compatible code (see [Forced Reboots](#forced-reboots)). You can reboot it into application or BOOTSEL mode, and select the Arm or Risc-V CPU on RP2350
+
+```text
+$ picotool help reboot
+REBOOT:
+    Reboot the device
+
+SYNOPSIS:
+    picotool reboot [-a] [-u] [-g <partition>] [-c <cpu>] [device-selection]
+
+OPTIONS:
+    Reboot type
+        -a, --application
+            Reboot back into the application (this is the default)
+        -u, --usb
+            Reboot back into BOOTSEL mode
+        -g <partition>
+            Select diagnostic partition
+        -c <cpu>
+            Select arm | riscv CPU (if possible)
+    Selecting the device to reboot
+        --bus <bus>
+            Filter devices by USB bus number
+        --address <addr>
+            Filter devices by USB device address
+        --vid <vid>
+            Filter by vendor id
+        --pid <pid>
+            Filter by product id
+        --ser <ser>
+            Filter by serial number
+        -f, --force
+            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
+            command (unless the command itself is a 'reboot') the device will be rebooted back to application mode
+        -F, --force-no-reboot
+            Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
+            command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
+            USB drive mounted
+```
+
 ## seal
 
 `seal` allows you to sign and/or hash a binary to run on RP2350.
