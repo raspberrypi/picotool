@@ -300,7 +300,8 @@ OPTIONS:
         -v, --verify
             Verify the data was written correctly
         -x, --execute
-            Attempt to execute the downloaded file as a program after the load
+            Perform a bootrom reboot to execute the downloaded file as a program after the load - either a flash update boot for binaries in
+            flash, or a RAM image boot for other binaries 
     File to load from
         <filename>
             The file name
