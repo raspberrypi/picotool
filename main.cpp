@@ -5417,9 +5417,11 @@ bool load_command::execute(device_map &devices) {
     vector<uint32_t> available_family_ids;
     uint32_t file_family_id = 0;
     uint32_t override_family_id = settings.family_id;
+    bool multi_family_uf2 = false;
     auto tmp_file_access = get_file_memory_access(0, false, &next_id);
     if (next_id) {
         // UF2 file with multiple family IDs
+        multi_family_uf2 = true;
         settings.family_id = 0;
         next_id = get_family_id(0);
         while (next_id) {
@@ -5436,6 +5438,16 @@ bool load_command::execute(device_map &devices) {
                 available_family_ids[0] = override_family_id;
             }
         }
+    } else {
+        // For anything else, just populate available_family_ids with the family ID from the file
+        uint32_t family_id = get_family_id(0);
+        available_family_ids.push_back(family_id);
+    }
+
+    if (available_family_ids.size() > 1) {
+        vector<string> family_names = {};
+        for (auto family_id : available_family_ids) family_names.push_back(family_name(family_id));
+        fos << "UF2 file contains multiple family IDs: " << cli::join(family_names, ", ") << "\n";
     }
 
     if (settings.load.partition >= 0) {
@@ -5454,10 +5466,6 @@ bool load_command::execute(device_map &devices) {
         settings.offset_set = true;
         settings.partition_size = end - start;
     } else if (!settings.load.ignore_pt && !settings.offset_set) {
-        if (available_family_ids.size() == 0) {
-            uint32_t family_id = get_family_id(0);
-            available_family_ids.push_back(family_id);
-        }
         uint32_t start;
         uint32_t end;
         bool accepted = false;
@@ -5498,9 +5506,9 @@ bool load_command::execute(device_map &devices) {
             }
         }
     }
-    auto file_access = get_file_memory_access(0, false, &file_family_id);
+    auto file_access = multi_family_uf2 ? get_file_memory_access(0, false, &file_family_id) : get_file_memory_access(0);
     if (settings.offset_set && get_file_type() != filetype::bin && raw_access.get_model()->chip() == rp2040) {
-        fail(ERROR_ARGS, "Offset only valid for BIN files");
+        fail(ERROR_ARGS, "On RP2040, offset is only valid for BIN files");
     }
     bool ret = load_guts(con, file_access);
     return ret;
