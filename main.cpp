@@ -5413,7 +5413,31 @@ bool load_guts(picoboot::connection con, iostream_memory_access &file_access) {
 bool load_command::execute(device_map &devices) {
     auto con = get_single_bootsel_device_connection(devices);
     picoboot_memory_access raw_access(con);
-    auto tmp_file_access = get_file_memory_access(0);
+    uint32_t next_id = 0;
+    vector<uint32_t> available_family_ids;
+    uint32_t file_family_id = 0;
+    uint32_t override_family_id = settings.family_id;
+    auto tmp_file_access = get_file_memory_access(0, false, &next_id);
+    if (next_id) {
+        // UF2 file with multiple family IDs
+        settings.family_id = 0;
+        next_id = get_family_id(0);
+        while (next_id) {
+            available_family_ids.push_back(next_id);
+            auto tmp_access = get_file_memory_access(0, false, &next_id);
+        }
+        if (override_family_id) {
+            if (std::find(available_family_ids.begin(), available_family_ids.end(), override_family_id) == available_family_ids.end()) {
+                fos << "WARNING: Requested family ID " << family_name(override_family_id) << " not found in UF2 file, ";
+                fos << "so treating first family ID found in the UF2 file (" << family_name(available_family_ids[0]) << ") as the requested one\n";
+                available_family_ids.resize(1);
+            } else {
+                available_family_ids.resize(1);
+                available_family_ids[0] = override_family_id;
+            }
+        }
+    }
+
     if (settings.load.partition >= 0) {
         auto partitions = get_partitions(con);
         if (!partitions) {
@@ -5429,28 +5453,52 @@ bool load_command::execute(device_map &devices) {
         settings.offset = start + FLASH_START;
         settings.offset_set = true;
         settings.partition_size = end - start;
-    } else if (!settings.load.ignore_pt && !settings.offset_set && tmp_file_access.get_binary_start() == FLASH_START) {
-        uint32_t family_id = get_family_id(0);
-        settings.family_id = family_id;
+    } else if (!settings.load.ignore_pt && !settings.offset_set) {
+        if (available_family_ids.size() == 0) {
+            uint32_t family_id = get_family_id(0);
+            available_family_ids.push_back(family_id);
+        }
         uint32_t start;
         uint32_t end;
-        if (raw_access.get_model()->supports_partition_table()) {
-            if (get_target_partition(con, &start, &end)) {
-                settings.offset = start + FLASH_START;
-                settings.offset_set = true;
-                settings.partition_size = end - start;
+        bool accepted = false;
+        for (auto family_id : available_family_ids) {
+            settings.family_id = override_family_id ? override_family_id : family_id;
+            if (raw_access.get_model()->supports_partition_table() && tmp_file_access.get_binary_start() == FLASH_START) {
+                if (get_target_partition(con, &start, &end)) {
+                    settings.offset = start + FLASH_START;
+                    settings.offset_set = true;
+                    settings.partition_size = end - start;
+                    accepted = true;
+                    file_family_id = family_id;
+                    break;
+                }
             } else {
-                // Check if partition table is present, for correct error message
-                auto partitions = get_partitions(con);
-                if (!partitions) {
-                    fail(ERROR_NOT_POSSIBLE, "This file cannot be loaded onto a device with no partition table");
-                } else {
-                    fail(ERROR_NOT_POSSIBLE, "This file cannot be loaded into the partition table on the device");
+                // Check the family ID is supported by the model (either SRAM, or RP2040)
+                if (raw_access.get_model()->supports_family_id(settings.family_id)) {
+                    if (available_family_ids.size() > 1) {
+                        fos << "Loading family ID " << family_name(settings.family_id) << "\n";
+                    }
+                    accepted = true;
+                    file_family_id = family_id;
+                    break;
                 }
             }
         }
+        if (!accepted) {
+            // Check if partition table is present, for correct error message
+            if (raw_access.get_model()->supports_partition_table() && tmp_file_access.get_binary_start() == FLASH_START) {
+                auto partitions = get_partitions(con);
+                if (!partitions) {
+                    fail(ERROR_NOT_POSSIBLE, "This file cannot be loaded onto an %s device with no partition table", raw_access.get_model()->name().c_str());
+                } else {
+                    fail(ERROR_NOT_POSSIBLE, "This file cannot be loaded into the partition table on the device");
+                }
+            } else {
+                fail(ERROR_NOT_POSSIBLE, "This file cannot be loaded onto an %s device", raw_access.get_model()->name().c_str());
+            }
+        }
     }
-    auto file_access = get_file_memory_access(0);
+    auto file_access = get_file_memory_access(0, false, &file_family_id);
     if (settings.offset_set && get_file_type() != filetype::bin && raw_access.get_model()->chip() == rp2040) {
         fail(ERROR_ARGS, "Offset only valid for BIN files");
     }
