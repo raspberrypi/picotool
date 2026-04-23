@@ -127,6 +127,36 @@ static const string rp2350_arm_ns_family_name = "rp2350-arm-ns";
 static const string rp2350_riscv_family_name = "rp2350-riscv";
 static const string cyw43_firmware_family_name = "cyw43-firmware";
 
+static const std::vector<std::string> family_names = {
+    data_family_name,
+    absolute_family_name,
+    rp2040_family_name,
+    rp2350_arm_s_family_name,
+    rp2350_arm_ns_family_name,
+    rp2350_riscv_family_name,
+    cyw43_firmware_family_name
+};
+
+static const std::map<uint32_t, std::string> family_id_to_name = {
+    {DATA_FAMILY_ID, data_family_name},
+    {ABSOLUTE_FAMILY_ID, absolute_family_name},
+    {RP2040_FAMILY_ID, rp2040_family_name},
+    {RP2350_ARM_S_FAMILY_ID, rp2350_arm_s_family_name},
+    {RP2350_ARM_NS_FAMILY_ID, rp2350_arm_ns_family_name},
+    {RP2350_RISCV_FAMILY_ID, rp2350_riscv_family_name},
+    {CYW43_FIRMWARE_FAMILY_ID, cyw43_firmware_family_name}
+};
+
+static const std::map<std::string, uint32_t> family_name_to_id = {
+    {data_family_name, DATA_FAMILY_ID},
+    {absolute_family_name, ABSOLUTE_FAMILY_ID},
+    {rp2040_family_name, RP2040_FAMILY_ID},
+    {rp2350_arm_s_family_name, RP2350_ARM_S_FAMILY_ID},
+    {rp2350_arm_ns_family_name, RP2350_ARM_NS_FAMILY_ID},
+    {rp2350_riscv_family_name, RP2350_RISCV_FAMILY_ID},
+    {cyw43_firmware_family_name, CYW43_FIRMWARE_FAMILY_ID}
+};
+
 #if !HAS_LIBUSB
 static const string built_without_libusb_message = "\nThis version of picotool was compiled without USB support. Some commands are not available.\n";
 #endif
@@ -365,21 +395,12 @@ struct family_id : public cli::value_base<family_id> {
         string nm = "<" + name() + ">";
         // note we cannot capture "this"
         on_action([&t, nm](string value) {
-            auto ovalue = value;
-            if (value == data_family_name) {
-                t = DATA_FAMILY_ID;
-            } else if (value == absolute_family_name) {
-                t = ABSOLUTE_FAMILY_ID;
-            } else if (value == rp2040_family_name) {
-                t = RP2040_FAMILY_ID;
-            } else if (value == rp2350_arm_s_family_name) {
-                t = RP2350_ARM_S_FAMILY_ID;
-            } else if (value == rp2350_arm_ns_family_name) {
-                t = RP2350_ARM_NS_FAMILY_ID;
-            } else if (value == rp2350_riscv_family_name) {
-                t = RP2350_RISCV_FAMILY_ID;
-            } else if (value == cyw43_firmware_family_name) {
-                t = CYW43_FIRMWARE_FAMILY_ID;
+            std::transform(value.begin(), value.end(), value.begin(),
+                [](unsigned char c){ return std::tolower(c); });
+            std::replace( value.begin(), value.end(), '_', '-');
+            auto family_id = family_name_to_id.find(value);
+            if (family_id != family_name_to_id.end()) {
+                t = family_id->second;
             } else {
                 if (value.find("0x") == 0) {
                     value = value.substr(2);
@@ -391,7 +412,7 @@ struct family_id : public cli::value_base<family_id> {
                             return "Garbage after hex value: " + value.substr(pos);
                         }
                     } catch (std::invalid_argument &) {
-                        return ovalue + " is not a valid hex value";
+                        return value + " is not a valid hex value";
                     } catch (std::out_of_range &) {
                     }
                     if (lvalue != (unsigned int) lvalue) {
@@ -399,7 +420,8 @@ struct family_id : public cli::value_base<family_id> {
                     }
                     t = (unsigned int) lvalue;
                 } else {
-                    return value + " is not a valid family ID";
+                    return value + " is not a valid family ID"
+                    + "\n\nValid family IDs are: " + cli::join(family_names, ", ");
                 }
             }
             return string("");
@@ -409,13 +431,10 @@ struct family_id : public cli::value_base<family_id> {
 };
 
 string family_name(unsigned int family_id) {
-    if (family_id == DATA_FAMILY_ID) return "'" + data_family_name + "'";
-    if (family_id == ABSOLUTE_FAMILY_ID) return "'" + absolute_family_name + "'";
-    if (family_id == RP2040_FAMILY_ID) return "'" + rp2040_family_name + "'";
-    if (family_id == RP2350_ARM_S_FAMILY_ID) return "'" + rp2350_arm_s_family_name + "'";
-    if (family_id == RP2350_ARM_NS_FAMILY_ID) return "'" + rp2350_arm_ns_family_name + "'";
-    if (family_id == RP2350_RISCV_FAMILY_ID) return "'" + rp2350_riscv_family_name + "'";
-    if (family_id == CYW43_FIRMWARE_FAMILY_ID) return "'" + cyw43_firmware_family_name + "'";
+    auto family_name = family_id_to_name.find(family_id);
+    if (family_name != family_id_to_name.end()) {
+        return "'" + family_name->second + "'";
+    }
     if (!family_id) return "none";
     return hex_string(family_id);
 }
@@ -6456,21 +6475,32 @@ uint32_t permissions_to_flags(json permissions) {
     return ret;
 }
 
-uint32_t families_to_flags(std::vector<string> families) {
+uint32_t families_to_flags(std::vector<string> families, bool fail_invalid = false) {
     uint32_t ret = 0;
+    uint32_t id = 0;
+    auto family_id_getter = family_id("family_id").set(id);
     for (auto family : families) {
-        if (family == data_family_name) {
+        auto family_id_ret = family_id_getter.action(family);
+        if (family_id_ret.size() > 0) {
+            if (fail_invalid) {
+                fail(ERROR_FORMAT, "Could not parse family ID from %s: %s", family.c_str(), family_id_ret.c_str());
+            }
+            continue;
+        }
+        if (id == DATA_FAMILY_ID) {
             ret |= PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_DATA_BITS;
-        } else if (family == absolute_family_name) {
+        } else if (id == ABSOLUTE_FAMILY_ID) {
             ret |= PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_ABSOLUTE_BITS;
-        } else if (family == rp2040_family_name) {
+        } else if (id == RP2040_FAMILY_ID) {
             ret |= PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2040_BITS;
-        } else if (family == rp2350_arm_s_family_name) {
+        } else if (id == RP2350_ARM_S_FAMILY_ID) {
             ret |= PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_S_BITS;
-        } else if (family == rp2350_arm_ns_family_name) {
+        } else if (id == RP2350_ARM_NS_FAMILY_ID) {
             ret |= PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_NS_BITS;
-        } else if (family == rp2350_riscv_family_name) {
+        } else if (id == RP2350_RISCV_FAMILY_ID) {
             ret |= PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_RISCV_BITS;
+        } else if (fail_invalid) {
+            fail(ERROR_FORMAT, "Invalid family ID for bootrom flags: %s", family.c_str());
         }
     }
     return ret;
@@ -6513,7 +6543,7 @@ bool partition_create_command::execute(device_map &devices) {
         pt_block = std::make_shared<block>(FLASH_START);
     }
 
-    uint32_t unpartitioned_flags = permissions_to_flags(pt_json["unpartitioned"]["permissions"]) | families_to_flags(pt_json["unpartitioned"]["families"]);
+    uint32_t unpartitioned_flags = permissions_to_flags(pt_json["unpartitioned"]["permissions"]) | families_to_flags(pt_json["unpartitioned"]["families"], true);
     partition_table_item pt(unpartitioned_flags, settings.partition.singleton);
 
 #if SUPPORT_RP2350_A2
@@ -6735,6 +6765,10 @@ bool uf2_info_command::execute(device_map &devices) {
 bool uf2_convert_command::execute(device_map &devices) {
     if (get_file_type_idx(1) != filetype::uf2) {
         fail(ERROR_ARGS, "Output must be a UF2 file\n");
+    }
+
+    if (get_file_type_idx(0) != filetype::elf && get_file_type_idx(0) != filetype::bin) {
+        fail(ERROR_ARGS, "Input must be an ELF or BIN file\n");
     }
 
     uint32_t family_id = get_family_id(0);
