@@ -401,8 +401,7 @@ struct family_id : public cli::value_base<family_id> {
             auto family_id = family_name_to_id.find(value);
             if (family_id != family_name_to_id.end()) {
                 t = family_id->second;
-            } else {
-                if (value.find("0x") == 0) {
+            } else if (value.find("0x") == 0) {
                     value = value.substr(2);
                     size_t pos = 0;
                     long lvalue = std::numeric_limits<long>::max();
@@ -419,10 +418,9 @@ struct family_id : public cli::value_base<family_id> {
                         return value + " is not a valid 32 bit value";
                     }
                     t = (unsigned int) lvalue;
-                } else {
-                    return value + " is not a valid family ID"
-                    + "\n\nValid family IDs are: " + cli::join(family_names, ", ");
-                }
+            } else {
+                return value + " is not a valid family ID"
+                + "\n\nValid family IDs are: " + cli::join(family_names, ", ") + ", or hex strings starting with 0x";
             }
             return string("");
         });
