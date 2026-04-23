@@ -3290,13 +3290,13 @@ string str_permissions(unsigned int p) {
     return ss.str();
 }
 
-void insert_default_families(uint32_t flags_and_permissions, vector<std::string> &family_ids) {
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_ABSOLUTE_BITS) family_ids.emplace_back(family_name(ABSOLUTE_FAMILY_ID));
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2040_BITS) family_ids.emplace_back(family_name(RP2040_FAMILY_ID));
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_S_BITS) family_ids.emplace_back(family_name(RP2350_ARM_S_FAMILY_ID));
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_NS_BITS) family_ids.emplace_back(family_name(RP2350_ARM_NS_FAMILY_ID));
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_RISCV_BITS) family_ids.emplace_back(family_name(RP2350_RISCV_FAMILY_ID));
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_DATA_BITS) family_ids.emplace_back(family_name(DATA_FAMILY_ID));
+void insert_default_families(uint32_t flags_and_permissions, vector<std::string> &family_names) {
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_ABSOLUTE_BITS) family_names.emplace_back(family_name(ABSOLUTE_FAMILY_ID));
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2040_BITS) family_names.emplace_back(family_name(RP2040_FAMILY_ID));
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_S_BITS) family_names.emplace_back(family_name(RP2350_ARM_S_FAMILY_ID));
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_NS_BITS) family_names.emplace_back(family_name(RP2350_ARM_NS_FAMILY_ID));
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_RISCV_BITS) family_names.emplace_back(family_name(RP2350_RISCV_FAMILY_ID));
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_DATA_BITS) family_names.emplace_back(family_name(DATA_FAMILY_ID));
 }
 
 static chip_t image_type_exe_chip_to_chip(uint image_type_exe_chip) {
@@ -3408,9 +3408,9 @@ void info_guts(memory_access &raw_access, void *con) {
                 info_pair("partition table", partition_table->singleton ? "singleton" : "non-singleton");
                 std::stringstream unpartitioned;
                 unpartitioned << str_permissions(partition_table->unpartitioned_flags);
-                std::vector<std::string> family_ids;
-                insert_default_families(partition_table->unpartitioned_flags, family_ids);
-                unpartitioned << ", uf2 { " << cli::join(family_ids, ", ") << " }";
+                std::vector<std::string> family_names;
+                insert_default_families(partition_table->unpartitioned_flags, family_names);
+                unpartitioned << ", uf2 { " << cli::join(family_names, ", ") << " }";
                 info_pair("un-partitioned space", unpartitioned.str());
 
                 for (size_t i=0; i < partition_table->partitions.size(); i++) {
@@ -3440,17 +3440,17 @@ void info_guts(memory_access &raw_access, void *con) {
                         pstring << ", id=" << hex_string(id, 16, false);
                     }
                     uint32_t num_extra_families = partition.extra_families.size();
-                    family_ids.clear();
-                    insert_default_families(flags, family_ids);
+                    family_names.clear();
+                    insert_default_families(flags, family_names);
                     for (auto family : partition.extra_families) {
-                        family_ids.emplace_back(family_name(family));
+                        family_names.emplace_back(family_name(family));
                     }
                     if (flags & PICOBIN_PARTITION_FLAGS_HAS_NAME_BITS) {
                         pstring << ", \"";
                         pstring << partition.name;
                         pstring << '"';
                     }
-                    pstring << ", uf2 { " << cli::join(family_ids, ", ") << " }";
+                    pstring << ", uf2 { " << cli::join(family_names, ", ") << " }";
                     pstring << ", arm_boot " << !(flags & PICOBIN_PARTITION_FLAGS_IGNORED_DURING_ARM_BOOT_BITS);
                     pstring << ", riscv_boot " << !(flags & PICOBIN_PARTITION_FLAGS_IGNORED_DURING_RISCV_BOOT_BITS);
                     info_pair(pname.str(), pstring.str());
@@ -6374,9 +6374,9 @@ bool partition_info_command::execute(device_map &devices) {
     }
     printf("un-partitioned_space : ");
     fos << str_permissions(unpartitioned.permissions_and_flags);
-    std::vector<std::string> family_ids;
-    insert_default_families(unpartitioned.permissions_and_flags, family_ids);
-    printf(", uf2 { %s }\n", cli::join(family_ids, ", ").c_str());
+    std::vector<std::string> family_names;
+    insert_default_families(unpartitioned.permissions_and_flags, family_names);
+    printf(", uf2 { %s }\n", cli::join(family_names, ", ").c_str());
 
     if (has_pt) {
         printf("partitions:\n");
@@ -6418,8 +6418,8 @@ bool partition_info_command::execute(device_map &devices) {
             uint32_t num_extra_families =
                     (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_NUM_EXTRA_FAMILIES_BITS)
                             >> PICOBIN_PARTITION_FLAGS_ACCEPTS_NUM_EXTRA_FAMILIES_LSB;
-            family_ids.clear();
-            insert_default_families(flags_and_permissions, family_ids);
+            family_names.clear();
+            insert_default_families(flags_and_permissions, family_names);
             if (num_extra_families | (flags_and_permissions & PICOBIN_PARTITION_FLAGS_HAS_NAME_BITS)) {
                 cmd.dParams[0] = PT_INFO_SINGLE_PARTITION | PT_INFO_PARTITION_FAMILY_IDS | PT_INFO_PARTITION_NAME |
                                 (i << 24);
@@ -6429,7 +6429,7 @@ bool partition_info_command::execute(device_map &devices) {
                 assert((flags_and_permissions & PICOBIN_PARTITION_FLAGS_HAS_NAME_BITS) ||
                        got == num_extra_families + 1);
                 for (unsigned int j = 1; j < num_extra_families + 1; j++) {
-                    family_ids.emplace_back(family_name(family_id_name_buf_32[j + 1]));
+                    family_names.emplace_back(family_name(family_id_name_buf_32[j + 1]));
                 }
                 if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_HAS_NAME_BITS) {
                     uint8_t *bytes = &family_id_name_buf[(num_extra_families + 2) * 4];
@@ -6440,7 +6440,7 @@ bool partition_info_command::execute(device_map &devices) {
                     putchar('"');
                 }
             }
-            printf(", uf2 { %s }", cli::join(family_ids, ", ").c_str());
+            printf(", uf2 { %s }", cli::join(family_names, ", ").c_str());
             printf(", arm_boot %d", !(flags_and_permissions & PICOBIN_PARTITION_FLAGS_IGNORED_DURING_ARM_BOOT_BITS));
             printf(", riscv_boot %d", !(flags_and_permissions & PICOBIN_PARTITION_FLAGS_IGNORED_DURING_RISCV_BOOT_BITS));
             printf("\n");
