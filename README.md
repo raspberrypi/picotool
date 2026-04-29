@@ -607,7 +607,7 @@ OPTIONS:
 
 `seal` allows you to sign and/or hash a binary to run on RP2350.
 
-By default, it will just sign the binary, but this can be configured with the `--hash` and `--no-sign` arguments.
+By default, it will just add an embedded block to the end containing a relative load map, thus sealing the binary. The `--hash` and `--sign` arguments can be passed to include an hash and a signature; `--major`, `--minor` and `--rollback` can be passed to include a version; and `--clear` or `--pin-xip-sram` can be passed to add load map items.
 
 Your signing key must be for the _secp256k1_ curve, in PEM format. You can create a .PEM file with:
 
@@ -667,7 +667,7 @@ OPTIONS:
 
 ## encrypt
 
-`encrypt` allows you to encrypt and sign a binary for use on the RP2350. By default, it will sign the encrypted binary, but that can be configured similarly to `picotool seal`. You can either provide your own bootloader to decrypt the binary (see pico-examples/bootloaders/encrypted), or embed a decrypting bootloader into the binary with the `--embed` argument, to create a self-decrypting binary.
+`encrypt` allows you to encrypt and sign a binary for use on the RP2350. By default, it will sign the encrypted binary, but that can be configured similarly to `picotool seal`. You can either provide your own bootloader to decrypt the binary (see pico-examples/bootloaders/encrypted), or embed a decrypting bootloader into the binary with the `--embed` argument, to create a self-decrypting binary. When embedding a bootloader, by default it will add a load map item to clear SRAM on load like the `picotool seal --clear` option - this can be disabled by passing `--no-clear`.
 
 The encrypted binary will have the following structure:
 
