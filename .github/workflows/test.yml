@@ -33,10 +33,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Install mingw (Windows mingw)
-        if: runner.os == 'Windows' && matrix.generator == 'Ninja'
-        run: |
-          choco install -y mingw --version=12.2.0
       - name: Install arm-none-eabi-gcc (Windows & MacOS)
         if: runner.os == 'Windows' || runner.os == 'macOS'
         uses: carlosperate/arm-none-eabi-gcc-action@v1
