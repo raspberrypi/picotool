@@ -562,6 +562,7 @@ struct _settings {
         bool otp_key_page_set = false;
         bool fast_rosc = false;
         bool use_mbedtls = false;
+        bool no_clear_sram = false;
         uint16_t otp_key_page = 29;
     } encrypt;
 
@@ -920,7 +921,7 @@ struct encrypt_command : public cmd {
             (
                 option("--hash").set(settings.seal.hash) % "Hash the encrypted file" +
                 option("--sign").set(settings.seal.sign) % "Sign the encrypted file" +
-                option("--clear").set(settings.seal.clear_sram) % "Clear all of SRAM on load" +
+                option("--no-clear").set(settings.encrypt.no_clear_sram) % "Don't clear all of SRAM on load" +
                 option("--pin-xip-sram").set(settings.seal.pin_xip_sram) % "Pin XIP SRAM on load"
             ).min(0).doc_non_optional(true) % "Signing Configuration" +
             named_file_selection_x("infile", 0) % "File to load from" +
@@ -5237,6 +5238,9 @@ bool encrypt_command::execute(device_map &devices) {
     bool keyFromFile = true;
     bool keyIsShare = false;
     bool ivFromFile = true;
+
+    // Set settings.seal.clear_sram to opposite of settings.encrypt.no_clear_sram
+    settings.seal.clear_sram = !settings.encrypt.no_clear_sram;
 
     aes_key_t aes_key;
     aes_key_share_t aes_key_share;
