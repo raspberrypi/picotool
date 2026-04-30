@@ -1,5 +1,9 @@
 # Copy this file to /etc/udev/rules.d/
 # You can reload the udev rules with "udevadm control --reload"
+# You may need to remove the GROUP= lines when not using Raspberry Pi OS, leaving the rules as:
+# SUBSYSTEM=="usb", \
+#     ...
+#     MODE="660"
 
 SUBSYSTEM=="usb", \
     ATTRS{idVendor}=="2e8a", \
