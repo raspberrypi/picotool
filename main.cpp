@@ -4076,9 +4076,9 @@ string missing_device_string(bool wasRetry, bool requires_rp2350 = false) {
             snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found with address %d.", device_name, settings.address);
         }
     } else if (settings.bus != -1) {
-        snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found found on bus %d.", device_name, settings.bus);
+        snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found on bus %d.", device_name, settings.bus);
     } else if (!settings.ser.empty()) {
-        snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found found with serial number %s.", device_name, settings.ser.c_str());
+        snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found with serial number %s.", device_name, settings.ser.c_str());
     } else {
         snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found.", device_name);
     }
