@@ -687,7 +687,7 @@ void hash_andor_sign_block(block *new_block, const public_t public_key, const pr
 }
 
 
-bool check_generic_load_map(std::shared_ptr<load_map_item> load_map, model_t model, bool &pin_xip_sram) {
+bool detect_generic_load_map(std::shared_ptr<load_map_item> load_map, model_t model, bool &pin_xip_sram) {
     if (load_map == nullptr) {
         return false;
     }
@@ -704,7 +704,7 @@ bool check_generic_load_map(std::shared_ptr<load_map_item> load_map, model_t mod
 std::vector<uint8_t> get_lm_hash_data(elf_file *elf, block *new_block, model_t model, bool clear_sram = false, bool pin_xip_sram = false) {
     std::vector<uint8_t> to_hash;
     std::shared_ptr<load_map_item> load_map = new_block->get_item<load_map_item>();
-    if (check_generic_load_map(load_map, model, pin_xip_sram)) {
+    if (detect_generic_load_map(load_map, model, pin_xip_sram)) {
         new_block->items.erase(std::remove(new_block->items.begin(), new_block->items.end(), load_map), new_block->items.end());
         load_map = nullptr;
     }
@@ -794,7 +794,7 @@ std::vector<uint8_t> get_lm_hash_data(elf_file *elf, block *new_block, model_t m
 std::vector<uint8_t> get_lm_hash_data(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *new_block, get_more_bin_cb more_cb, model_t model, bool clear_sram = false, bool pin_xip_sram = false) {
     std::vector<uint8_t> to_hash;
     std::shared_ptr<load_map_item> load_map = new_block->get_item<load_map_item>();
-    if (check_generic_load_map(load_map, model, pin_xip_sram)) {
+    if (detect_generic_load_map(load_map, model, pin_xip_sram)) {
         new_block->items.erase(std::remove(new_block->items.begin(), new_block->items.end(), load_map), new_block->items.end());
         load_map = nullptr;
     }
