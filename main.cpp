@@ -921,7 +921,7 @@ struct encrypt_command : public cmd {
             (
                 option("--hash").set(settings.seal.hash) % "Hash the encrypted file" +
                 option("--sign").set(settings.seal.sign) % "Sign the encrypted file" +
-                option("--no-clear").set(settings.encrypt.no_clear_sram) % "Don't clear all of SRAM on load" +
+                option("--no-clear").set(settings.encrypt.no_clear_sram) % "Don't clear all of main SRAM on load" +
                 option("--pin-xip-sram").set(settings.seal.pin_xip_sram) % "Pin XIP SRAM on load"
             ).min(0).doc_non_optional(true) % "Signing Configuration" +
             named_file_selection_x("infile", 0) % "File to load from" +
@@ -954,7 +954,7 @@ struct seal_command : public cmd {
             (
                 option("--hash").set(settings.seal.hash) % "Hash the file" +
                 option("--sign").set(settings.seal.sign) % "Sign the file" +
-                option("--clear").set(settings.seal.clear_sram) % "Clear all of SRAM on load" +
+                option("--clear").set(settings.seal.clear_sram) % "Clear all of main SRAM on load" +
                 option("--pin-xip-sram").set(settings.seal.pin_xip_sram) % "Pin XIP SRAM on load"
             ).min(0).doc_non_optional(true) % "Configuration" +
             named_file_selection_x("infile", 0) % "File to load from" +

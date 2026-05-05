@@ -645,7 +645,7 @@ OPTIONS:
         --sign
             Sign the file
         --clear
-            Clear all of SRAM on load
+            Clear all of main SRAM on load
         --pin-xip-sram
             Pin XIP SRAM on load
     File to load from
@@ -725,7 +725,7 @@ OPTIONS:
         --sign
             Sign the encrypted file
         --no-clear
-            Don't clear all of SRAM on load
+            Don't clear all of main SRAM on load
         --pin-xip-sram
             Pin XIP SRAM on load
     File to load from
