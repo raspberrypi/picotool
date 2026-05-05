@@ -607,7 +607,7 @@ OPTIONS:
 
 `seal` allows you to sign and/or hash a binary to run on RP2350.
 
-By default, it will just add an embedded block to the end containing a relative load map, thus sealing the binary. The `--hash` and `--sign` arguments can be passed to include an hash and a signature; `--major`, `--minor` and `--rollback` can be passed to include a version; and `--clear` or `--pin-xip-sram` can be passed to add load map items indicating clear of SRAM and pin of XIP SRAM.
+By default, it will just add an embedded block to the end containing a relative load map, thus sealing the binary. The `--hash` and `--sign` arguments can be passed to include an hash and a signature; `--major`, `--minor` and `--rollback` can be passed to include a version; and `--clear` or `--pin-xip-sram` can be passed to add load map items indicating whether SRAM should be cleared and whether XIP SRAM should be pinned.
 
 Your signing key must be for the _secp256k1_ curve, in PEM format. You can create a .PEM file with:
 
