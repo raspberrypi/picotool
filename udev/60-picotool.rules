@@ -1,27 +1,42 @@
 # Copy this file to /etc/udev/rules.d/
 # You can reload the udev rules with "udevadm control --reload"
 
+# Rules for plugdev access
 SUBSYSTEM=="usb", \
     ATTRS{idVendor}=="2e8a", \
     ATTRS{idProduct}=="0003", \
-    TAG+="uaccess", \
     MODE="660", \
     GROUP="plugdev"
 SUBSYSTEM=="usb", \
     ATTRS{idVendor}=="2e8a", \
     ATTRS{idProduct}=="0009", \
-    TAG+="uaccess", \
     MODE="660", \
     GROUP="plugdev"
 SUBSYSTEM=="usb", \
     ATTRS{idVendor}=="2e8a", \
     ATTRS{idProduct}=="000a", \
-    TAG+="uaccess", \
     MODE="660", \
     GROUP="plugdev"
 SUBSYSTEM=="usb", \
     ATTRS{idVendor}=="2e8a", \
     ATTRS{idProduct}=="000f", \
-    TAG+="uaccess", \
     MODE="660", \
     GROUP="plugdev"
+
+# Rules for seat access
+SUBSYSTEM=="usb", \
+    ATTRS{idVendor}=="2e8a", \
+    ATTRS{idProduct}=="0003", \
+    TAG+="uaccess"
+SUBSYSTEM=="usb", \
+    ATTRS{idVendor}=="2e8a", \
+    ATTRS{idProduct}=="0009", \
+    TAG+="uaccess"
+SUBSYSTEM=="usb", \
+    ATTRS{idVendor}=="2e8a", \
+    ATTRS{idProduct}=="000a", \
+    TAG+="uaccess"
+SUBSYSTEM=="usb", \
+    ATTRS{idVendor}=="2e8a", \
+    ATTRS{idProduct}=="000f", \
+    TAG+="uaccess"
