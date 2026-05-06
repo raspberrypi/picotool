@@ -16,10 +16,10 @@ SYNOPSIS:
     picotool config [-s <key> <value>] [-g <group>] <filename> [-t <type>]
     picotool load [--ignore-partitions] [--family <family_id>] [-p <partition>] [-n] [-N] [-u] [-v] [-x] <filename> [-t <type>] [-o
                 <offset>] [device-selection]
-    picotool encrypt [--quiet] [--verbose] [--embed] [--fast-rosc] [--use-mbedtls] [--otp-key-page <page>] [--hash] [--sign] <infile> [-t
-                <type>] [-o <offset>] <outfile> [-t <type>] <aes_key> <iv_salt> <signing_key> <otp>
-    picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] <key> <otp>
-                [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
+    picotool encrypt [--quiet] [--verbose] [--embed] [--fast-rosc] [--use-mbedtls] [--otp-key-page <page>] [--hash] [--sign] [--no-clear]
+                [--pin-xip-sram] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] <aes_key> <iv_salt> <signing_key> <otp>
+    picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] [--pin-xip-sram] <infile> [-t <type>] [-o <offset>] <outfile> [-t
+                <type>] <key> <otp> [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
     picotool link [--quiet] [--verbose] <outfile> [-t <type>] <infile1> [-t <type>] <infile2> [-t <type>] [<infile3>] [-t <type>] [-p <pad>]
     picotool save [-p] [-v] [--family <family_id>] <filename> [-t <type>] [device-selection]
     picotool save -a [-v] [--family <family_id>] <filename> [-t <type>] [device-selection]
@@ -607,7 +607,7 @@ OPTIONS:
 
 `seal` allows you to sign and/or hash a binary to run on RP2350.
 
-By default, it will just sign the binary, but this can be configured with the `--hash` and `--no-sign` arguments.
+By default, it will just add an embedded block to the end containing a relative load map, thus sealing the binary. The `--hash` and `--sign` arguments can be passed to include an hash and a signature; `--major`, `--minor` and `--rollback` can be passed to include a version; and `--clear` or `--pin-xip-sram` can be passed to add load map items indicating whether SRAM should be cleared and whether XIP SRAM should be pinned.
 
 Your signing key must be for the _secp256k1_ curve, in PEM format. You can create a .PEM file with:
 
@@ -621,8 +621,8 @@ SEAL:
     Add final metadata to a binary, optionally including a hash and/or signature.
 
 SYNOPSIS:
-    picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] <key> <otp>
-                [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
+    picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] [--pin-xip-sram] <infile> [-t <type>] [-o <offset>] <outfile> [-t
+                <type>] <key> <otp> [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
 
 OPTIONS:
         --quiet
@@ -645,7 +645,9 @@ OPTIONS:
         --sign
             Sign the file
         --clear
-            Clear all of SRAM on load
+            Clear all of main SRAM on load
+        --pin-xip-sram
+            Pin XIP SRAM on load
     File to load from
         <infile>
             The file name
@@ -665,7 +667,7 @@ OPTIONS:
 
 ## encrypt
 
-`encrypt` allows you to encrypt and sign a binary for use on the RP2350. By default, it will sign the encrypted binary, but that can be configured similarly to `picotool seal`. You can either provide your own bootloader to decrypt the binary (see pico-examples/bootloaders/encrypted), or embed a decrypting bootloader into the binary with the `--embed` argument, to create a self-decrypting binary.
+`encrypt` allows you to encrypt and sign a binary for use on the RP2350. By default, it will sign the encrypted binary, but that can be configured similarly to `picotool seal`. You can either provide your own bootloader to decrypt the binary (see pico-examples/bootloaders/encrypted), or embed a decrypting bootloader into the binary with the `--embed` argument, to create a self-decrypting binary. When embedding a bootloader, by default it will add a load map item to clear SRAM on load like the `picotool seal --clear` option - this can be disabled by passing `--no-clear`.
 
 The encrypted binary will have the following structure:
 
@@ -691,8 +693,8 @@ ENCRYPT:
     Encrypt the program.
 
 SYNOPSIS:
-    picotool encrypt [--quiet] [--verbose] [--embed] [--fast-rosc] [--use-mbedtls] [--otp-key-page <page>] [--hash] [--sign] <infile> [-t
-                <type>] [-o <offset>] <outfile> [-t <type>] <aes_key> <iv_salt> <signing_key> <otp>
+    picotool encrypt [--quiet] [--verbose] [--embed] [--fast-rosc] [--use-mbedtls] [--otp-key-page <page>] [--hash] [--sign] [--no-clear]
+                [--pin-xip-sram] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] <aes_key> <iv_salt> <signing_key> <otp>
 
 OPTIONS:
         --quiet
@@ -722,6 +724,10 @@ OPTIONS:
             Hash the encrypted file
         --sign
             Sign the encrypted file
+        --no-clear
+            Don't clear all of main SRAM on load
+        --pin-xip-sram
+            Pin XIP SRAM on load
     File to load from
         <infile>
             The file name

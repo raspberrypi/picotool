@@ -3,7 +3,6 @@ if (NOT TARGET mbedtls)
     add_library(bintool STATIC
             bintool.cpp)
     target_compile_definitions(bintool PRIVATE
-            NO_PICO_PLATFORM=1
             HAS_MBEDTLS=0
             )
 
@@ -18,7 +17,6 @@ else()
             bintool.cpp
             mbedtls_wrapper.c)
     target_compile_definitions(bintool PRIVATE
-            NO_PICO_PLATFORM=1
             HAS_MBEDTLS=1
             )
 

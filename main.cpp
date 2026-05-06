@@ -549,6 +549,7 @@ struct _settings {
         bool hash = false;
         bool sign = false;
         bool clear_sram = false;
+        bool pin_xip_sram = false;
         bool set_tbyb = false;
         uint16_t major_version = 0;
         uint16_t minor_version = 0;
@@ -561,6 +562,7 @@ struct _settings {
         bool otp_key_page_set = false;
         bool fast_rosc = false;
         bool use_mbedtls = false;
+        bool no_clear_sram = false;
         uint16_t otp_key_page = 29;
     } encrypt;
 
@@ -918,7 +920,9 @@ struct encrypt_command : public cmd {
             ).force_expand_help(true) +
             (
                 option("--hash").set(settings.seal.hash) % "Hash the encrypted file" +
-                option("--sign").set(settings.seal.sign) % "Sign the encrypted file"
+                option("--sign").set(settings.seal.sign) % "Sign the encrypted file" +
+                option("--no-clear").set(settings.encrypt.no_clear_sram) % "Don't clear all of main SRAM on load" +
+                option("--pin-xip-sram").set(settings.seal.pin_xip_sram) % "Pin XIP SRAM on load"
             ).min(0).doc_non_optional(true) % "Signing Configuration" +
             named_file_selection_x("infile", 0) % "File to load from" +
             (
@@ -950,7 +954,8 @@ struct seal_command : public cmd {
             (
                 option("--hash").set(settings.seal.hash) % "Hash the file" +
                 option("--sign").set(settings.seal.sign) % "Sign the file" +
-                option("--clear").set(settings.seal.clear_sram) % "Clear all of SRAM on load"
+                option("--clear").set(settings.seal.clear_sram) % "Clear all of main SRAM on load" +
+                option("--pin-xip-sram").set(settings.seal.pin_xip_sram) % "Pin XIP SRAM on load"
             ).min(0).doc_non_optional(true) % "Configuration" +
             named_file_selection_x("infile", 0) % "File to load from" +
             (
@@ -3336,7 +3341,7 @@ void info_guts(memory_access &raw_access, void *con) {
             verified_t sig_verified = none;
         #if HAS_MBEDTLS
             // Pass empty bin, which will be populated by more_cb if there is a signature/hash_value
-            verify_block({}, raw_access.get_binary_start(), raw_access.get_binary_start(), current_block, hash_verified, sig_verified, more_cb);
+            verify_block({}, raw_access.get_binary_start(), raw_access.get_binary_start(), current_block, raw_access.get_model(), hash_verified, sig_verified, more_cb);
         #endif
 
             // Addresses
@@ -5062,7 +5067,7 @@ uint32_t __noinline otp_calculate_ecc(uint16_t x) {
 
 
 #if HAS_MBEDTLS
-void sign_guts_elf(elf_file* elf, private_t private_key, public_t public_key) {
+void sign_guts_elf(elf_file* elf, private_t private_key, public_t public_key, model_t model) {
     std::unique_ptr<block> first_block = find_first_block(elf);
     if (!first_block) {
         // Throw a clearer error for RP2040 binaries with no block loop
@@ -5147,8 +5152,9 @@ void sign_guts_elf(elf_file* elf, private_t private_key, public_t public_key) {
 
     hash_andor_sign(
         elf, &new_block, public_key, private_key,
+        model,
         settings.seal.hash, settings.seal.sign,
-        settings.seal.clear_sram
+        settings.seal.clear_sram, settings.seal.pin_xip_sram
     );
 }
 
@@ -5217,8 +5223,9 @@ vector<uint8_t> sign_guts_bin(iostream_memory_access in, private_t private_key, 
     auto sig_data = hash_andor_sign(
         bin, bin_start, bin_start,
         &new_block, public_key, private_key,
+        in.get_model(),
         settings.seal.hash, settings.seal.sign,
-        settings.seal.clear_sram
+        settings.seal.clear_sram, settings.seal.pin_xip_sram
     );
 
     return sig_data;
@@ -5231,6 +5238,9 @@ bool encrypt_command::execute(device_map &devices) {
     bool keyFromFile = true;
     bool keyIsShare = false;
     bool ivFromFile = true;
+
+    // Set settings.seal.clear_sram to opposite of settings.encrypt.no_clear_sram
+    settings.seal.clear_sram = !settings.encrypt.no_clear_sram;
 
     aes_key_t aes_key;
     aes_key_share_t aes_key_share;
@@ -5416,11 +5426,13 @@ bool encrypt_command::execute(device_map &devices) {
             new_block.items.erase(std::remove(new_block.items.begin(), new_block.items.end(), load_map), new_block.items.end());
         }
 
+        model_t model = get_model(0);
+
         if (settings.encrypt.embed) {
             std::vector<uint8_t> iv_data;
             std::vector<uint8_t> enc_data;
             uint32_t data_start_address = SRAM_START;
-            encrypt_guts(elf, &new_block, aes_key, iv_data, enc_data);
+            encrypt_guts(elf, &new_block, aes_key, model, iv_data, enc_data);
 
             // Salt IV
             assert(iv_data.size() == iv_salt.size());
@@ -5433,7 +5445,7 @@ bool encrypt_command::execute(device_map &devices) {
 
             auto program = get_iostream_memory_access<iostream_memory_access>(tmp, filetype::elf, true);
             // todo should be determined from image_def
-            program.set_model(std::make_shared<model_rp2350>());
+            program.set_model(model);
 
             // data_start_addr
             settings.config.key = "data_start_addr";
@@ -5513,14 +5525,13 @@ bool encrypt_command::execute(device_map &devices) {
             }
 
             // Sign the final thing
-            settings.seal.clear_sram = true;
-            sign_guts_elf(enc_elf, private_key, public_key);
+            sign_guts_elf(enc_elf, private_key, public_key, model);
 
             auto out = get_file_idx(ios::out|ios::binary, 1);
             enc_elf->write(out);
             out->close();
         } else {
-            encrypt(elf, &new_block, aes_key, public_key, private_key, iv_salt, settings.seal.hash, settings.seal.sign);
+            encrypt(elf, &new_block, aes_key, public_key, private_key, model, iv_salt, settings.seal.hash, settings.seal.sign);
             auto out = get_file_idx(ios::out|ios::binary, 1);
             elf->write(out);
             out->close();
@@ -5548,7 +5559,7 @@ bool encrypt_command::execute(device_map &devices) {
             new_block.items.erase(std::remove(new_block.items.begin(), new_block.items.end(), load_map), new_block.items.end());
         }
 
-        auto enc_data = encrypt(bin, bin_start, bin_start, &new_block, aes_key, public_key, private_key, iv_salt, settings.seal.hash, settings.seal.sign);
+        auto enc_data = encrypt(bin, bin_start, bin_start, &new_block, aes_key, public_key, private_key, binfile.get_model(), iv_salt, settings.seal.hash, settings.seal.sign);
 
         auto out = get_file_idx(ios::out|ios::binary, 1);
         out->write((const char *)enc_data.data(), enc_data.size());
@@ -5752,7 +5763,7 @@ bool seal_command::execute(device_map &devices) {
         elf->read_file(get_file(ios::in|ios::binary));
         // Remove any holes in the ELF file, as these cause issues when signing/hashing
         elf->remove_sh_holes();
-        sign_guts_elf(elf, private_key, public_key);
+        sign_guts_elf(elf, private_key, public_key, get_model(0));
 
         auto out = get_file_idx(ios::out|ios::binary, 1);
         elf->write(out);
@@ -8343,7 +8354,7 @@ bool otp_permissions_command::execute(device_map &devices) {
     elf_file source_file(settings.verbose);
     elf_file *elf = &source_file;
     elf->read_file(tmp);
-    sign_guts_elf(elf, private_key, public_key);
+    sign_guts_elf(elf, private_key, public_key, program.get_model());
     auto out = std::make_shared<std::stringstream>();
     elf->write(out);
 
