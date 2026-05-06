@@ -1383,9 +1383,9 @@ struct uf2_combine_command : public cmd {
         return (
                 option("--quiet").set(settings.quiet) % "Don't print any output" +
                 option("--verbose").set(settings.verbose) % "Print verbose output" +
-                named_typed_file_selection_x("infile1", 0, "uf2") % "First file to combine" +
-                named_typed_file_selection_x("infile1", 1, "uf2") % "Second file to combine" +
-                named_typed_file_selection_x("outfile", 2, "uf2") % "File to save output to" +
+                named_typed_file_selection_x("infile1", 1, "uf2") % "First file to combine" +
+                named_typed_file_selection_x("infile2", 2, "uf2") % "Second file to combine" +
+                named_typed_file_selection_x("outfile", 0, "uf2") % "File to save output to" +
                 (
                     option("--family") & family_id("family_id").set(settings.family_id) % "family ID for combined UF2 (defaults to first one)"
                 ).force_expand_help(true) % "UF2 Family options" +
@@ -6845,12 +6845,12 @@ bool uf2_combine_command::execute(device_map &devices) {
         fail(ERROR_ARGS, "Cannot use both partition and offset options together\n");
     }
 
-    auto file1 = get_file_idx(ios::in|ios::binary, 0);
-    auto file2 = get_file_idx(ios::in|ios::binary, 1);
-    auto out = get_file_idx(ios::out|ios::binary, 2);
+    auto out = get_file_idx(ios::out|ios::binary, 0);
+    auto file1 = get_file_idx(ios::in|ios::binary, 1);
+    auto file2 = get_file_idx(ios::in|ios::binary, 2);
 
     if (settings.uf2.partition_set) {
-        auto access = get_file_memory_access(0);
+        auto access = get_file_memory_access(1);
 
         vector<uint8_t> bin;
         auto blocks = find_all_blocks(access, bin);
