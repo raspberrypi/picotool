@@ -4774,6 +4774,7 @@ bool erase_command::execute(device_map &devices) {
 
     {
         progress_bar bar("Erasing: ");
+        con.exit_xip();
         for (uint32_t addr = start; addr < end; addr += FLASH_SECTOR_ERASE_SIZE) {
             bar.progress(addr-start, end-start);
             con.flash_erase(addr, FLASH_SECTOR_ERASE_SIZE);
