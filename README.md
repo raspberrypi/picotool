@@ -612,6 +612,9 @@ OPTIONS:
             Filter by product id
         --ser <ser>
             Filter by serial number
+        --rp2040
+            Assume the device is an RP2040 - this is only required when using a custom vid/pid with an RP2040 on Windows, and is ignored on
+            other operating systems
         -f, --force
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be rebooted back to application mode
