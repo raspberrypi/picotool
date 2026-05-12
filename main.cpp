@@ -611,7 +611,7 @@ auto device_selection =
         (option("--vid") & integer("vid").set(settings.vid).if_missing([] { return "missing vid"; })) % "Filter by vendor id" +
         (option("--pid") & integer("pid").set(settings.pid)) % "Filter by product id" +
         (option("--ser") & value("ser").set(settings.ser)) % "Filter by serial number"
-        + option("--rp2040").set(settings.force_rp2040) % "Use RP2040-specific workarounds when using a custom vid/pid on Windows (ignored on other platforms)"
+        + option("--rp2040").set(settings.force_rp2040) % "Assume the device is an RP2040 - this is only required when using a custom vid/pid with an RP2040 on Windows, and is ignored on other operating systems"
         + option('f', "--force").set(settings.force) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode" +
                 option('F', "--force-no-reboot").set(settings.force_no_reboot) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the USB drive mounted"
     ).min(0).doc_non_optional(true).collapse_synopsys("device-selection");
@@ -8707,8 +8707,9 @@ int main(int argc, char **argv) {
                     }
 
                     if (settings.vid == 0 && !settings.ser.empty() && !devices[dr_vidpid_bootrom_ok].empty()) {
-                        // Searching with no vid/pid filtering (ie opening all devices) can cause issues, so stop
-                        // searching when we have a serial number, as we know we have the correct device
+                        // Searching with no vid/pid filtering (ie attempting to open all USB devices to look for a PICOBOOT interface)
+                        // can cause issues, so stop searching when we have found a device with the correct serial number, as we know we have
+                        // the correct device
                         DEBUG_LOG("Found bootrom device with serial number, so stopping search");
                         break;
                     }
@@ -8812,7 +8813,9 @@ int main(int argc, char **argv) {
                                 struct libusb_device_descriptor desc;
                                 libusb_get_device_descriptor(to_reboot, &desc);
                                 if (desc.idProduct == PRODUCT_ID_RP2040_STDIO_USB || settings.force_rp2040) {
-                                    disable_mask = 0;   // enable MSC interface so Zadig works correctly
+                                    // the Zadig driver should be setup for the device in BOOTSEL mode with no interfaces disabled,  
+                                    // as all the interfaces are enabled when you plug it in while holding the BOOTSEL button  
+                                    disable_mask = 0;
                                     settings.force_rp2040 = true;
                                 }
                             }
@@ -8852,7 +8855,7 @@ int main(int argc, char **argv) {
                         settings.address = -1;
                         settings.bus = -1;
                         if (settings.pid != -1 || settings.vid != -1) {
-                            // vid/pid filtering was enabled, but should change in BOOTSEL mode, so needs to be disabled
+                            // vid/pid filtering was enabled, but may change in BOOTSEL mode, so needs to be disabled
                             if (settings.ser.empty()) {
                                 // this is an RP2040 running a no_flash binary, so will have a standard RP2040 vid/pid in BOOTSEL mode
                                 settings.vid = -1; // -1 means filter for standard vid/pid
