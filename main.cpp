@@ -8919,7 +8919,7 @@ int main(int argc, char **argv) {
                                 libusb_get_device_descriptor(to_reboot, &desc);
                                 if (desc.idProduct == PRODUCT_ID_RP2040_STDIO_USB || settings.force_rp2040) {
                                     // the Zadig driver should be setup for the device in BOOTSEL mode with no interfaces disabled,  
-                                    // as all the interfaces are enabled when you plug it in while holding the BOOTSEL button  
+                                    // as all the interfaces are enabled when you plug it in while holding down the BOOTSEL button  
                                     disable_mask = 0;
                                     settings.force_rp2040 = true;
                                 }
