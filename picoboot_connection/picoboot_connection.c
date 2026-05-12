@@ -11,7 +11,7 @@
 
 #include "picoboot_connection.h"
 #include "boot/bootrom_constants.h"
-#include "pico/stdio_usb/reset_interface.h"
+#include "pico/usb_reset_interface.h"
 
 #if ENABLE_DEBUG_LOG
 #include <stdio.h>
@@ -459,19 +459,6 @@ int picoboot_exec(libusb_device_handle *usb_device, uint32_t addr) {
     cmd.address_only_cmd.dAddr = addr;
     return picoboot_cmd(usb_device, &cmd, NULL, 0);
 }
-
-// int picoboot_exec2(libusb_device_handle *usb_device, struct picoboot_exec2_cmd *exec2_cmd) {
-//     struct picoboot_cmd cmd;
-//     // shouldn't be necessary any more
-//     // addr |= 1u; // Thumb bit
-//     //if (verbose) output("EXEC2 %08x\n", (unsigned int) exec2_cmd->scan_base);
-//     cmd.bCmdId = PC_EXEC2;
-//     cmd.bCmdSize = sizeof(cmd.exec2_cmd);
-//     cmd.dTransferLength = 0;
-//     cmd.exec2_cmd = *exec2_cmd;
-//     return picoboot_cmd(usb_device, &cmd, NULL, 0);
-// } // currently unused
-
 
 int picoboot_flash_erase(libusb_device_handle *usb_device, uint32_t addr, uint32_t len) {
     struct picoboot_cmd cmd;

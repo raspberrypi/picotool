@@ -12,6 +12,14 @@
 #include "rp2350_a3_rom_end.h"
 #include "rp2350_a4_rom_end.h"
 
+// tsk namespace is polluted on windows
+#ifdef _WIN32
+#undef min
+#undef max
+
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+
 enum memory_type {
     rom,
     flash,
@@ -375,6 +383,7 @@ static address_ranges address_ranges_flash(const model_t& model) {
     address_ranges ranges;
     ranges.emplace_back(model->flash_start(), model->flash_end(), address_range::type::CONTENTS);
     ranges.emplace_back(model->sram_start(), model->sram_end(), address_range::type::NO_CONTENTS);
+    ranges.emplace_back(model->xip_sram_start(), model->xip_sram_end(), address_range::type::NO_CONTENTS);
     if (model->chip() == rp2040) {
         ranges.emplace_back(MAIN_RAM_BANKED_START, MAIN_RAM_BANKED_END, address_range::type::NO_CONTENTS);
     }

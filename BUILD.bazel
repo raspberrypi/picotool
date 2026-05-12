@@ -1,3 +1,5 @@
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("//bazel:defs.bzl", "otp_header_parse", "picotool_binary_data_header")
 
 package(default_visibility = ["//visibility:public"])
@@ -67,9 +69,9 @@ cc_library(
     name = "enc_bootloader",
     srcs = ["get_enc_bootloader.cpp"],
     hdrs = [
-        "get_enc_bootloader.h",
         "enc_bootloader_elf.h",
         "enc_bootloader_mbedtls_elf.h",
+        "get_enc_bootloader.h",
     ],
     deps = [
         "//bazel:data_locs",
@@ -97,11 +99,11 @@ cc_binary(
     srcs = [
         "cli.h",
         "clipp/clipp.h",
+        "get_enc_bootloader.cpp",
+        "get_xip_ram_perms.cpp",
         "main.cpp",
         "otp.cpp",
         "otp.h",
-        "get_xip_ram_perms.cpp",
-        "get_enc_bootloader.cpp",
     ] + select({
         # MSVC can't handle long strings, so use this manually generated
         # header instead.
@@ -136,8 +138,8 @@ cc_binary(
         "//conditions:default": [],
     }),
     deps = [
-        ":xip_ram_perms",
         ":enc_bootloader",
+        ":xip_ram_perms",
         "//bazel:data_locs",
         "//bintool",
         "//elf",
@@ -154,7 +156,6 @@ cc_binary(
         "@pico-sdk//src/common/pico_usb_reset_interface_headers",
         "@pico-sdk//src/rp2350/hardware_regs:otp_data",
         "@pico-sdk//src/rp2_common/pico_bootrom:pico_bootrom_headers",
-        "@pico-sdk//src/rp2_common/pico_stdio_usb:reset_interface_headers",
     ] + select({
         # MSVC can't handle long strings, so use this manually generated
         # header instead.

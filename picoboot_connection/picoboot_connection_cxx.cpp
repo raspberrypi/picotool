@@ -108,10 +108,6 @@ void connection::exec(uint32_t addr) {
     wrap_call([&] { return picoboot_exec(device, addr); });
 }
 
-// void connection::exec2(struct picoboot_exec2_cmd *cmd) {
-//     wrap_call([&] { return picoboot_exec2(device, cmd); });
-// } // currently unused
-
 void connection::flash_erase(uint32_t addr, uint32_t len) {
     wrap_call([&] { return picoboot_flash_erase(device, addr, len); });
 }

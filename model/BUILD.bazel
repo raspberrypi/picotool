@@ -1,3 +1,5 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
 package(default_visibility = ["//visibility:public"])
 
 cc_library(
@@ -15,8 +17,8 @@ cc_library(
     includes = ["."],
     deps = [
         "//errors",
-        "@pico-sdk//src/common/boot_uf2_headers",
         "@pico-sdk//src/common/boot_picoboot_headers",
+        "@pico-sdk//src/common/boot_uf2_headers",
     ],
 )
 

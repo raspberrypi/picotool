@@ -45,7 +45,7 @@
 #include "elf2uf2.h"
 #include "boot/bootrom_constants.h"
 #include "pico/binary_info.h"
-#include "pico/stdio_usb/reset_interface.h"
+#include "pico/usb_reset_interface.h"
 #include "elf.h"
 #include "otp.h"
 #include "model.h"
@@ -126,6 +126,36 @@ static const string rp2350_arm_s_family_name = "rp2350-arm-s";
 static const string rp2350_arm_ns_family_name = "rp2350-arm-ns";
 static const string rp2350_riscv_family_name = "rp2350-riscv";
 static const string cyw43_firmware_family_name = "cyw43-firmware";
+
+static const std::vector<std::string> family_names = {
+    data_family_name,
+    absolute_family_name,
+    rp2040_family_name,
+    rp2350_arm_s_family_name,
+    rp2350_arm_ns_family_name,
+    rp2350_riscv_family_name,
+    cyw43_firmware_family_name
+};
+
+static const std::map<uint32_t, std::string> family_id_to_name = {
+    {DATA_FAMILY_ID, data_family_name},
+    {ABSOLUTE_FAMILY_ID, absolute_family_name},
+    {RP2040_FAMILY_ID, rp2040_family_name},
+    {RP2350_ARM_S_FAMILY_ID, rp2350_arm_s_family_name},
+    {RP2350_ARM_NS_FAMILY_ID, rp2350_arm_ns_family_name},
+    {RP2350_RISCV_FAMILY_ID, rp2350_riscv_family_name},
+    {CYW43_FIRMWARE_FAMILY_ID, cyw43_firmware_family_name}
+};
+
+static const std::map<std::string, uint32_t> family_name_to_id = {
+    {data_family_name, DATA_FAMILY_ID},
+    {absolute_family_name, ABSOLUTE_FAMILY_ID},
+    {rp2040_family_name, RP2040_FAMILY_ID},
+    {rp2350_arm_s_family_name, RP2350_ARM_S_FAMILY_ID},
+    {rp2350_arm_ns_family_name, RP2350_ARM_NS_FAMILY_ID},
+    {rp2350_riscv_family_name, RP2350_RISCV_FAMILY_ID},
+    {cyw43_firmware_family_name, CYW43_FIRMWARE_FAMILY_ID}
+};
 
 #if !HAS_LIBUSB
 static const string built_without_libusb_message = "\nThis version of picotool was compiled without USB support. Some commands are not available.\n";
@@ -365,42 +395,32 @@ struct family_id : public cli::value_base<family_id> {
         string nm = "<" + name() + ">";
         // note we cannot capture "this"
         on_action([&t, nm](string value) {
-            auto ovalue = value;
-            if (value == data_family_name) {
-                t = DATA_FAMILY_ID;
-            } else if (value == absolute_family_name) {
-                t = ABSOLUTE_FAMILY_ID;
-            } else if (value == rp2040_family_name) {
-                t = RP2040_FAMILY_ID;
-            } else if (value == rp2350_arm_s_family_name) {
-                t = RP2350_ARM_S_FAMILY_ID;
-            } else if (value == rp2350_arm_ns_family_name) {
-                t = RP2350_ARM_NS_FAMILY_ID;
-            } else if (value == rp2350_riscv_family_name) {
-                t = RP2350_RISCV_FAMILY_ID;
-            } else if (value == cyw43_firmware_family_name) {
-                t = CYW43_FIRMWARE_FAMILY_ID;
-            } else {
-                if (value.find("0x") == 0) {
-                    value = value.substr(2);
-                    size_t pos = 0;
-                    long lvalue = std::numeric_limits<long>::max();
-                    try {
-                        lvalue = std::stoul(value, &pos, 16);
-                        if (pos != value.length()) {
-                            return "Garbage after hex value: " + value.substr(pos);
-                        }
-                    } catch (std::invalid_argument &) {
-                        return ovalue + " is not a valid hex value";
-                    } catch (std::out_of_range &) {
+            std::transform(value.begin(), value.end(), value.begin(),
+                [](unsigned char c){ return std::tolower(c); });
+            std::replace( value.begin(), value.end(), '_', '-');
+            auto family_id = family_name_to_id.find(value);
+            if (family_id != family_name_to_id.end()) {
+                t = family_id->second;
+            } else if (value.find("0x") == 0) {
+                value = value.substr(2);
+                size_t pos = 0;
+                long lvalue = std::numeric_limits<long>::max();
+                try {
+                    lvalue = std::stoul(value, &pos, 16);
+                    if (pos != value.length()) {
+                        return "Garbage after hex value: " + value.substr(pos);
                     }
-                    if (lvalue != (unsigned int) lvalue) {
-                        return value + " is not a valid 32 bit value";
-                    }
-                    t = (unsigned int) lvalue;
-                } else {
-                    return value + " is not a valid family ID";
+                } catch (std::invalid_argument &) {
+                    return value + " is not a valid hex value";
+                } catch (std::out_of_range &) {
                 }
+                if (lvalue != (unsigned int) lvalue) {
+                    return value + " is not a valid 32 bit value";
+                }
+                t = (unsigned int) lvalue;
+            } else {
+                return value + " is not a valid family ID"
+                + "\n\nValid family IDs are: " + cli::join(family_names, ", ") + ", or hex strings starting with 0x";
             }
             return string("");
         });
@@ -409,13 +429,10 @@ struct family_id : public cli::value_base<family_id> {
 };
 
 string family_name(unsigned int family_id) {
-    if (family_id == DATA_FAMILY_ID) return "'" + data_family_name + "'";
-    if (family_id == ABSOLUTE_FAMILY_ID) return "'" + absolute_family_name + "'";
-    if (family_id == RP2040_FAMILY_ID) return "'" + rp2040_family_name + "'";
-    if (family_id == RP2350_ARM_S_FAMILY_ID) return "'" + rp2350_arm_s_family_name + "'";
-    if (family_id == RP2350_ARM_NS_FAMILY_ID) return "'" + rp2350_arm_ns_family_name + "'";
-    if (family_id == RP2350_RISCV_FAMILY_ID) return "'" + rp2350_riscv_family_name + "'";
-    if (family_id == CYW43_FIRMWARE_FAMILY_ID) return "'" + cyw43_firmware_family_name + "'";
+    auto family_name = family_id_to_name.find(family_id);
+    if (family_name != family_id_to_name.end()) {
+        return "'" + family_name->second + "'";
+    }
     if (!family_id) return "none";
     return hex_string(family_id);
 }
@@ -550,6 +567,7 @@ struct _settings {
         bool hash = false;
         bool sign = false;
         bool clear_sram = false;
+        bool pin_xip_sram = false;
         bool set_tbyb = false;
         uint16_t major_version = 0;
         uint16_t minor_version = 0;
@@ -562,6 +580,7 @@ struct _settings {
         bool otp_key_page_set = false;
         bool fast_rosc = false;
         bool use_mbedtls = false;
+        bool no_clear_sram = false;
         uint16_t otp_key_page = 29;
     } encrypt;
 
@@ -856,7 +875,7 @@ struct load_command : public cmd {
                 option('N', "--no-overwrite-unsafe").set(settings.load.no_overwrite_force) % "When writing flash data, do not overwrite an existing program in flash. If picotool cannot determine the size/presence of the program in flash, the load continues anyway" +
                 option('u', "--update").set(settings.load.update) % "Skip writing flash sectors that already contain identical data" +
                 option('v', "--verify").set(settings.load.verify) % "Verify the data was written correctly" +
-                option('x', "--execute").set(settings.load.execute) % "Attempt to execute the downloaded file as a program after the load"
+                option('x', "--execute").set(settings.load.execute) % "Perform a bootrom reboot to execute the downloaded file as a program after the load - either a flash update boot for binaries in flash, or a RAM image boot for other binaries "
             ).min(0).doc_non_optional(true) % "Post load actions" +
             file_selection % "File to load from" +
             (
@@ -920,7 +939,9 @@ struct encrypt_command : public cmd {
             ).force_expand_help(true) +
             (
                 option("--hash").set(settings.seal.hash) % "Hash the encrypted file" +
-                option("--sign").set(settings.seal.sign) % "Sign the encrypted file"
+                option("--sign").set(settings.seal.sign) % "Sign the encrypted file" +
+                option("--no-clear").set(settings.encrypt.no_clear_sram) % "Don't clear all of main SRAM on load" +
+                option("--pin-xip-sram").set(settings.seal.pin_xip_sram) % "Pin XIP SRAM on load"
             ).min(0).doc_non_optional(true) % "Signing Configuration" +
             named_file_selection_x("infile", 0) % "File to load from" +
             (
@@ -952,7 +973,8 @@ struct seal_command : public cmd {
             (
                 option("--hash").set(settings.seal.hash) % "Hash the file" +
                 option("--sign").set(settings.seal.sign) % "Sign the file" +
-                option("--clear").set(settings.seal.clear_sram) % "Clear all of SRAM on load"
+                option("--clear").set(settings.seal.clear_sram) % "Clear all of main SRAM on load" +
+                option("--pin-xip-sram").set(settings.seal.pin_xip_sram) % "Pin XIP SRAM on load"
             ).min(0).doc_non_optional(true) % "Configuration" +
             named_file_selection_x("infile", 0) % "File to load from" +
             (
@@ -1297,7 +1319,7 @@ struct otp_white_label_command : public cmd {
 
 
 vector<std::shared_ptr<cmd>> otp_sub_commands {
-        std::shared_ptr<cmd>( new otp_list_command()),
+        std::shared_ptr<cmd>(new otp_list_command()),
     #if HAS_LIBUSB
         std::shared_ptr<cmd>(new otp_get_command()),
         std::shared_ptr<cmd>(new otp_set_command()),
@@ -1479,7 +1501,7 @@ struct reboot_command : public cmd {
         (
             option('a', "--application").set(settings.reboot_app_specified) % "Reboot back into the application (this is the default)" +
             option('u', "--usb").set(settings.reboot_usb) % "Reboot back into BOOTSEL mode" +
-            (option('g', "--diagnostic") & integer("partition").min_value(-3).max_value(15).set(settings.reboot_diagnostic_partition)).min(0) +
+            (option('g', "--diagnostic") & integer("partition").min_value(-3).max_value(15).set(settings.reboot_diagnostic_partition)).min(0) % "Select diagnostic partition" +
             (option('c', "--cpu") & value("cpu").set(settings.switch_cpu)) % "Select arm | riscv CPU (if possible)"
         ).min(0).doc_non_optional(true) % "Reboot type" +
         device_selection % "Selecting the device to reboot";
@@ -1721,6 +1743,14 @@ int parse(const int argc, char **argv) {
     };
 
     auto args = cli::make_args(argc, argv);
+
+    // Check if any -h or --help argument was requested, if so insert the help subcommand before any
+    // arguments, this will ensure the correct help gets printed automatically.
+    bool help_requested = std::find(args.begin(), args.end(), "--help") != args.end()
+                          || std::find(args.begin(), args.end(), "-h") != args.end();
+    if (help_requested) {
+      args.insert(args.begin(), "help");
+    }
     if (args.empty()) {
         usage();
         return 0;
@@ -1926,6 +1956,15 @@ bool get_json_int(json value, T& out) {
         }
         return get_int(str, out);
     } else if (value.is_number_integer()) {
+        out = value;
+        return true;
+    } else {
+        return false;
+    }
+}
+
+bool get_json_bool(json value, bool& out) {
+    if (value.is_boolean()) {
         out = value;
         return true;
     } else {
@@ -3258,13 +3297,13 @@ string str_permissions(unsigned int p) {
     return ss.str();
 }
 
-void insert_default_families(uint32_t flags_and_permissions, vector<std::string> &family_ids) {
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_ABSOLUTE_BITS) family_ids.emplace_back(family_name(ABSOLUTE_FAMILY_ID));
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2040_BITS) family_ids.emplace_back(family_name(RP2040_FAMILY_ID));
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_S_BITS) family_ids.emplace_back(family_name(RP2350_ARM_S_FAMILY_ID));
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_NS_BITS) family_ids.emplace_back(family_name(RP2350_ARM_NS_FAMILY_ID));
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_RISCV_BITS) family_ids.emplace_back(family_name(RP2350_RISCV_FAMILY_ID));
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_DATA_BITS) family_ids.emplace_back(family_name(DATA_FAMILY_ID));
+void insert_default_families(uint32_t flags_and_permissions, vector<std::string> &family_names) {
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_ABSOLUTE_BITS) family_names.emplace_back(family_name(ABSOLUTE_FAMILY_ID));
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2040_BITS) family_names.emplace_back(family_name(RP2040_FAMILY_ID));
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_S_BITS) family_names.emplace_back(family_name(RP2350_ARM_S_FAMILY_ID));
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_NS_BITS) family_names.emplace_back(family_name(RP2350_ARM_NS_FAMILY_ID));
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_RISCV_BITS) family_names.emplace_back(family_name(RP2350_RISCV_FAMILY_ID));
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_DATA_BITS) family_names.emplace_back(family_name(DATA_FAMILY_ID));
 }
 
 static chip_t image_type_exe_chip_to_chip(uint image_type_exe_chip) {
@@ -3321,7 +3360,7 @@ void info_guts(memory_access &raw_access, void *con) {
             verified_t sig_verified = none;
         #if HAS_MBEDTLS
             // Pass empty bin, which will be populated by more_cb if there is a signature/hash_value
-            verify_block({}, raw_access.get_binary_start(), raw_access.get_binary_start(), current_block, hash_verified, sig_verified, more_cb);
+            verify_block({}, raw_access.get_binary_start(), raw_access.get_binary_start(), current_block, raw_access.get_model(), hash_verified, sig_verified, more_cb);
         #endif
 
             // Addresses
@@ -3363,6 +3402,10 @@ void info_guts(memory_access &raw_access, void *con) {
                 if (image_def->tbyb()) {
                     info_pair("tbyb", "not bought");
                 }
+
+                if (verbose_metadata) {
+                    info_pair("extra security", image_def->extra_security() ? "enabled" : "not enabled");
+                }
             }
 
             // Partition Table
@@ -3372,9 +3415,9 @@ void info_guts(memory_access &raw_access, void *con) {
                 info_pair("partition table", partition_table->singleton ? "singleton" : "non-singleton");
                 std::stringstream unpartitioned;
                 unpartitioned << str_permissions(partition_table->unpartitioned_flags);
-                std::vector<std::string> family_ids;
-                insert_default_families(partition_table->unpartitioned_flags, family_ids);
-                unpartitioned << ", uf2 { " << cli::join(family_ids, ", ") << " }";
+                std::vector<std::string> family_names;
+                insert_default_families(partition_table->unpartitioned_flags, family_names);
+                unpartitioned << ", uf2 { " << cli::join(family_names, ", ") << " }";
                 info_pair("un-partitioned space", unpartitioned.str());
 
                 for (size_t i=0; i < partition_table->partitions.size(); i++) {
@@ -3404,17 +3447,17 @@ void info_guts(memory_access &raw_access, void *con) {
                         pstring << ", id=" << hex_string(id, 16, false);
                     }
                     uint32_t num_extra_families = partition.extra_families.size();
-                    family_ids.clear();
-                    insert_default_families(flags, family_ids);
+                    family_names.clear();
+                    insert_default_families(flags, family_names);
                     for (auto family : partition.extra_families) {
-                        family_ids.emplace_back(family_name(family));
+                        family_names.emplace_back(family_name(family));
                     }
                     if (flags & PICOBIN_PARTITION_FLAGS_HAS_NAME_BITS) {
                         pstring << ", \"";
                         pstring << partition.name;
                         pstring << '"';
                     }
-                    pstring << ", uf2 { " << cli::join(family_ids, ", ") << " }";
+                    pstring << ", uf2 { " << cli::join(family_names, ", ") << " }";
                     pstring << ", arm_boot " << !(flags & PICOBIN_PARTITION_FLAGS_IGNORED_DURING_ARM_BOOT_BITS);
                     pstring << ", riscv_boot " << !(flags & PICOBIN_PARTITION_FLAGS_IGNORED_DURING_RISCV_BOOT_BITS);
                     info_pair(pname.str(), pstring.str());
@@ -4057,9 +4100,9 @@ string missing_device_string(bool wasRetry, bool requires_rp2350 = false) {
             snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found with address %d.", device_name, settings.address);
         }
     } else if (settings.bus != -1) {
-        snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found found on bus %d.", device_name, settings.bus);
+        snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found on bus %d.", device_name, settings.bus);
     } else if (!settings.ser.empty()) {
-        snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found found with serial number %s.", device_name, settings.ser.c_str());
+        snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found with serial number %s.", device_name, settings.ser.c_str());
     } else {
         snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found.", device_name);
     }
@@ -4676,6 +4719,10 @@ bool erase_command::execute(device_map &devices) {
     auto con = get_single_bootsel_device_connection(devices);
     picoboot_memory_access raw_access(con);
 
+    // Errata RP2350-E10 fix
+    auto model = raw_access.get_model();
+    if (model->chip_revision() == rp2350_a2) con.exit_xip();
+
     uint32_t end = 0;
     uint32_t binary_end = 0;
     binary_info_header hdr;
@@ -4720,7 +4767,6 @@ bool erase_command::execute(device_map &devices) {
         }
     }
 
-    model_t model = raw_access.get_model();
     enum memory_type t1 = get_memory_type(start , model);
     enum memory_type t2 = get_memory_type(end, model);
     if (t1 != flash || t1 != t2) {
@@ -4730,6 +4776,7 @@ bool erase_command::execute(device_map &devices) {
 
     {
         progress_bar bar("Erasing: ");
+        con.exit_xip();
         for (uint32_t addr = start; addr < end; addr += FLASH_SECTOR_ERASE_SIZE) {
             bar.progress(addr-start, end-start);
             con.flash_erase(addr, FLASH_SECTOR_ERASE_SIZE);
@@ -5040,7 +5087,7 @@ uint32_t __noinline otp_calculate_ecc(uint16_t x) {
 
 
 #if HAS_MBEDTLS
-void sign_guts_elf(elf_file* elf, private_t private_key, public_t public_key) {
+void sign_guts_elf(elf_file* elf, private_t private_key, public_t public_key, model_t model) {
     std::unique_ptr<block> first_block = find_first_block(elf);
     if (!first_block) {
         // Throw a clearer error for RP2040 binaries with no block loop
@@ -5080,9 +5127,11 @@ void sign_guts_elf(elf_file* elf, private_t private_key, public_t public_key) {
         new_block.items.push_back(version);
     }
 
-    // Add entry point when signing Arm images
+    // Add entry point and vector table when signing Arm images, and set PICOBIN_IMAGE_TYPE_EXE_EXTRA_SECURITY_BITS
     std::shared_ptr<image_type_item> image_type = new_block.get_item<image_type_item>();
     if (settings.seal.sign && image_type != nullptr && image_type->image_type() == type_exe && image_type->cpu() == cpu_arm) {
+        // Set PICOBIN_IMAGE_TYPE_EXE_EXTRA_SECURITY_BITS
+        image_type->flags |= PICOBIN_IMAGE_TYPE_EXE_EXTRA_SECURITY_BITS;
         std::shared_ptr<entry_point_item> entry_point = new_block.get_item<entry_point_item>();
         if (entry_point == nullptr) {
             std::shared_ptr<vector_table_item> vtor = new_block.get_item<vector_table_item>();
@@ -5101,6 +5150,9 @@ void sign_guts_elf(elf_file* elf, private_t private_key, public_t public_key) {
                         vtor_loc += rwd->addr;
                     }
                 }
+
+                vtor = std::make_shared<vector_table_item>(vtor_loc);
+                new_block.items.push_back(vtor);
             }
             auto segment = elf->segment_from_virtual_address(vtor_loc);
             if (segment == nullptr) {
@@ -5120,8 +5172,9 @@ void sign_guts_elf(elf_file* elf, private_t private_key, public_t public_key) {
 
     hash_andor_sign(
         elf, &new_block, public_key, private_key,
+        model,
         settings.seal.hash, settings.seal.sign,
-        settings.seal.clear_sram
+        settings.seal.clear_sram, settings.seal.pin_xip_sram
     );
 }
 
@@ -5161,15 +5214,20 @@ vector<uint8_t> sign_guts_bin(iostream_memory_access in, private_t private_key, 
         new_block.items.push_back(version);
     }
 
-    // Add entry point when signing Arm images
+    // Add entry point and vector table when signing Arm images, and set PICOBIN_IMAGE_TYPE_EXE_EXTRA_SECURITY_BITS
     std::shared_ptr<image_type_item> image_type = new_block.get_item<image_type_item>();
     if (settings.seal.sign && image_type != nullptr && image_type->image_type() == type_exe && image_type->cpu() == cpu_arm) {
+        // Set PICOBIN_IMAGE_TYPE_EXE_EXTRA_SECURITY_BITS
+        image_type->flags |= PICOBIN_IMAGE_TYPE_EXE_EXTRA_SECURITY_BITS;
         std::shared_ptr<entry_point_item> entry_point = new_block.get_item<entry_point_item>();
         if (entry_point == nullptr) {
             std::shared_ptr<vector_table_item> vtor = new_block.get_item<vector_table_item>();
             uint32_t vtor_loc = bin_start;
             if (vtor != nullptr) {
                 vtor_loc = vtor->addr;
+            } else {
+                vtor = std::make_shared<vector_table_item>(vtor_loc);
+                new_block.items.push_back(vtor);
             }
             auto offset = vtor_loc - bin_start;
             uint32_t ep;
@@ -5185,8 +5243,9 @@ vector<uint8_t> sign_guts_bin(iostream_memory_access in, private_t private_key, 
     auto sig_data = hash_andor_sign(
         bin, bin_start, bin_start,
         &new_block, public_key, private_key,
+        in.get_model(),
         settings.seal.hash, settings.seal.sign,
-        settings.seal.clear_sram
+        settings.seal.clear_sram, settings.seal.pin_xip_sram
     );
 
     return sig_data;
@@ -5199,6 +5258,9 @@ bool encrypt_command::execute(device_map &devices) {
     bool keyFromFile = true;
     bool keyIsShare = false;
     bool ivFromFile = true;
+
+    // Set settings.seal.clear_sram to opposite of settings.encrypt.no_clear_sram
+    settings.seal.clear_sram = !settings.encrypt.no_clear_sram;
 
     aes_key_t aes_key;
     aes_key_share_t aes_key_share;
@@ -5384,11 +5446,13 @@ bool encrypt_command::execute(device_map &devices) {
             new_block.items.erase(std::remove(new_block.items.begin(), new_block.items.end(), load_map), new_block.items.end());
         }
 
+        model_t model = get_model(0);
+
         if (settings.encrypt.embed) {
             std::vector<uint8_t> iv_data;
             std::vector<uint8_t> enc_data;
             uint32_t data_start_address = SRAM_START;
-            encrypt_guts(elf, &new_block, aes_key, iv_data, enc_data);
+            encrypt_guts(elf, &new_block, aes_key, model, iv_data, enc_data);
 
             // Salt IV
             assert(iv_data.size() == iv_salt.size());
@@ -5401,7 +5465,7 @@ bool encrypt_command::execute(device_map &devices) {
 
             auto program = get_iostream_memory_access<iostream_memory_access>(tmp, filetype::elf, true);
             // todo should be determined from image_def
-            program.set_model(std::make_shared<model_rp2350>());
+            program.set_model(model);
 
             // data_start_addr
             settings.config.key = "data_start_addr";
@@ -5481,14 +5545,13 @@ bool encrypt_command::execute(device_map &devices) {
             }
 
             // Sign the final thing
-            settings.seal.clear_sram = true;
-            sign_guts_elf(enc_elf, private_key, public_key);
+            sign_guts_elf(enc_elf, private_key, public_key, model);
 
             auto out = get_file_idx(ios::out|ios::binary, 1);
             enc_elf->write(out);
             out->close();
         } else {
-            encrypt(elf, &new_block, aes_key, public_key, private_key, iv_salt, settings.seal.hash, settings.seal.sign);
+            encrypt(elf, &new_block, aes_key, public_key, private_key, model, iv_salt, settings.seal.hash, settings.seal.sign);
             auto out = get_file_idx(ios::out|ios::binary, 1);
             elf->write(out);
             out->close();
@@ -5516,7 +5579,7 @@ bool encrypt_command::execute(device_map &devices) {
             new_block.items.erase(std::remove(new_block.items.begin(), new_block.items.end(), load_map), new_block.items.end());
         }
 
-        auto enc_data = encrypt(bin, bin_start, bin_start, &new_block, aes_key, public_key, private_key, iv_salt, settings.seal.hash, settings.seal.sign);
+        auto enc_data = encrypt(bin, bin_start, bin_start, &new_block, aes_key, public_key, private_key, binfile.get_model(), iv_salt, settings.seal.hash, settings.seal.sign);
 
         auto out = get_file_idx(ios::out|ios::binary, 1);
         out->write((const char *)enc_data.data(), enc_data.size());
@@ -5720,7 +5783,7 @@ bool seal_command::execute(device_map &devices) {
         elf->read_file(get_file(ios::in|ios::binary));
         // Remove any holes in the ELF file, as these cause issues when signing/hashing
         elf->remove_sh_holes();
-        sign_guts_elf(elf, private_key, public_key);
+        sign_guts_elf(elf, private_key, public_key, get_model(0));
 
         auto out = get_file_idx(ios::out|ios::binary, 1);
         elf->write(out);
@@ -6325,9 +6388,9 @@ bool partition_info_command::execute(device_map &devices) {
     }
     printf("un-partitioned_space : ");
     fos << str_permissions(unpartitioned.permissions_and_flags);
-    std::vector<std::string> family_ids;
-    insert_default_families(unpartitioned.permissions_and_flags, family_ids);
-    printf(", uf2 { %s }\n", cli::join(family_ids, ", ").c_str());
+    std::vector<std::string> family_names;
+    insert_default_families(unpartitioned.permissions_and_flags, family_names);
+    printf(", uf2 { %s }\n", cli::join(family_names, ", ").c_str());
 
     if (has_pt) {
         printf("partitions:\n");
@@ -6369,8 +6432,8 @@ bool partition_info_command::execute(device_map &devices) {
             uint32_t num_extra_families =
                     (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_NUM_EXTRA_FAMILIES_BITS)
                             >> PICOBIN_PARTITION_FLAGS_ACCEPTS_NUM_EXTRA_FAMILIES_LSB;
-            family_ids.clear();
-            insert_default_families(flags_and_permissions, family_ids);
+            family_names.clear();
+            insert_default_families(flags_and_permissions, family_names);
             if (num_extra_families | (flags_and_permissions & PICOBIN_PARTITION_FLAGS_HAS_NAME_BITS)) {
                 cmd.dParams[0] = PT_INFO_SINGLE_PARTITION | PT_INFO_PARTITION_FAMILY_IDS | PT_INFO_PARTITION_NAME |
                                 (i << 24);
@@ -6380,7 +6443,7 @@ bool partition_info_command::execute(device_map &devices) {
                 assert((flags_and_permissions & PICOBIN_PARTITION_FLAGS_HAS_NAME_BITS) ||
                        got == num_extra_families + 1);
                 for (unsigned int j = 1; j < num_extra_families + 1; j++) {
-                    family_ids.emplace_back(family_name(family_id_name_buf_32[j + 1]));
+                    family_names.emplace_back(family_name(family_id_name_buf_32[j + 1]));
                 }
                 if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_HAS_NAME_BITS) {
                     uint8_t *bytes = &family_id_name_buf[(num_extra_families + 2) * 4];
@@ -6391,7 +6454,7 @@ bool partition_info_command::execute(device_map &devices) {
                     putchar('"');
                 }
             }
-            printf(", uf2 { %s }", cli::join(family_ids, ", ").c_str());
+            printf(", uf2 { %s }", cli::join(family_names, ", ").c_str());
             printf(", arm_boot %d", !(flags_and_permissions & PICOBIN_PARTITION_FLAGS_IGNORED_DURING_ARM_BOOT_BITS));
             printf(", riscv_boot %d", !(flags_and_permissions & PICOBIN_PARTITION_FLAGS_IGNORED_DURING_RISCV_BOOT_BITS));
             printf("\n");
@@ -6424,21 +6487,32 @@ uint32_t permissions_to_flags(json permissions) {
     return ret;
 }
 
-uint32_t families_to_flags(std::vector<string> families) {
+uint32_t families_to_flags(std::vector<string> families, bool fail_invalid = false) {
     uint32_t ret = 0;
+    uint32_t id = 0;
+    auto family_id_getter = family_id("family_id").set(id);
     for (auto family : families) {
-        if (family == data_family_name) {
+        auto family_id_ret = family_id_getter.action(family);
+        if (family_id_ret.size() > 0) {
+            if (fail_invalid) {
+                fail(ERROR_FORMAT, "Could not parse family ID from %s: %s", family.c_str(), family_id_ret.c_str());
+            }
+            continue;
+        }
+        if (id == DATA_FAMILY_ID) {
             ret |= PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_DATA_BITS;
-        } else if (family == absolute_family_name) {
+        } else if (id == ABSOLUTE_FAMILY_ID) {
             ret |= PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_ABSOLUTE_BITS;
-        } else if (family == rp2040_family_name) {
+        } else if (id == RP2040_FAMILY_ID) {
             ret |= PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2040_BITS;
-        } else if (family == rp2350_arm_s_family_name) {
+        } else if (id == RP2350_ARM_S_FAMILY_ID) {
             ret |= PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_S_BITS;
-        } else if (family == rp2350_arm_ns_family_name) {
+        } else if (id == RP2350_ARM_NS_FAMILY_ID) {
             ret |= PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_NS_BITS;
-        } else if (family == rp2350_riscv_family_name) {
+        } else if (id == RP2350_RISCV_FAMILY_ID) {
             ret |= PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_RISCV_BITS;
+        } else if (fail_invalid) {
+            fail(ERROR_FORMAT, "Invalid family ID for bootrom flags: %s", family.c_str());
         }
     }
     return ret;
@@ -6481,7 +6555,7 @@ bool partition_create_command::execute(device_map &devices) {
         pt_block = std::make_shared<block>(FLASH_START);
     }
 
-    uint32_t unpartitioned_flags = permissions_to_flags(pt_json["unpartitioned"]["permissions"]) | families_to_flags(pt_json["unpartitioned"]["families"]);
+    uint32_t unpartitioned_flags = permissions_to_flags(pt_json["unpartitioned"]["permissions"]) | families_to_flags(pt_json["unpartitioned"]["families"], true);
     partition_table_item pt(unpartitioned_flags, settings.partition.singleton);
 
 #if SUPPORT_RP2350_A2
@@ -6564,10 +6638,23 @@ bool partition_create_command::execute(device_map &devices) {
             else {string p_id = p["id"]; fail(ERROR_INCOMPATIBLE, "Partition ID \"%s\" is not a valid 64bit integer\n", p_id.c_str());}
         }
 
-        if(p.contains("no_reboot_on_uf2_download")) new_p.flags |= PICOBIN_PARTITION_FLAGS_UF2_DOWNLOAD_NO_REBOOT_BITS;
-        if(p.contains("ab_non_bootable_owner_affinity")) new_p.flags |= PICOBIN_PARTITION_FLAGS_UF2_DOWNLOAD_AB_NON_BOOTABLE_OWNER_AFFINITY;
-        if(p.contains("ignored_during_riscv_boot")) new_p.flags |= PICOBIN_PARTITION_FLAGS_IGNORED_DURING_RISCV_BOOT_BITS;
-        if(p.contains("ignored_during_arm_boot")) new_p.flags |= PICOBIN_PARTITION_FLAGS_IGNORED_DURING_ARM_BOOT_BITS;
+        bool tmp_bool;
+        for (const auto& pair : std::vector<std::pair<std::string, uint32_t>>{
+            {"no_reboot_on_uf2_download", PICOBIN_PARTITION_FLAGS_UF2_DOWNLOAD_NO_REBOOT_BITS},
+            {"ab_non_bootable_owner_affinity", PICOBIN_PARTITION_FLAGS_UF2_DOWNLOAD_AB_NON_BOOTABLE_OWNER_AFFINITY},
+            {"ignored_during_riscv_boot", PICOBIN_PARTITION_FLAGS_IGNORED_DURING_RISCV_BOOT_BITS},
+            {"ignored_during_arm_boot", PICOBIN_PARTITION_FLAGS_IGNORED_DURING_ARM_BOOT_BITS},
+        }) {
+            const std::string json_flag = pair.first;
+            const uint32_t FLAG_BITS = pair.second;
+            if(p.contains(json_flag)) {  
+                if (get_json_bool(p[json_flag], tmp_bool)) {  
+                    new_p.flags |= (tmp_bool ? FLAG_BITS : 0);  
+                } else {  
+                    fail(ERROR_INCOMPATIBLE, "Partition %d %s value is not a valid boolean\n", pt.partitions.size(), json_flag.c_str());  
+                }  
+            }  
+        }
         pt.partitions.push_back(new_p);
     }
 
@@ -6690,6 +6777,10 @@ bool uf2_info_command::execute(device_map &devices) {
 bool uf2_convert_command::execute(device_map &devices) {
     if (get_file_type_idx(1) != filetype::uf2) {
         fail(ERROR_ARGS, "Output must be a UF2 file\n");
+    }
+
+    if (get_file_type_idx(0) != filetype::elf && get_file_type_idx(0) != filetype::bin) {
+        fail(ERROR_ARGS, "Input must be an ELF or BIN file\n");
     }
 
     uint32_t family_id = get_family_id(0);
@@ -7454,10 +7545,17 @@ bool coprodis_command::execute(device_map &devices) {
 }
 
 #if HAS_LIBUSB
-static void check_otp_write_error(picoboot::command_failure &e, bool ecc) {
+static void check_otp_write_error(picoboot::command_failure &e, struct picoboot_otp_cmd *otp_cmd, model_t model) {
     if (e.get_code() == PICOBOOT_UNSUPPORTED_MODIFICATION) {
-        if (ecc) fail(ERROR_NOT_POSSIBLE, "Attempted to modify OTP ECC row(s)\n");
+        if (otp_cmd->bEcc) fail(ERROR_NOT_POSSIBLE, "Attempted to modify OTP ECC row(s)\n");
         else     fail(ERROR_NOT_POSSIBLE, "Attempted to clear bits in OTP row(s)\n");
+    } else if (
+        e.get_code() == PICOBOOT_NOT_PERMITTED
+        && model->chip() == rp2350
+        && model->chip_revision() == rp2350_a2
+        && otp_cmd->wRow >= OTP_PAGE_COUNT * (OTP_PAGE_ROWS - 1)
+    ) {
+        fail(ERROR_NOT_POSSIBLE, "Cannot write to page locks for pages 32-63 on RP2350 A2 due to errata RP2350-E15 - use otp permissions command instead\n");
     }
 }
 
@@ -7639,7 +7737,7 @@ bool otp_get_command::execute(device_map &devices) {
     picoboot_memory_access raw_access(con);
     auto model = raw_access.get_model();
     auto matches = filter_otp(settings.otp.selectors, otp_cmd_max_bits(), settings.otp.fuzzy);
-    uint32_t last_reg_row = 1; // invalid
+    uint32_t last_reg_row = UINT32_MAX; // invalid
     bool first = true;
     char buf[512];
     uint32_t raw_buffer[OTP_PAGE_ROWS];
@@ -7934,7 +8032,7 @@ bool otp_load_command::execute(device_map &devices) {
                 try {
                     con.otp_write(&otp_cmd, buffer, len);
                 } catch (picoboot::command_failure &e) {
-                    check_otp_write_error(e, otp_cmd.bEcc);
+                    check_otp_write_error(e, &otp_cmd, model);
                     throw e;
                 }
         });
@@ -7963,7 +8061,7 @@ bool otp_load_command::execute(device_map &devices) {
     try {
         con.otp_write(&otp_cmd, (uint8_t *)file_buffer, file_size);
     } catch (picoboot::command_failure &e) {
-        check_otp_write_error(e, otp_cmd.bEcc);
+        check_otp_write_error(e, &otp_cmd, model);
         throw e;
     }
 
@@ -7988,7 +8086,7 @@ bool otp_list_command::execute(device_map &devices) {
     init_otp(otp_regs, settings.otp.extra_files);
 
     auto matches = filter_otp(settings.otp.selectors.empty() ? std::vector<string>({":"}) : settings.otp.selectors, 24, true);
-    uint32_t last_reg_row = 1; // invalid
+    uint32_t last_reg_row = UINT32_MAX; // invalid
     bool first = true;
     char buf[512];
     int indent0 = settings.otp.list_pages ? 18 : 8;
@@ -8071,6 +8169,7 @@ bool otp_set_command::execute(device_map &devices) {
     auto con = get_single_picoboot_cmd_compatible_device_connection("otp set", devices, {PC_OTP_READ, PC_OTP_WRITE});
     hack_init_otp_regs();
     picoboot_memory_access raw_access(con);
+    auto model = raw_access.get_model();
     auto matches = filter_otp(settings.otp.selectors, otp_cmd_max_bits(), settings.otp.fuzzy);
     // baing lazy to count
     std::set<uint32_t> unique_rows;
@@ -8205,7 +8304,7 @@ bool otp_set_command::execute(device_map &devices) {
             con.otp_write(&otp_cmd, (uint8_t *)&write_value, sizeof(write_value));
         }
     } catch (picoboot::command_failure &e) {
-        check_otp_write_error(e, otp_cmd.bEcc);
+        check_otp_write_error(e, &otp_cmd, model);
         throw e;
     }
 
@@ -8214,6 +8313,8 @@ bool otp_set_command::execute(device_map &devices) {
 
 bool otp_permissions_command::execute(device_map &devices) {
     auto con = get_single_picoboot_cmd_compatible_device_connection("otp permissions", devices, {PC_OTP_READ, PC_OTP_WRITE});
+    picoboot_memory_access raw_access(con);
+    auto model = raw_access.get_model();
 
     json perms_json = json::parse(*get_file(ios::in|ios::binary));
 
@@ -8227,6 +8328,8 @@ bool otp_permissions_command::execute(device_map &devices) {
 
     settings.config.group = "otp_page_permissions";
     for (auto it = perms_json.begin(); it != perms_json.end(); ++it) {
+        settings.otp.lock0 = 0;
+        settings.otp.lock1 = 0;
         std::stringstream ss;
         ss << "page" << it.key();
         settings.config.key = ss.str();
@@ -8286,7 +8389,7 @@ bool otp_permissions_command::execute(device_map &devices) {
     elf_file source_file(settings.verbose);
     elf_file *elf = &source_file;
     elf->read_file(tmp);
-    sign_guts_elf(elf, private_key, public_key);
+    sign_guts_elf(elf, private_key, public_key, program.get_model());
     auto out = std::make_shared<std::stringstream>();
     elf->write(out);
 
@@ -8360,6 +8463,8 @@ void wl_do_field(json json_data, vector<uint16_t>& data, uint32_t& flags, const 
 bool otp_white_label_command::execute(device_map &devices) {
     auto con = get_single_picoboot_cmd_compatible_device_connection("otp white-label", devices, {PC_OTP_READ, PC_OTP_WRITE});
     hack_init_otp_regs();
+    picoboot_memory_access raw_access(con);
+    auto model = raw_access.get_model();
     const otp_reg* flags_reg;
     const otp_reg* addr_reg;
     {
@@ -8448,7 +8553,7 @@ bool otp_white_label_command::execute(device_map &devices) {
     try {
         con.otp_write(&otp_cmd, (uint8_t*)data.data(), data.size()*sizeof(data[0]));
     } catch (picoboot::command_failure &e) {
-        check_otp_write_error(e, otp_cmd.bEcc);
+        check_otp_write_error(e, &otp_cmd, model);
         throw e;
     }
 
@@ -8459,7 +8564,7 @@ bool otp_white_label_command::execute(device_map &devices) {
     try {
         con.otp_write(&otp_cmd, (uint8_t*)&struct_row, sizeof(struct_row));
     } catch (picoboot::command_failure &e) {
-        check_otp_write_error(e, otp_cmd.bEcc);
+        check_otp_write_error(e, &otp_cmd, model);
         throw e;
     }
 
@@ -8475,7 +8580,7 @@ bool otp_white_label_command::execute(device_map &devices) {
     try {
         con.otp_write(&otp_cmd, (uint8_t*)tmp_data.data(), tmp_data.size()*sizeof(flags));
     } catch (picoboot::command_failure &e) {
-        check_otp_write_error(e, otp_cmd.bEcc);
+        check_otp_write_error(e, &otp_cmd, model);
         throw e;
     }
 

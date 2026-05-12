@@ -1,3 +1,5 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
 package(default_visibility = ["//visibility:public"])
 
 cc_library(
@@ -22,10 +24,6 @@ cc_library(
         "HAS_MBEDTLS=1",  # Bazel build always has mbedtls.
     ],
     includes = ["."],
-    # In the CMake build, there's a workaround where this library is built with
-    # NO_PICO_PLATFORM, but that define shouldn't propagate to other
-    # dependencies.
-    local_defines = ["NO_PICO_PLATFORM=1"],
     deps = [
         "//elf",
         "//errors",

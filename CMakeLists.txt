@@ -303,8 +303,6 @@ target_compile_definitions(picotool PRIVATE
         )
 # for OTP info
 target_include_directories(picotool PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
-# todo, this is a bit of an abstraction failure; but don't want to rev the SDK just for this right now
-target_include_directories(picotool PRIVATE ${PICO_SDK_PATH}/src/rp2_common/pico_stdio_usb/include)
 target_link_libraries(picotool
         pico_binary_info
         boot_uf2_headers
