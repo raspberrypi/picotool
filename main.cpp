@@ -6951,7 +6951,7 @@ bool coprodis_command::decode_line(uint32_t val, char *buf, size_t buf_len) {
             if (CRn != 0 || opc1 >= 8) {
 //                    fail(ERROR_INCOMPATIBLE,
 //                         "Instruction %s %d, #%d, %s, c%d, c%d, #%d is not supported by GPIO Coprocessor",
-//                         inst.c_str(), coproc, opc1, cpu_reg(Rt), CRn, CRm, opc2
+//                         inst, coproc, opc1, cpu_reg(Rt), CRn, CRm, opc2
 //                    );
                 printf("WARNING: Instruction %s %d, #%d, %s, c%d, c%d, #%d is not supported by GPIO Coprocessor\n",
                      inst, coproc, opc1, cpu_reg(Rt), CRn, CRm, opc2
@@ -7528,6 +7528,10 @@ bool coprodis_command::execute(device_map &devices) {
                 break;
             }
             consume_whitespace(pos);
+            if (line.compare(pos, 5, ".word") == 0) {
+                // This is a .word, not a coprocessor instruction
+                break;
+            }
             if (pos < sizeof(buf)-1) {
                 strncpy(buf, line.c_str(), sizeof(buf)-1);
                 replaced = decode_line(instr, buf + pos, sizeof(buf) - pos - 1);
