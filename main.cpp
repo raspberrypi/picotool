@@ -498,6 +498,7 @@ struct _settings {
     int vid=-1;
     int pid=-1;
     string ser;
+    bool force_rp2040 = false;
     uint32_t offset = 0;
     uint32_t from = 0;
     uint32_t to = 0;
@@ -629,6 +630,7 @@ auto device_selection =
         (option("--vid") & integer("vid").set(settings.vid).if_missing([] { return "missing vid"; })) % "Filter by vendor id" +
         (option("--pid") & integer("pid").set(settings.pid)) % "Filter by product id" +
         (option("--ser") & value("ser").set(settings.ser)) % "Filter by serial number"
+        + option("--rp2040").set(settings.force_rp2040) % "Assume the device is an RP2040 - this is only required when using a custom vid/pid with an RP2040 on Windows, and is ignored on other operating systems"
         + option('f', "--force").set(settings.force) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode" +
                 option('F', "--force-no-reboot").set(settings.force_no_reboot) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the USB drive mounted"
     ).min(0).doc_non_optional(true).collapse_synopsys("device-selection");
@@ -8812,6 +8814,14 @@ int main(int argc, char **argv) {
                     if (result != dr_error) {
                         devices[result].emplace_back(std::make_tuple(chip, *dev, handle));
                     }
+
+                    if (settings.vid == 0 && !settings.ser.empty() && !devices[dr_vidpid_bootrom_ok].empty()) {
+                        // Searching with no vid/pid filtering (ie attempting to open all USB devices to look for a PICOBOOT interface)
+                        // can cause issues, so stop searching when we have found a device with the correct serial number, as we know we have
+                        // the correct device
+                        DEBUG_LOG("Found bootrom device with serial number, so stopping search");
+                        break;
+                    }
                 }
             }
             auto supported = selected_cmd->get_device_support();
@@ -8829,6 +8839,11 @@ int main(int argc, char **argv) {
                             bool had_note = false;
                             fos << missing_device_string(tries>0, selected_cmd->requires_rp2350());
                             if (tries) {
+#if defined(_WIN32)
+                                if (settings.force_rp2040) {
+                                    fos << " You may need to install a driver via Zadig. See Zadig in the README (https://github.com/raspberrypi/picotool#zadig) for more information.";
+                                }
+#endif
                                 fos << " It is possible the device is not responding, and will have to be manually entered into BOOTSEL mode.\n";
                                 had_note = true; // suppress "but:" in this case
                             }
@@ -8851,7 +8866,7 @@ int main(int argc, char **argv) {
                                     " appears to have a USB serial connection, but picotool was unable to connect. Maybe try 'sudo' or check your permissions.");
     #else
                             printer(dr_vidpid_bootrom_cant_connect,
-                                    " appears to be in BOOTSEL mode, but picotool was unable to connect. You may need to install a driver via Zadig. See \"Getting started with Raspberry Pi Pico\" for more information");
+                                    " appears to be in BOOTSEL mode, but picotool was unable to connect. You may need to install a driver via Zadig. See Zadig in the README (https://github.com/raspberrypi/picotool#zadig) for more information");
                             printer(dr_vidpid_stdio_usb_cant_connect,
                                     " appears to have a USB serial connection, but picotool was unable to connect.");
     #endif
@@ -8860,13 +8875,8 @@ int main(int argc, char **argv) {
                             printer(dr_vidpid_micropython,
                                     " appears to be an RP-series MicroPython device not in BOOTSEL mode.");
                             if (selected_cmd->force_requires_pre_reboot()) {
-    #if defined(_WIN32)
-                                printer(dr_vidpid_stdio_usb,
-                                        " appears to have a USB serial connection, not in BOOTSEL mode. You can force reboot into BOOTSEL mode via 'picotool reboot -f -u' first.");
-    #else
                                 printer(dr_vidpid_stdio_usb,
                                         " appears to have a USB serial connection, so consider -f (or -F) to force reboot in order to run the command.");
-    #endif
                             } else {
                                 // special case message for what is actually just reboot (the only command that doesn't require reboot first)
                                 printer(dr_vidpid_stdio_usb,
@@ -8906,13 +8916,16 @@ int main(int argc, char **argv) {
                             // we reboot into BOOTSEL mode and disable MSC interface (the 1 here)
                             auto &to_reboot = std::get<1>(devices[dr_vidpid_stdio_usb][0]);
                             auto &to_reboot_handle = std::get<2>(devices[dr_vidpid_stdio_usb][0]);
+                            unsigned int disable_mask = 1;  // disable MSC interface
     #if defined(_WIN32)
                             {
                                 struct libusb_device_descriptor desc;
                                 libusb_get_device_descriptor(to_reboot, &desc);
-                                if (desc.idProduct == PRODUCT_ID_RP2040_STDIO_USB) {
-                                    fail(ERROR_NOT_POSSIBLE,
-                                        "Forced commands do not work with RP2040 on Windows - you can force reboot into BOOTSEL mode via 'picotool reboot -f -u' instead.");
+                                if (desc.idProduct == PRODUCT_ID_RP2040_STDIO_USB || settings.force_rp2040) {
+                                    // the Zadig driver should be setup for the device in BOOTSEL mode with no interfaces disabled,  
+                                    // as all the interfaces are enabled when you plug it in while holding down the BOOTSEL button  
+                                    disable_mask = 0;
+                                    settings.force_rp2040 = true;
                                 }
                             }
     #endif
@@ -8929,7 +8942,7 @@ int main(int argc, char **argv) {
                                 }
                             }
 
-                            reboot_device(to_reboot, to_reboot_handle, true, 1);
+                            reboot_device(to_reboot, to_reboot_handle, true, disable_mask);
                             fos << "The device was asked to reboot into BOOTSEL mode so the command can be executed.";
                         } else if (tries == 1) {
                             fos << "\nWaiting for device to reboot";
@@ -8950,6 +8963,18 @@ int main(int argc, char **argv) {
                         // again is to assume it has the same serial number.
                         settings.address = -1;
                         settings.bus = -1;
+                        if (settings.pid != -1 || settings.vid != -1) {
+                            // vid/pid filtering was enabled, but may change in BOOTSEL mode, so needs to be disabled
+                            if (settings.ser.empty()) {
+                                // this is an RP2040 running a no_flash binary, so will have a standard RP2040 vid/pid in BOOTSEL mode
+                                settings.vid = -1; // -1 means filter for standard vid/pid
+                                settings.pid = -1;
+                            } else {
+                                // skip vid/pid filtering, as it can be white-labelled on RP2350, and we know the serial number
+                                settings.vid = 0; // 0 means skip vid/pid filtering entirely
+                                settings.pid = -1;
+                            }
+                        }
                         continue;
                     }
                 }
