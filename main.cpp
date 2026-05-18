@@ -7828,7 +7828,7 @@ bool otp_get_command::execute(device_map &devices) {
             }
             if (do_ecc) {
                 corrected_val = otp_calculate_ecc(raw_value &0xffff);
-                snprintf(buf, sizeof(buf), "\nVALUE 0x%06x\n", corrected_val);
+                snprintf(buf, sizeof(buf), "\nVALUE 0x%04x\n", corrected_val &0xffff);
                 fos << buf;
                 // todo more clarity over ECC settings
                 // todo recovery
