@@ -1355,10 +1355,12 @@ struct uf2_convert_command : public cmd {
                         hex("offset").set(settings.offset) % "Load offset (memory address; default 0x10000000 for BIN file)"
                 ).force_expand_help(true) % "Packaging Options" + 
                 (
-                    option("--family") & family_id("family_id").set(settings.family_id) % "family ID for UF2"
+                    option("--family") % "Specify the family ID" &
+                        family_id("family_id").set(settings.family_id) % "family ID for UF2"
                 ).force_expand_help(true) % "UF2 Family options" +
                 (
-                    option("--platform") & platform_model("platform").set(settings.model) % "optional platform for memory verification (eg rp2040, rp2350)"
+                    option("--platform") % "Optional platform for memory verification" &
+                        platform_model("platform").set(settings.model) % "platform to use (eg rp2040, rp2350)"
                 ).force_expand_help(true) % "Platform options"
             #if SUPPORT_RP2350_A2
                 + (
@@ -1387,7 +1389,8 @@ struct uf2_combine_command : public cmd {
                 named_typed_file_selection_x("infile2", 2, "uf2") % "Second file to combine" +
                 named_typed_file_selection_x("outfile", 0, "uf2") % "File to save output to" +
                 (
-                    option("--family") & family_id("family_id").set(settings.family_id) % "family ID for combined UF2 (defaults to first one)"
+                    option("--family") % "Specify the family ID" &
+                        family_id("family_id").set(settings.family_id) % "family ID for combined UF2 (defaults to first one)"
                 ).force_expand_help(true) % "UF2 Family options" +
                 (
                     option("--offset").set(settings.uf2.offset_set) % "Offset second UF2 by amount" &

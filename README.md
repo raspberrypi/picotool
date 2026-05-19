@@ -894,11 +894,15 @@ OPTIONS:
         <offset>
             Load offset (memory address; default 0x10000000 for BIN file)
     UF2 Family options
+        --family
+            Specify the family ID
         <family_id>
             family ID for UF2
     Platform options
+        --platform
+            Optional platform for memory verification
         <platform>
-            optional platform for memory verification (eg rp2040, rp2350)
+            platform to use (eg rp2040, rp2350)
     Errata RP2350-E10 Fix
         --abs-block
             Add an absolute block
@@ -940,6 +944,8 @@ OPTIONS:
         -t <type>
             Specify file type (uf2) explicitly, ignoring file extension
     UF2 Family options
+        --family
+            Specify the family ID
         <family_id>
             family ID for combined UF2 (defaults to first one)
     Offset options
