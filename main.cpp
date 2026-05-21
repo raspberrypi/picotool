@@ -5430,6 +5430,8 @@ bool encrypt_command::execute(device_map &devices) {
         elf_file source_file(settings.verbose);
         elf_file *elf = &source_file;
         elf->read_file(get_file(ios::in|ios::binary));
+        // Compress the segments together
+        elf->store_compressed(model);
         // Remove any holes in the ELF file, as these cause issues when encrypting
         elf->remove_ph_holes();
         elf->remove_sh_holes();
@@ -5783,6 +5785,8 @@ bool seal_command::execute(device_map &devices) {
         elf_file source_file(settings.verbose);
         elf_file *elf = &source_file;
         elf->read_file(get_file(ios::in|ios::binary));
+        // Compress the segments together
+        elf->store_compressed(model);
         // Remove any holes in the ELF file, as these cause issues when signing/hashing
         elf->remove_sh_holes();
         sign_guts_elf(elf, private_key, public_key, model);

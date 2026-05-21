@@ -33,17 +33,6 @@ template<typename T> void dumper(const char *msg, const T& foop) {
     DEBUG_LOG("\n");
 }
 
-std::vector<const Segment *> sorted_segs(elf_file *elf) {
-    std::vector<const Segment *> phys_sorted_segs;
-    std::transform(elf->segments().begin(), elf->segments().end(), std::back_inserter(phys_sorted_segs), [](const Segment &seg) {
-        return &seg;
-    });
-    std::sort(phys_sorted_segs.begin(), phys_sorted_segs.end(), [](const Segment *first, const Segment *second) {
-        return first->physical_address() < second->physical_address();
-    });
-    return phys_sorted_segs;
-}
-
 #if HAS_MBEDTLS
 int read_keys(const std::string &filename, public_t *public_key, private_t *private_key) {
     mbedtls_pk_context pk_ctx;
@@ -108,7 +97,7 @@ void write_otp_key_yaml(const std::string &filename, message_digest_t pub_sha256
 
 std::unique_ptr<block> find_first_block(elf_file *elf) {
     std::unique_ptr<block> first_block;
-    for(auto x : sorted_segs(elf)) {
+    for(auto x : elf->sorted_segments()) {
         if (!x->is_load()) continue;
         auto data = elf->content(*x); // x->content(*elf);
         // todo handle alignment (not sure if necessary)
@@ -734,7 +723,7 @@ std::vector<uint8_t> get_lm_hash_data(elf_file *elf, block *new_block, model_t m
             std::copy(xip_pin_size_data.begin(), xip_pin_size_data.end(), std::back_inserter(to_hash));
             DEBUG_LOG("PIN XIP SRAM %08x + %08x\n", (int)model->xip_sram_start(), (int)xip_pin_size_vec[0]);
         }
-        for(const auto &seg : sorted_segs(elf)) {
+        for(const auto &seg : elf->sorted_segments()) {
             if (!seg->is_load()) continue;
             const auto data = elf->content(*seg);
             // std::cout << "virt = " << std::hex << seg->virtual_address() << " + " << std::hex << seg->virtual_size() << ", phys = " << std::hex << seg->physical_address() << " + " << std::hex << seg->physical_size() << std::endl;
@@ -1026,7 +1015,7 @@ int encrypt(elf_file *elf, block *new_block, const aes_key_t aes_key, const publ
     }
 
     unsigned int i=0;
-    for(const auto &seg : sorted_segs(elf)) {
+    for(const auto &seg : elf->sorted_segments()) {
         if (!seg->is_load()) continue;
         std::vector<uint8_t> data(enc_data.begin() + i, enc_data.begin() + i + seg->physical_size());
         // std::cout << "virt = " << std::hex << seg->virtual_address() << " + " << std::hex << seg->virtual_size() << ", phys = " << std::hex << seg->physical_address() << " + " << std::hex << seg->physical_size() << std::endl;
