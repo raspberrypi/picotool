@@ -254,7 +254,7 @@ void set_next_block(std::vector<uint8_t> &bin, uint32_t storage_addr, std::uniqu
 }
 
 
-block place_new_block(elf_file *elf, std::unique_ptr<block> &first_block, bool set_others_ignored) {
+block place_new_block(elf_file *elf, std::unique_ptr<block> &first_block, model_t model, bool set_others_ignored) {
     uint32_t highest_ram_address = 0;
     uint32_t highest_flash_address = 0;
     bool no_flash = false;
@@ -264,9 +264,9 @@ block place_new_block(elf_file *elf, std::unique_ptr<block> &first_block, bool s
         const uint32_t paddr = seg.physical_address();
         const uint32_t psize = seg.physical_size();
         if (psize == 0) continue;
-        if (paddr >= 0x20000000 && paddr < 0x20080000) {
+        if (paddr >= model->sram_start() && paddr < model->sram_striped_end()) {
             highest_ram_address = std::max(paddr + psize, highest_ram_address);
-        } else if (paddr >= 0x10000000 && paddr < 0x20000000) {
+        } else if (paddr >=  model->flash_start() && paddr < model->flash_end()) {
             highest_flash_address = std::max(paddr + psize, highest_flash_address);
         }
     }
@@ -430,16 +430,16 @@ std::unique_ptr<block> get_last_block(std::vector<uint8_t> &bin, uint32_t storag
 }
 
 
-block place_new_block(std::vector<uint8_t> &bin, uint32_t storage_addr, std::unique_ptr<block> &first_block, bool set_others_ignored) {
+block place_new_block(std::vector<uint8_t> &bin, uint32_t storage_addr, std::unique_ptr<block> &first_block, model_t model, bool set_others_ignored) {
     uint32_t highest_ram_address = 0;
     uint32_t highest_flash_address = 0;
     bool no_flash = false;
 
     const uint32_t paddr = storage_addr;
     const uint32_t psize = bin.size();
-    if (paddr >= 0x20000000 && paddr < 0x20080000) {
+    if (paddr >= model->sram_start() && paddr < model->sram_striped_end()) {
         highest_ram_address = std::max(paddr + psize, highest_ram_address);
-    } else if (paddr >= 0x10000000 && paddr < 0x20000000) {
+    } else if (paddr >=  model->flash_start() && paddr < model->flash_end()) {
         highest_flash_address = std::max(paddr + psize, highest_flash_address);
     }
 
