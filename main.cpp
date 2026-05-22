@@ -8334,8 +8334,10 @@ bool otp_permissions_command::execute(device_map &devices) {
     for (auto it = perms_json.begin(); it != perms_json.end(); ++it) {
         settings.otp.lock0 = 0;
         settings.otp.lock1 = 0;
+        int page;
+        if (!get_int(it.key(), page)) continue;
         std::stringstream ss;
-        ss << "page" << it.key();
+        ss << "page" << page;
         settings.config.key = ss.str();
         std::cout << ss.str() << std::endl;
         auto perms = it.value();
