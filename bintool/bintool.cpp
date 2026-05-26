@@ -676,17 +676,49 @@ void hash_andor_sign_block(block *new_block, const public_t public_key, const pr
 }
 
 
+bool detect_generic_load_map_entry(const load_map_item::entry& entry, model_t model, bool &pin_xip_sram) {
+    if (!pin_xip_sram) { // don't change if already set
+        // generic xip pinning from the SDK
+        pin_xip_sram = entry.storage_address == 0x0
+                    && entry.runtime_address == model->xip_sram_start()
+                    && entry.size == 0x0;
+    }
+
+    return pin_xip_sram;
+}
+
+
 bool detect_generic_load_map(std::shared_ptr<load_map_item> load_map, model_t model, bool &pin_xip_sram) {
     if (load_map == nullptr) {
         return false;
     }
 
-    // generic xip pinning from the SDK
-    pin_xip_sram = load_map->entries.size() == 1
-        && load_map->entries[0].storage_address == 0x0
-        && load_map->entries[0].runtime_address == model->xip_sram_start()
-        && load_map->entries[0].size == 0x0;
+    if (load_map->entries.size() == 1) detect_generic_load_map_entry(load_map->entries[0], model, pin_xip_sram);
+
     return pin_xip_sram;
+}
+
+void remove_non_generic_load_map_entries(block *new_block, model_t model) {
+    if (new_block == nullptr) {
+        return;
+    }
+    std::shared_ptr<load_map_item> load_map = new_block->get_item<load_map_item>();
+    if (load_map == nullptr) {
+        return;
+    }
+
+    load_map->entries.erase(
+        std::remove_if(load_map->entries.begin(), load_map->entries.end(), 
+            [&model](const load_map_item::entry& entry) {
+                bool ignored;
+                return !detect_generic_load_map_entry(entry, model, ignored);
+            }
+        ), load_map->entries.end()
+    );
+
+    if (load_map->entries.size() == 0) {
+        new_block->items.erase(std::remove(new_block->items.begin(), new_block->items.end(), load_map), new_block->items.end());
+    }
 }
 
 

@@ -19,6 +19,8 @@ typedef enum verified_t {
 #if HAS_MBEDTLS
     int read_keys(const std::string &filename, public_t *public_key, private_t *private_key);
     void hash_andor_sign_block(block *new_block, const public_t public_key, const private_t private_key, bool hash_value, bool sign, std::vector<uint8_t> to_hash = {});
+    bool detect_generic_load_map(std::shared_ptr<load_map_item> load_map, model_t model, bool &pin_xip_sram);
+    void remove_non_generic_load_map_entries(block *new_block, model_t model);
 #endif
 
 // Elfs
