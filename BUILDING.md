@@ -97,3 +97,17 @@ make install
 In order for the SDK to find `picotool` in this custom folder, you will usually need to set the `picotool_DIR` variable in your project. This can be achieved either by setting the `picotool_DIR` environment variable to `$MY_INSTALL_DIR/picotool`, by passing `-Dpicotool_DIR=$MY_INSTALL_DIR/picotool` to your `cmake` command, or by adding `set(picotool_DIR $MY_INSTALL_DIR/picotool)` to your CMakeLists.txt file.
 
 > See the [find_package documentation](https://cmake.org/cmake/help/latest/command/find_package.html#config-mode-search-procedure) for more details
+
+
+## Customising the build
+
+The `picotool` build has some CMake variables you can use to customise how the build works, and how `picotool` functions:
+
+- `GENERATE_FIXED_DOCS_WIDTH`: By default the width of the output from `picotool` adjusts to the width of the terminal. Setting this to `true` fixes the width to 140, which is used when generating the [README](README.md).
+- `DEFAULT_BOOTSEL_LED`: This can be used to set the default value for the `--led` argument, so `picotool` always reboots devices to BOOTSEL with that LED flashing.
+- `PICOTOOL_NO_LIBUSB`: By default `picotool` is compiled with USB support if libusb is found. Setting this to `true` explicitly compiles without USB support, which is used when the Pico SDK builds picotool.
+- `USE_PRECOMPILED`: By default the build uses pre-compiles ELF/BIN files for code that is run on the device (enc_bootloader, xip_ram_perms, and picoboot_flash_id). Setting this to `false` re-compiles these files instead.
+
+These can all be set by passing `-DNAME=VALUE` to your `cmake` command (e.g. `-DGENERATE_FIXED_DOCS_WIDTH=1`).
+
+Note that the behaviour when setting `PICOTOOL_NO_LIBUSB` or `USE_PRECOMPILED` is undefined when using an existing build directory, due to the use of CMake external projects - instead you should create a new build directory to ensure it is in the correct state.

@@ -489,6 +489,10 @@ private:
      std::vector<std::shared_ptr<cmd>> _sub_commands;
 };
 
+#ifndef DEFAULT_BOOTSEL_LED
+#define DEFAULT_BOOTSEL_LED -1
+#endif
+
 struct _settings {
     std::array<std::string, 6> filenames;
     std::array<std::string, 6> file_types;
@@ -498,6 +502,8 @@ struct _settings {
     int vid=-1;
     int pid=-1;
     string ser;
+    int led=DEFAULT_BOOTSEL_LED;
+    bool active_low=false;
     bool force_rp2040 = false;
     uint32_t offset = 0;
     uint32_t from = 0;
@@ -633,6 +639,8 @@ auto device_selection =
         + option("--rp2040").set(settings.force_rp2040) % "Assume the device is an RP2040 - this is only required when using a custom vid/pid with an RP2040 on Windows, and is ignored on other operating systems"
         + option('f', "--force").set(settings.force) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode" +
                 option('F', "--force-no-reboot").set(settings.force_no_reboot) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the USB drive mounted"
+        + (option("--led") & integer("led").set(settings.led)) % "Flash LED on this GPIO to show BOOTSEL activity (ignored by Arm RP2350-A2) - only applicable if this command reboots the device to BOOTSEL mode"
+        + option("--active-low").set(settings.active_low) % "The BOOTSEL activity LED is active low (ignored on RP2040 and RP2350-A4)"
     ).min(0).doc_non_optional(true).collapse_synopsys("device-selection");
 
 #define file_types_x(i)\
@@ -8610,6 +8618,9 @@ static int reboot_device(libusb_device *device, libusb_device_handle *dev_handle
                 fail(ERROR_USB, "Failed to claim interface\n");
             }
             if (bootsel) {
+                if (settings.led >= 0) {
+                    disable_mask |= (settings.led << 9u) | (settings.active_low << 7u) | (1u << 8u);
+                }
                 ret = libusb_control_transfer(dev_handle, LIBUSB_REQUEST_TYPE_CLASS | LIBUSB_RECIPIENT_INTERFACE,
                                               RESET_REQUEST_BOOTSEL, disable_mask, i, nullptr, 0, 2000);
             } else {
@@ -8648,11 +8659,12 @@ bool reboot_command::execute(device_map &devices) {
         picoboot_memory_access raw_access(con);
         model_t model = raw_access.get_model();
         if (model->supports_picoboot_cmd(PC_REBOOT2)) {
+            uint32_t usb_flags = (settings.led >= 0) ? (settings.active_low ? 0x30u : 0x20u) : 0u;
             struct picoboot_reboot2_cmd cmd = {
                     .dFlags = (uint8_t)(settings.reboot_usb ? REBOOT2_FLAG_REBOOT_TYPE_BOOTSEL : REBOOT2_FLAG_REBOOT_TYPE_NORMAL),
                     .dDelayMS = 500,
-                    .dParam0 = settings.reboot_usb ? 0u : (unsigned int)settings.reboot_diagnostic_partition,
-                    .dParam1 = 0,
+                    .dParam0 = settings.reboot_usb ? usb_flags : (unsigned int)settings.reboot_diagnostic_partition,
+                    .dParam1 = (settings.reboot_usb && (settings.led >= 0)) ? settings.led : 0u,
             };
             if (!settings.switch_cpu.empty()) {
                 if (settings.switch_cpu == "arm")
@@ -8675,11 +8687,13 @@ bool reboot_command::execute(device_map &devices) {
             // on RP2040 pass 0 to reboot in to flash
             con.reboot(0, 0, 500);
         } else {
+            uint32_t led_flag = (settings.led >= 0) ? (1u << settings.led) : 0u;
             unsigned int program_base = SRAM_START;
             std::vector<uint32_t> program = {
-                    0x20002100, // movs r0, #0;       movs r1, #0
-                    0x47104a00, // ldr  r2, [pc, #0]; bx r2
-                    bootrom_func_lookup_rp2040(raw_access, rom_table_code('U', 'B'))
+                    0x21004802, // ldr r0, [pc, #8]; movs r1, #0
+                    0x47104a00, // ldr r2, [pc, #0]; bx r2
+                    bootrom_func_lookup_rp2040(raw_access, rom_table_code('U', 'B')),
+                    led_flag,
             };
 
             raw_access.write_vector(program_base, program);
