@@ -123,11 +123,11 @@ TARGET SELECTION:
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
             USB drive mounted
-        --led <led>
-            Flash LED on this GPIO to show BOOTSEL activity (ignored by Arm RP2350-A2) - only applicable if this command reboots the device
-            to BOOTSEL mode
-        --active-low
-            The BOOTSEL activity LED is active low (ignored on RP2040 and RP2350-A4)
+        --bootsel-led <gpio>
+            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by RP2350-A2 in Arm mode) - only applicable if
+            this command reboots the device to BOOTSEL mode
+        --bootsel-led-active-low
+            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
     To target a file
         <filename>
             The file name
@@ -237,11 +237,11 @@ TARGET SELECTION:
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
             USB drive mounted
-        --led <led>
-            Flash LED on this GPIO to show BOOTSEL activity (ignored by Arm RP2350-A2) - only applicable if this command reboots the device
-            to BOOTSEL mode
-        --active-low
-            The BOOTSEL activity LED is active low (ignored on RP2040 and RP2350-A4)
+        --bootsel-led <gpio>
+            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by RP2350-A2 in Arm mode) - only applicable if
+            this command reboots the device to BOOTSEL mode
+        --bootsel-led-active-low
+            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
     To target a file
         <filename>
             The file name
@@ -347,11 +347,11 @@ OPTIONS:
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
             USB drive mounted
-        --led <led>
-            Flash LED on this GPIO to show BOOTSEL activity (ignored by Arm RP2350-A2) - only applicable if this command reboots the device
-            to BOOTSEL mode
-        --active-low
-            The BOOTSEL activity LED is active low (ignored on RP2040 and RP2350-A4)
+        --bootsel-led <gpio>
+            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by RP2350-A2 in Arm mode) - only applicable if
+            this command reboots the device to BOOTSEL mode
+        --bootsel-led-active-low
+            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
 ```
 
 e.g.
@@ -421,11 +421,11 @@ OPTIONS:
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
             USB drive mounted
-        --led <led>
-            Flash LED on this GPIO to show BOOTSEL activity (ignored by Arm RP2350-A2) - only applicable if this command reboots the device
-            to BOOTSEL mode
-        --active-low
-            The BOOTSEL activity LED is active low (ignored on RP2040 and RP2350-A4)
+        --bootsel-led <gpio>
+            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by RP2350-A2 in Arm mode) - only applicable if
+            this command reboots the device to BOOTSEL mode
+        --bootsel-led-active-low
+            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
 ```
 
 e.g. first looking at what is on the device...
@@ -503,11 +503,11 @@ OPTIONS:
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
             USB drive mounted
-        --led <led>
-            Flash LED on this GPIO to show BOOTSEL activity (ignored by Arm RP2350-A2) - only applicable if this command reboots the device
-            to BOOTSEL mode
-        --active-low
-            The BOOTSEL activity LED is active low (ignored on RP2040 and RP2350-A4)
+        --bootsel-led <gpio>
+            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by RP2350-A2 in Arm mode) - only applicable if
+            this command reboots the device to BOOTSEL mode
+        --bootsel-led-active-low
+            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
 ```
 
 ## erase
@@ -560,11 +560,11 @@ OPTIONS:
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
             USB drive mounted
-        --led <led>
-            Flash LED on this GPIO to show BOOTSEL activity (ignored by Arm RP2350-A2) - only applicable if this command reboots the device
-            to BOOTSEL mode
-        --active-low
-            The BOOTSEL activity LED is active low (ignored on RP2040 and RP2350-A4)
+        --bootsel-led <gpio>
+            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by RP2350-A2 in Arm mode) - only applicable if
+            this command reboots the device to BOOTSEL mode
+        --bootsel-led-active-low
+            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
 ```
 
 e.g. first looking at what is on the device...
@@ -650,11 +650,11 @@ OPTIONS:
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
             USB drive mounted
-        --led <led>
-            Flash LED on this GPIO to show BOOTSEL activity (ignored by Arm RP2350-A2) - only applicable if this command reboots the device
-            to BOOTSEL mode
-        --active-low
-            The BOOTSEL activity LED is active low (ignored on RP2040 and RP2350-A4)
+        --bootsel-led <gpio>
+            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by RP2350-A2 in Arm mode) - only applicable if
+            this command reboots the device to BOOTSEL mode
+        --bootsel-led-active-low
+            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
 ```
 
 ## seal
@@ -837,11 +837,11 @@ OPTIONS:
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
             USB drive mounted
-        --led <led>
-            Flash LED on this GPIO to show BOOTSEL activity (ignored by Arm RP2350-A2) - only applicable if this command reboots the device
-            to BOOTSEL mode
-        --active-low
-            The BOOTSEL activity LED is active low (ignored on RP2040 and RP2350-A4)
+        --bootsel-led <gpio>
+            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by RP2350-A2 in Arm mode) - only applicable if
+            this command reboots the device to BOOTSEL mode
+        --bootsel-led-active-low
+            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
 ```
 
 ```text
@@ -1002,11 +1002,11 @@ OPTIONS:
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
             USB drive mounted
-        --led <led>
-            Flash LED on this GPIO to show BOOTSEL activity (ignored by Arm RP2350-A2) - only applicable if this command reboots the device
-            to BOOTSEL mode
-        --active-low
-            The BOOTSEL activity LED is active low (ignored on RP2040 and RP2350-A4)
+        --bootsel-led <gpio>
+            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by RP2350-A2 in Arm mode) - only applicable if
+            this command reboots the device to BOOTSEL mode
+        --bootsel-led-active-low
+            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
 ```
 
 ## otp
@@ -1109,11 +1109,11 @@ TARGET SELECTION:
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
             USB drive mounted
-        --led <led>
-            Flash LED on this GPIO to show BOOTSEL activity (ignored by Arm RP2350-A2) - only applicable if this command reboots the device
-            to BOOTSEL mode
-        --active-low
-            The BOOTSEL activity LED is active low (ignored on RP2040 and RP2350-A4)
+        --bootsel-led <gpio>
+            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by RP2350-A2 in Arm mode) - only applicable if
+            this command reboots the device to BOOTSEL mode
+        --bootsel-led-active-low
+            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
 ```
 
 ```text
@@ -1177,11 +1177,11 @@ TARGET SELECTION:
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
             USB drive mounted
-        --led <led>
-            Flash LED on this GPIO to show BOOTSEL activity (ignored by Arm RP2350-A2) - only applicable if this command reboots the device
-            to BOOTSEL mode
-        --active-low
-            The BOOTSEL activity LED is active low (ignored on RP2040 and RP2350-A4)
+        --bootsel-led <gpio>
+            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by RP2350-A2 in Arm mode) - only applicable if
+            this command reboots the device to BOOTSEL mode
+        --bootsel-led-active-low
+            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
 ```
 
 ### load
@@ -1232,11 +1232,11 @@ OPTIONS:
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
             USB drive mounted
-        --led <led>
-            Flash LED on this GPIO to show BOOTSEL activity (ignored by Arm RP2350-A2) - only applicable if this command reboots the device
-            to BOOTSEL mode
-        --active-low
-            The BOOTSEL activity LED is active low (ignored on RP2040 and RP2350-A4)
+        --bootsel-led <gpio>
+            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by RP2350-A2 in Arm mode) - only applicable if
+            this command reboots the device to BOOTSEL mode
+        --bootsel-led-active-low
+            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
 ```
 
 For example, if you wish to sign a binary and then test secure boot with it, you can run the following set of commands:
@@ -1284,11 +1284,11 @@ OPTIONS:
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
             USB drive mounted
-        --led <led>
-            Flash LED on this GPIO to show BOOTSEL activity (ignored by Arm RP2350-A2) - only applicable if this command reboots the device
-            to BOOTSEL mode
-        --active-low
-            The BOOTSEL activity LED is active low (ignored on RP2040 and RP2350-A4)
+        --bootsel-led <gpio>
+            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by RP2350-A2 in Arm mode) - only applicable if
+            this command reboots the device to BOOTSEL mode
+        --bootsel-led-active-low
+            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
 ```
 
 ```text
@@ -1377,11 +1377,11 @@ OPTIONS:
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
             USB drive mounted
-        --led <led>
-            Flash LED on this GPIO to show BOOTSEL activity (ignored by Arm RP2350-A2) - only applicable if this command reboots the device
-            to BOOTSEL mode
-        --active-low
-            The BOOTSEL activity LED is active low (ignored on RP2040 and RP2350-A4)
+        --bootsel-led <gpio>
+            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by RP2350-A2 in Arm mode) - only applicable if
+            this command reboots the device to BOOTSEL mode
+        --bootsel-led-active-low
+            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
 ```
 
 ```text
@@ -1450,11 +1450,11 @@ TARGET SELECTION:
             Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the
             command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the
             USB drive mounted
-        --led <led>
-            Flash LED on this GPIO to show BOOTSEL activity (ignored by Arm RP2350-A2) - only applicable if this command reboots the device
-            to BOOTSEL mode
-        --active-low
-            The BOOTSEL activity LED is active low (ignored on RP2040 and RP2350-A4)
+        --bootsel-led <gpio>
+            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by RP2350-A2 in Arm mode) - only applicable if
+            this command reboots the device to BOOTSEL mode
+        --bootsel-led-active-low
+            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
     To dump the contents of an OTP JSON file
         <input>
             The file name

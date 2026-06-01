@@ -77,6 +77,11 @@ static __forceinline int __builtin_ctz(unsigned x) {
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 
+// preprocessor macros
+#define STR_HELPER(x) #x
+#define STR(x) STR_HELPER(x)
+
+
 #define MAX_REBOOT_TRIES 5
 
 #define OTP_PAGE_COUNT 64
@@ -639,8 +644,15 @@ auto device_selection =
         + option("--rp2040").set(settings.force_rp2040) % "Assume the device is an RP2040 - this is only required when using a custom vid/pid with an RP2040 on Windows, and is ignored on other operating systems"
         + option('f', "--force").set(settings.force) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode" +
                 option('F', "--force-no-reboot").set(settings.force_no_reboot) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the USB drive mounted"
-        + (option("--led") & integer("led").set(settings.led)) % "Flash LED on this GPIO to show BOOTSEL activity (ignored by Arm RP2350-A2) - only applicable if this command reboots the device to BOOTSEL mode"
-        + option("--active-low").set(settings.active_low) % "The BOOTSEL activity LED is active low (ignored on RP2040 and RP2350-A4)"
+        + (option("--bootsel-led") & integer("gpio").set(settings.led)) % 
+        "Specify the GPIO for the BOOTSEL activity LED to flash (default "
+    #if DEFAULT_BOOTSEL_LED < 0
+        "none"
+    #else
+        STR(DEFAULT_BOOTSEL_LED)
+    #endif
+        ", ignored by RP2350-A2 in Arm mode) - only applicable if this command reboots the device to BOOTSEL mode"
+        + option("--bootsel-led-active-low").set(settings.active_low) % "The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)"
     ).min(0).doc_non_optional(true).collapse_synopsys("device-selection");
 
 #define file_types_x(i)\

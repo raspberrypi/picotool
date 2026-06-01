@@ -104,7 +104,7 @@ In order for the SDK to find `picotool` in this custom folder, you will usually 
 The `picotool` build has some CMake variables you can use to customise how the build works, and how `picotool` functions:
 
 - `GENERATE_FIXED_DOCS_WIDTH`: By default the width of the output from `picotool` adjusts to the width of the terminal. Setting this to `true` fixes the width to 140, which is used when generating the [README](README.md).
-- `DEFAULT_BOOTSEL_LED`: This can be used to set the default value for the `--led` argument, so `picotool` always reboots devices to BOOTSEL with that LED flashing.
+- `DEFAULT_BOOTSEL_LED`: This can be used to set the default value for the `--bootsel-led` argument, so `picotool` always reboots devices to BOOTSEL with that LED flashing.
 - `PICOTOOL_NO_LIBUSB`: By default `picotool` is compiled with USB support if libusb is found. Setting this to `true` explicitly compiles without USB support, which is used when the Pico SDK builds picotool.
 - `USE_PRECOMPILED`: By default the build uses pre-compiled ELF/BIN files for code that is run on the device (enc_bootloader, xip_ram_perms, and picoboot_flash_id). Setting this to `false` re-compiles these files instead.
 
