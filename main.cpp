@@ -8659,7 +8659,12 @@ bool reboot_command::execute(device_map &devices) {
         picoboot_memory_access raw_access(con);
         model_t model = raw_access.get_model();
         if (model->supports_picoboot_cmd(PC_REBOOT2)) {
-            uint32_t usb_flags = (settings.led >= 0) ? (settings.active_low ? 0x30u : 0x20u) : 0u;
+            uint32_t usb_flags = 0u;
+            if (settings.led >= 0) {
+                usb_flags |= BOOTSEL_FLAG_GPIO_PIN_SPECIFIED;
+                if (settings.active_low)
+                    usb_flags |= BOOTSEL_FLAG_GPIO_PIN_ACTIVE_LOW;
+            }
             struct picoboot_reboot2_cmd cmd = {
                     .dFlags = (uint8_t)(settings.reboot_usb ? REBOOT2_FLAG_REBOOT_TYPE_BOOTSEL : REBOOT2_FLAG_REBOOT_TYPE_NORMAL),
                     .dDelayMS = 500,
