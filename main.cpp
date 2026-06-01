@@ -651,7 +651,7 @@ auto device_selection =
     #else
         STR(DEFAULT_BOOTSEL_LED)
     #endif
-        ", ignored by RP2350-A2 in Arm mode) - only applicable if this command reboots the device to BOOTSEL mode"
+        ", ignored by RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to BOOTSEL mode"
         + option("--bootsel-led-active-low").set(settings.active_low) % "The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)"
     ).min(0).doc_non_optional(true).collapse_synopsys("device-selection");
 
