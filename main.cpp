@@ -1359,7 +1359,7 @@ struct uf2_convert_command : public cmd {
                         family_id("family_id").set(settings.family_id) % "family ID for UF2"
                 ).force_expand_help(true) % "UF2 Family options" +
                 (
-                    option("--platform") % "Optional platform for memory verification" &
+                    option("--platform") % "Optional platform for memory-address validation" &
                         platform_model("platform").set(settings.model) % "platform to use (eg rp2040, rp2350)"
                 ).force_expand_help(true) % "Platform options"
             #if SUPPORT_RP2350_A2
@@ -6840,7 +6840,7 @@ bool uf2_convert_command::execute(device_map &devices) {
 }
 
 bool uf2_combine_command::execute(device_map &devices) {
-    if (get_file_type_idx(0) != filetype::uf2 || get_file_type_idx(1) != filetype::uf2 || get_file_type_idx(0) != filetype::uf2) {
+    if (get_file_type_idx(0) != filetype::uf2 || get_file_type_idx(1) != filetype::uf2) {
         fail(ERROR_ARGS, "All files must be UF2 files\n");
     }
 
