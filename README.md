@@ -962,7 +962,7 @@ OPTIONS:
             family ID for UF2
     Platform options
         --platform
-            Optional platform for memory verification
+            Optional platform for memory-address validation
         <platform>
             platform to use (eg rp2040, rp2350)
     Errata RP2350-E10 Fix
