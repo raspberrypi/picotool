@@ -77,6 +77,11 @@ static __forceinline int __builtin_ctz(unsigned x) {
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 
+// preprocessor macros
+#define STR_HELPER(x) #x
+#define STR(x) STR_HELPER(x)
+
+
 #define MAX_REBOOT_TRIES 5
 
 #define OTP_PAGE_COUNT 64
@@ -126,6 +131,36 @@ static const string rp2350_arm_s_family_name = "rp2350-arm-s";
 static const string rp2350_arm_ns_family_name = "rp2350-arm-ns";
 static const string rp2350_riscv_family_name = "rp2350-riscv";
 static const string cyw43_firmware_family_name = "cyw43-firmware";
+
+static const std::vector<std::string> family_names = {
+    data_family_name,
+    absolute_family_name,
+    rp2040_family_name,
+    rp2350_arm_s_family_name,
+    rp2350_arm_ns_family_name,
+    rp2350_riscv_family_name,
+    cyw43_firmware_family_name
+};
+
+static const std::map<uint32_t, std::string> family_id_to_name = {
+    {DATA_FAMILY_ID, data_family_name},
+    {ABSOLUTE_FAMILY_ID, absolute_family_name},
+    {RP2040_FAMILY_ID, rp2040_family_name},
+    {RP2350_ARM_S_FAMILY_ID, rp2350_arm_s_family_name},
+    {RP2350_ARM_NS_FAMILY_ID, rp2350_arm_ns_family_name},
+    {RP2350_RISCV_FAMILY_ID, rp2350_riscv_family_name},
+    {CYW43_FIRMWARE_FAMILY_ID, cyw43_firmware_family_name}
+};
+
+static const std::map<std::string, uint32_t> family_name_to_id = {
+    {data_family_name, DATA_FAMILY_ID},
+    {absolute_family_name, ABSOLUTE_FAMILY_ID},
+    {rp2040_family_name, RP2040_FAMILY_ID},
+    {rp2350_arm_s_family_name, RP2350_ARM_S_FAMILY_ID},
+    {rp2350_arm_ns_family_name, RP2350_ARM_NS_FAMILY_ID},
+    {rp2350_riscv_family_name, RP2350_RISCV_FAMILY_ID},
+    {cyw43_firmware_family_name, CYW43_FIRMWARE_FAMILY_ID}
+};
 
 #if !HAS_LIBUSB
 static const string built_without_libusb_message = "\nThis version of picotool was compiled without USB support. Some commands are not available.\n";
@@ -365,42 +400,32 @@ struct family_id : public cli::value_base<family_id> {
         string nm = "<" + name() + ">";
         // note we cannot capture "this"
         on_action([&t, nm](string value) {
-            auto ovalue = value;
-            if (value == data_family_name) {
-                t = DATA_FAMILY_ID;
-            } else if (value == absolute_family_name) {
-                t = ABSOLUTE_FAMILY_ID;
-            } else if (value == rp2040_family_name) {
-                t = RP2040_FAMILY_ID;
-            } else if (value == rp2350_arm_s_family_name) {
-                t = RP2350_ARM_S_FAMILY_ID;
-            } else if (value == rp2350_arm_ns_family_name) {
-                t = RP2350_ARM_NS_FAMILY_ID;
-            } else if (value == rp2350_riscv_family_name) {
-                t = RP2350_RISCV_FAMILY_ID;
-            } else if (value == cyw43_firmware_family_name) {
-                t = CYW43_FIRMWARE_FAMILY_ID;
-            } else {
-                if (value.find("0x") == 0) {
-                    value = value.substr(2);
-                    size_t pos = 0;
-                    long lvalue = std::numeric_limits<long>::max();
-                    try {
-                        lvalue = std::stoul(value, &pos, 16);
-                        if (pos != value.length()) {
-                            return "Garbage after hex value: " + value.substr(pos);
-                        }
-                    } catch (std::invalid_argument &) {
-                        return ovalue + " is not a valid hex value";
-                    } catch (std::out_of_range &) {
+            std::transform(value.begin(), value.end(), value.begin(),
+                [](unsigned char c){ return std::tolower(c); });
+            std::replace( value.begin(), value.end(), '_', '-');
+            auto family_id = family_name_to_id.find(value);
+            if (family_id != family_name_to_id.end()) {
+                t = family_id->second;
+            } else if (value.find("0x") == 0) {
+                value = value.substr(2);
+                size_t pos = 0;
+                long lvalue = std::numeric_limits<long>::max();
+                try {
+                    lvalue = std::stoul(value, &pos, 16);
+                    if (pos != value.length()) {
+                        return "Garbage after hex value: " + value.substr(pos);
                     }
-                    if (lvalue != (unsigned int) lvalue) {
-                        return value + " is not a valid 32 bit value";
-                    }
-                    t = (unsigned int) lvalue;
-                } else {
-                    return value + " is not a valid family ID";
+                } catch (std::invalid_argument &) {
+                    return value + " is not a valid hex value";
+                } catch (std::out_of_range &) {
                 }
+                if (lvalue != (unsigned int) lvalue) {
+                    return value + " is not a valid 32 bit value";
+                }
+                t = (unsigned int) lvalue;
+            } else {
+                return value + " is not a valid family ID"
+                + "\n\nValid family IDs are: " + cli::join(family_names, ", ") + ", or hex strings starting with 0x";
             }
             return string("");
         });
@@ -409,13 +434,10 @@ struct family_id : public cli::value_base<family_id> {
 };
 
 string family_name(unsigned int family_id) {
-    if (family_id == DATA_FAMILY_ID) return "'" + data_family_name + "'";
-    if (family_id == ABSOLUTE_FAMILY_ID) return "'" + absolute_family_name + "'";
-    if (family_id == RP2040_FAMILY_ID) return "'" + rp2040_family_name + "'";
-    if (family_id == RP2350_ARM_S_FAMILY_ID) return "'" + rp2350_arm_s_family_name + "'";
-    if (family_id == RP2350_ARM_NS_FAMILY_ID) return "'" + rp2350_arm_ns_family_name + "'";
-    if (family_id == RP2350_RISCV_FAMILY_ID) return "'" + rp2350_riscv_family_name + "'";
-    if (family_id == CYW43_FIRMWARE_FAMILY_ID) return "'" + cyw43_firmware_family_name + "'";
+    auto family_name = family_id_to_name.find(family_id);
+    if (family_name != family_id_to_name.end()) {
+        return "'" + family_name->second + "'";
+    }
     if (!family_id) return "none";
     return hex_string(family_id);
 }
@@ -472,6 +494,10 @@ private:
      std::vector<std::shared_ptr<cmd>> _sub_commands;
 };
 
+#ifndef DEFAULT_BOOTSEL_LED
+#define DEFAULT_BOOTSEL_LED -1
+#endif
+
 struct _settings {
     std::array<std::string, 6> filenames;
     std::array<std::string, 6> file_types;
@@ -481,6 +507,9 @@ struct _settings {
     int vid=-1;
     int pid=-1;
     string ser;
+    int led=DEFAULT_BOOTSEL_LED;
+    bool active_low=false;
+    bool force_rp2040 = false;
     uint32_t offset = 0;
     uint32_t from = 0;
     uint32_t to = 0;
@@ -616,8 +645,18 @@ auto device_selection =
         (option("--vid") & integer("vid").set(settings.vid).if_missing([] { return "missing vid"; })) % "Filter by vendor id" +
         (option("--pid") & integer("pid").set(settings.pid)) % "Filter by product id" +
         (option("--ser") & value("ser").set(settings.ser)) % "Filter by serial number"
+        + option("--rp2040").set(settings.force_rp2040) % "Assume the device is an RP2040 - this is only required when using a custom vid/pid with an RP2040 on Windows, and is ignored on other operating systems"
         + option('f', "--force").set(settings.force) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode" +
                 option('F', "--force-no-reboot").set(settings.force_no_reboot) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the USB drive mounted"
+        + (option("--bootsel-led") & integer("gpio").set(settings.led)) % 
+        "Specify the GPIO for the BOOTSEL activity LED to flash (default "
+    #if DEFAULT_BOOTSEL_LED < 0
+        "none"
+    #else
+        STR(DEFAULT_BOOTSEL_LED)
+    #endif
+        ", ignored by RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to BOOTSEL mode"
+        + option("--bootsel-led-active-low").set(settings.active_low) % "The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)"
     ).min(0).doc_non_optional(true).collapse_synopsys("device-selection");
 
 #define file_types_x(i)\
@@ -3342,13 +3381,13 @@ string str_permissions(unsigned int p) {
     return ss.str();
 }
 
-void insert_default_families(uint32_t flags_and_permissions, vector<std::string> &family_ids) {
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_ABSOLUTE_BITS) family_ids.emplace_back(family_name(ABSOLUTE_FAMILY_ID));
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2040_BITS) family_ids.emplace_back(family_name(RP2040_FAMILY_ID));
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_S_BITS) family_ids.emplace_back(family_name(RP2350_ARM_S_FAMILY_ID));
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_NS_BITS) family_ids.emplace_back(family_name(RP2350_ARM_NS_FAMILY_ID));
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_RISCV_BITS) family_ids.emplace_back(family_name(RP2350_RISCV_FAMILY_ID));
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_DATA_BITS) family_ids.emplace_back(family_name(DATA_FAMILY_ID));
+void insert_default_families(uint32_t flags_and_permissions, vector<std::string> &family_names) {
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_ABSOLUTE_BITS) family_names.emplace_back(family_name(ABSOLUTE_FAMILY_ID));
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2040_BITS) family_names.emplace_back(family_name(RP2040_FAMILY_ID));
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_S_BITS) family_names.emplace_back(family_name(RP2350_ARM_S_FAMILY_ID));
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_NS_BITS) family_names.emplace_back(family_name(RP2350_ARM_NS_FAMILY_ID));
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_RISCV_BITS) family_names.emplace_back(family_name(RP2350_RISCV_FAMILY_ID));
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_DATA_BITS) family_names.emplace_back(family_name(DATA_FAMILY_ID));
 }
 
 static chip_t image_type_exe_chip_to_chip(uint image_type_exe_chip) {
@@ -3460,9 +3499,9 @@ void info_guts(memory_access &raw_access, void *con) {
                 info_pair("partition table", partition_table->singleton ? "singleton" : "non-singleton");
                 std::stringstream unpartitioned;
                 unpartitioned << str_permissions(partition_table->unpartitioned_flags);
-                std::vector<std::string> family_ids;
-                insert_default_families(partition_table->unpartitioned_flags, family_ids);
-                unpartitioned << ", uf2 { " << cli::join(family_ids, ", ") << " }";
+                std::vector<std::string> family_names;
+                insert_default_families(partition_table->unpartitioned_flags, family_names);
+                unpartitioned << ", uf2 { " << cli::join(family_names, ", ") << " }";
                 info_pair("un-partitioned space", unpartitioned.str());
 
                 for (size_t i=0; i < partition_table->partitions.size(); i++) {
@@ -3492,17 +3531,17 @@ void info_guts(memory_access &raw_access, void *con) {
                         pstring << ", id=" << hex_string(id, 16, false);
                     }
                     uint32_t num_extra_families = partition.extra_families.size();
-                    family_ids.clear();
-                    insert_default_families(flags, family_ids);
+                    family_names.clear();
+                    insert_default_families(flags, family_names);
                     for (auto family : partition.extra_families) {
-                        family_ids.emplace_back(family_name(family));
+                        family_names.emplace_back(family_name(family));
                     }
                     if (flags & PICOBIN_PARTITION_FLAGS_HAS_NAME_BITS) {
                         pstring << ", \"";
                         pstring << partition.name;
                         pstring << '"';
                     }
-                    pstring << ", uf2 { " << cli::join(family_ids, ", ") << " }";
+                    pstring << ", uf2 { " << cli::join(family_names, ", ") << " }";
                     pstring << ", arm_boot " << !(flags & PICOBIN_PARTITION_FLAGS_IGNORED_DURING_ARM_BOOT_BITS);
                     pstring << ", riscv_boot " << !(flags & PICOBIN_PARTITION_FLAGS_IGNORED_DURING_RISCV_BOOT_BITS);
                     info_pair(pname.str(), pstring.str());
@@ -4145,9 +4184,9 @@ string missing_device_string(bool wasRetry, bool requires_rp2350 = false) {
             snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found with address %d.", device_name, settings.address);
         }
     } else if (settings.bus != -1) {
-        snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found found on bus %d.", device_name, settings.bus);
+        snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found on bus %d.", device_name, settings.bus);
     } else if (!settings.ser.empty()) {
-        snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found found with serial number %s.", device_name, settings.ser.c_str());
+        snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found with serial number %s.", device_name, settings.ser.c_str());
     } else {
         snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found.", device_name);
     }
@@ -4821,6 +4860,7 @@ bool erase_command::execute(device_map &devices) {
 
     {
         progress_bar bar("Erasing: ");
+        con.exit_xip();
         for (uint32_t addr = start; addr < end; addr += FLASH_SECTOR_ERASE_SIZE) {
             bar.progress(addr-start, end-start);
             con.flash_erase(addr, FLASH_SECTOR_ERASE_SIZE);
@@ -6432,9 +6472,9 @@ bool partition_info_command::execute(device_map &devices) {
     }
     printf("un-partitioned_space : ");
     fos << str_permissions(unpartitioned.permissions_and_flags);
-    std::vector<std::string> family_ids;
-    insert_default_families(unpartitioned.permissions_and_flags, family_ids);
-    printf(", uf2 { %s }\n", cli::join(family_ids, ", ").c_str());
+    std::vector<std::string> family_names;
+    insert_default_families(unpartitioned.permissions_and_flags, family_names);
+    printf(", uf2 { %s }\n", cli::join(family_names, ", ").c_str());
 
     if (has_pt) {
         printf("partitions:\n");
@@ -6476,8 +6516,8 @@ bool partition_info_command::execute(device_map &devices) {
             uint32_t num_extra_families =
                     (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_NUM_EXTRA_FAMILIES_BITS)
                             >> PICOBIN_PARTITION_FLAGS_ACCEPTS_NUM_EXTRA_FAMILIES_LSB;
-            family_ids.clear();
-            insert_default_families(flags_and_permissions, family_ids);
+            family_names.clear();
+            insert_default_families(flags_and_permissions, family_names);
             if (num_extra_families | (flags_and_permissions & PICOBIN_PARTITION_FLAGS_HAS_NAME_BITS)) {
                 cmd.dParams[0] = PT_INFO_SINGLE_PARTITION | PT_INFO_PARTITION_FAMILY_IDS | PT_INFO_PARTITION_NAME |
                                 (i << 24);
@@ -6487,7 +6527,7 @@ bool partition_info_command::execute(device_map &devices) {
                 assert((flags_and_permissions & PICOBIN_PARTITION_FLAGS_HAS_NAME_BITS) ||
                        got == num_extra_families + 1);
                 for (unsigned int j = 1; j < num_extra_families + 1; j++) {
-                    family_ids.emplace_back(family_name(family_id_name_buf_32[j + 1]));
+                    family_names.emplace_back(family_name(family_id_name_buf_32[j + 1]));
                 }
                 if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_HAS_NAME_BITS) {
                     uint8_t *bytes = &family_id_name_buf[(num_extra_families + 2) * 4];
@@ -6498,7 +6538,7 @@ bool partition_info_command::execute(device_map &devices) {
                     putchar('"');
                 }
             }
-            printf(", uf2 { %s }", cli::join(family_ids, ", ").c_str());
+            printf(", uf2 { %s }", cli::join(family_names, ", ").c_str());
             printf(", arm_boot %d", !(flags_and_permissions & PICOBIN_PARTITION_FLAGS_IGNORED_DURING_ARM_BOOT_BITS));
             printf(", riscv_boot %d", !(flags_and_permissions & PICOBIN_PARTITION_FLAGS_IGNORED_DURING_RISCV_BOOT_BITS));
             printf("\n");
@@ -6531,21 +6571,32 @@ uint32_t permissions_to_flags(json permissions) {
     return ret;
 }
 
-uint32_t families_to_flags(std::vector<string> families) {
+uint32_t families_to_flags(std::vector<string> families, bool fail_invalid = false) {
     uint32_t ret = 0;
+    uint32_t id = 0;
+    auto family_id_getter = family_id("family_id").set(id);
     for (auto family : families) {
-        if (family == data_family_name) {
+        auto family_id_ret = family_id_getter.action(family);
+        if (family_id_ret.size() > 0) {
+            if (fail_invalid) {
+                fail(ERROR_FORMAT, "Could not parse family ID from %s: %s", family.c_str(), family_id_ret.c_str());
+            }
+            continue;
+        }
+        if (id == DATA_FAMILY_ID) {
             ret |= PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_DATA_BITS;
-        } else if (family == absolute_family_name) {
+        } else if (id == ABSOLUTE_FAMILY_ID) {
             ret |= PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_ABSOLUTE_BITS;
-        } else if (family == rp2040_family_name) {
+        } else if (id == RP2040_FAMILY_ID) {
             ret |= PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2040_BITS;
-        } else if (family == rp2350_arm_s_family_name) {
+        } else if (id == RP2350_ARM_S_FAMILY_ID) {
             ret |= PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_S_BITS;
-        } else if (family == rp2350_arm_ns_family_name) {
+        } else if (id == RP2350_ARM_NS_FAMILY_ID) {
             ret |= PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_NS_BITS;
-        } else if (family == rp2350_riscv_family_name) {
+        } else if (id == RP2350_RISCV_FAMILY_ID) {
             ret |= PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_RISCV_BITS;
+        } else if (fail_invalid) {
+            fail(ERROR_FORMAT, "Invalid family ID for bootrom flags: %s", family.c_str());
         }
     }
     return ret;
@@ -6588,7 +6639,7 @@ bool partition_create_command::execute(device_map &devices) {
         pt_block = std::make_shared<block>(FLASH_START);
     }
 
-    uint32_t unpartitioned_flags = permissions_to_flags(pt_json["unpartitioned"]["permissions"]) | families_to_flags(pt_json["unpartitioned"]["families"]);
+    uint32_t unpartitioned_flags = permissions_to_flags(pt_json["unpartitioned"]["permissions"]) | families_to_flags(pt_json["unpartitioned"]["families"], true);
     partition_table_item pt(unpartitioned_flags, settings.partition.singleton);
 
 #if SUPPORT_RP2350_A2
@@ -6810,6 +6861,10 @@ bool uf2_info_command::execute(device_map &devices) {
 bool uf2_convert_command::execute(device_map &devices) {
     if (get_file_type_idx(1) != filetype::uf2) {
         fail(ERROR_ARGS, "Output must be a UF2 file\n");
+    }
+
+    if (get_file_type_idx(0) != filetype::elf && get_file_type_idx(0) != filetype::bin) {
+        fail(ERROR_ARGS, "Input must be an ELF or BIN file\n");
     }
 
     uint32_t family_id = get_family_id(0);
@@ -7096,7 +7151,7 @@ bool coprodis_command::decode_line(uint32_t val, char *buf, size_t buf_len) {
             if (CRn != 0 || opc1 >= 8) {
 //                    fail(ERROR_INCOMPATIBLE,
 //                         "Instruction %s %d, #%d, %s, c%d, c%d, #%d is not supported by GPIO Coprocessor",
-//                         inst.c_str(), coproc, opc1, cpu_reg(Rt), CRn, CRm, opc2
+//                         inst, coproc, opc1, cpu_reg(Rt), CRn, CRm, opc2
 //                    );
                 printf("WARNING: Instruction %s %d, #%d, %s, c%d, c%d, #%d is not supported by GPIO Coprocessor\n",
                      inst, coproc, opc1, cpu_reg(Rt), CRn, CRm, opc2
@@ -7673,6 +7728,10 @@ bool coprodis_command::execute(device_map &devices) {
                 break;
             }
             consume_whitespace(pos);
+            if (line.compare(pos, 5, ".word") == 0) {
+                // This is a .word, not a coprocessor instruction
+                break;
+            }
             if (pos < sizeof(buf)-1) {
                 strncpy(buf, line.c_str(), sizeof(buf)-1);
                 replaced = decode_line(instr, buf + pos, sizeof(buf) - pos - 1);
@@ -7967,7 +8026,7 @@ bool otp_get_command::execute(device_map &devices) {
             }
             if (do_ecc) {
                 corrected_val = otp_calculate_ecc(raw_value &0xffff);
-                snprintf(buf, sizeof(buf), "\nVALUE 0x%06x\n", corrected_val);
+                snprintf(buf, sizeof(buf), "\nVALUE 0x%04x\n", corrected_val &0xffff);
                 fos << buf;
                 // todo more clarity over ECC settings
                 // todo recovery
@@ -8749,6 +8808,9 @@ static int reboot_device(libusb_device *device, libusb_device_handle *dev_handle
                 fail(ERROR_USB, "Failed to claim interface\n");
             }
             if (bootsel) {
+                if (settings.led >= 0) {
+                    disable_mask |= (settings.led << 9u) | (settings.active_low << 7u) | (1u << 8u);
+                }
                 ret = libusb_control_transfer(dev_handle, LIBUSB_REQUEST_TYPE_CLASS | LIBUSB_RECIPIENT_INTERFACE,
                                               RESET_REQUEST_BOOTSEL, disable_mask, i, nullptr, 0, 2000);
             } else {
@@ -8787,11 +8849,17 @@ bool reboot_command::execute(device_map &devices) {
         picoboot_memory_access raw_access(con);
         model_t model = raw_access.get_model();
         if (model->supports_picoboot_cmd(PC_REBOOT2)) {
+            uint32_t usb_flags = 0u;
+            if (settings.led >= 0) {
+                usb_flags |= BOOTSEL_FLAG_GPIO_PIN_SPECIFIED;
+                if (settings.active_low)
+                    usb_flags |= BOOTSEL_FLAG_GPIO_PIN_ACTIVE_LOW;
+            }
             struct picoboot_reboot2_cmd cmd = {
                     .dFlags = (uint8_t)(settings.reboot_usb ? REBOOT2_FLAG_REBOOT_TYPE_BOOTSEL : REBOOT2_FLAG_REBOOT_TYPE_NORMAL),
                     .dDelayMS = 500,
-                    .dParam0 = settings.reboot_usb ? 0u : (unsigned int)settings.reboot_diagnostic_partition,
-                    .dParam1 = 0,
+                    .dParam0 = settings.reboot_usb ? usb_flags : (unsigned int)settings.reboot_diagnostic_partition,
+                    .dParam1 = (settings.reboot_usb && (settings.led >= 0)) ? settings.led : 0u,
             };
             if (!settings.switch_cpu.empty()) {
                 if (settings.switch_cpu == "arm")
@@ -8814,11 +8882,13 @@ bool reboot_command::execute(device_map &devices) {
             // on RP2040 pass 0 to reboot in to flash
             con.reboot(0, 0, 500);
         } else {
+            uint32_t led_flag = (settings.led >= 0) ? (1u << settings.led) : 0u;
             unsigned int program_base = SRAM_START;
             std::vector<uint32_t> program = {
-                    0x20002100, // movs r0, #0;       movs r1, #0
-                    0x47104a00, // ldr  r2, [pc, #0]; bx r2
-                    bootrom_func_lookup_rp2040(raw_access, rom_table_code('U', 'B'))
+                    0x21004802, // ldr r0, [pc, #8]; movs r1, #0
+                    0x47104a00, // ldr r2, [pc, #0]; bx r2
+                    bootrom_func_lookup_rp2040(raw_access, rom_table_code('U', 'B')),
+                    led_flag,
             };
 
             raw_access.write_vector(program_base, program);
@@ -8953,6 +9023,14 @@ int main(int argc, char **argv) {
                     if (result != dr_error) {
                         devices[result].emplace_back(std::make_tuple(chip, *dev, handle));
                     }
+
+                    if (settings.vid == 0 && !settings.ser.empty() && !devices[dr_vidpid_bootrom_ok].empty()) {
+                        // Searching with no vid/pid filtering (ie attempting to open all USB devices to look for a PICOBOOT interface)
+                        // can cause issues, so stop searching when we have found a device with the correct serial number, as we know we have
+                        // the correct device
+                        DEBUG_LOG("Found bootrom device with serial number, so stopping search");
+                        break;
+                    }
                 }
             }
             auto supported = selected_cmd->get_device_support();
@@ -8970,6 +9048,11 @@ int main(int argc, char **argv) {
                             bool had_note = false;
                             fos << missing_device_string(tries>0, selected_cmd->requires_rp2350());
                             if (tries) {
+#if defined(_WIN32)
+                                if (settings.force_rp2040) {
+                                    fos << " You may need to install a driver via Zadig. See Zadig in the README (https://github.com/raspberrypi/picotool#zadig) for more information.";
+                                }
+#endif
                                 fos << " It is possible the device is not responding, and will have to be manually entered into BOOTSEL mode.\n";
                                 had_note = true; // suppress "but:" in this case
                             }
@@ -8992,7 +9075,7 @@ int main(int argc, char **argv) {
                                     " appears to have a USB serial connection, but picotool was unable to connect. Maybe try 'sudo' or check your permissions.");
     #else
                             printer(dr_vidpid_bootrom_cant_connect,
-                                    " appears to be in BOOTSEL mode, but picotool was unable to connect. You may need to install a driver via Zadig. See \"Getting started with Raspberry Pi Pico\" for more information");
+                                    " appears to be in BOOTSEL mode, but picotool was unable to connect. You may need to install a driver via Zadig. See Zadig in the README (https://github.com/raspberrypi/picotool#zadig) for more information");
                             printer(dr_vidpid_stdio_usb_cant_connect,
                                     " appears to have a USB serial connection, but picotool was unable to connect.");
     #endif
@@ -9001,13 +9084,8 @@ int main(int argc, char **argv) {
                             printer(dr_vidpid_micropython,
                                     " appears to be an RP-series MicroPython device not in BOOTSEL mode.");
                             if (selected_cmd->force_requires_pre_reboot()) {
-    #if defined(_WIN32)
-                                printer(dr_vidpid_stdio_usb,
-                                        " appears to have a USB serial connection, not in BOOTSEL mode. You can force reboot into BOOTSEL mode via 'picotool reboot -f -u' first.");
-    #else
                                 printer(dr_vidpid_stdio_usb,
                                         " appears to have a USB serial connection, so consider -f (or -F) to force reboot in order to run the command.");
-    #endif
                             } else {
                                 // special case message for what is actually just reboot (the only command that doesn't require reboot first)
                                 printer(dr_vidpid_stdio_usb,
@@ -9047,13 +9125,16 @@ int main(int argc, char **argv) {
                             // we reboot into BOOTSEL mode and disable MSC interface (the 1 here)
                             auto &to_reboot = std::get<1>(devices[dr_vidpid_stdio_usb][0]);
                             auto &to_reboot_handle = std::get<2>(devices[dr_vidpid_stdio_usb][0]);
+                            unsigned int disable_mask = 1;  // disable MSC interface
     #if defined(_WIN32)
                             {
                                 struct libusb_device_descriptor desc;
                                 libusb_get_device_descriptor(to_reboot, &desc);
-                                if (desc.idProduct == PRODUCT_ID_RP2040_STDIO_USB) {
-                                    fail(ERROR_NOT_POSSIBLE,
-                                        "Forced commands do not work with RP2040 on Windows - you can force reboot into BOOTSEL mode via 'picotool reboot -f -u' instead.");
+                                if (desc.idProduct == PRODUCT_ID_RP2040_STDIO_USB || settings.force_rp2040) {
+                                    // the Zadig driver should be setup for the device in BOOTSEL mode with no interfaces disabled,  
+                                    // as all the interfaces are enabled when you plug it in while holding down the BOOTSEL button  
+                                    disable_mask = 0;
+                                    settings.force_rp2040 = true;
                                 }
                             }
     #endif
@@ -9070,7 +9151,7 @@ int main(int argc, char **argv) {
                                 }
                             }
 
-                            reboot_device(to_reboot, to_reboot_handle, true, 1);
+                            reboot_device(to_reboot, to_reboot_handle, true, disable_mask);
                             fos << "The device was asked to reboot into BOOTSEL mode so the command can be executed.";
                         } else if (tries == 1) {
                             fos << "\nWaiting for device to reboot";
@@ -9091,6 +9172,18 @@ int main(int argc, char **argv) {
                         // again is to assume it has the same serial number.
                         settings.address = -1;
                         settings.bus = -1;
+                        if (settings.pid != -1 || settings.vid != -1) {
+                            // vid/pid filtering was enabled, but may change in BOOTSEL mode, so needs to be disabled
+                            if (settings.ser.empty()) {
+                                // this is an RP2040 running a no_flash binary, so will have a standard RP2040 vid/pid in BOOTSEL mode
+                                settings.vid = -1; // -1 means filter for standard vid/pid
+                                settings.pid = -1;
+                            } else {
+                                // skip vid/pid filtering, as it can be white-labelled on RP2350, and we know the serial number
+                                settings.vid = 0; // 0 means skip vid/pid filtering entirely
+                                settings.pid = -1;
+                            }
+                        }
                         continue;
                     }
                 }

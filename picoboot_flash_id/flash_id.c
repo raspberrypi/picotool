@@ -16,14 +16,14 @@ asm(
     ".set FLASH_RUID_TOTAL_BYTES, (1 + FLASH_RUID_DUMMY_BYTES + FLASH_RUID_DATA_BYTES)\n"
 );
 
-void flash_do_cmd(const uint8_t * txbuf, uint8_t *rxbuf, size_t count);
+void picoboot_flash_id_do_cmd(const uint8_t * txbuf, uint8_t *rxbuf, size_t count);
 void __attribute__((naked)) flash_get_unique_id_raw(void) {
     asm(
         ".Lflash_get_unique_id_raw:\n"
             "adr r0, .Ltxbuf\n"
             "adr r1, .Lrxbuf\n"
             "ldr r2, .Lbuflen\n"
-            "b flash_do_cmd\n"
+            "b picoboot_flash_id_do_cmd\n"
         ".Lbuflen:\n"
             ".word FLASH_RUID_TOTAL_BYTES\n"
         ".Ltxbuf:\n"
@@ -37,7 +37,7 @@ void __attribute__((naked)) flash_get_unique_id_raw(void) {
     );
 }
 
-static inline void __attribute__((always_inline)) flash_cs_force(_Bool high) {
+static inline void __attribute__((always_inline)) picoboot_flash_id_cs_force(_Bool high) {
     uint32_t field_val = high ?
         IO_QSPI_GPIO_QSPI_SS_CTRL_OUTOVER_VALUE_HIGH :
         IO_QSPI_GPIO_QSPI_SS_CTRL_OUTOVER_VALUE_LOW;
@@ -47,8 +47,8 @@ static inline void __attribute__((always_inline)) flash_cs_force(_Bool high) {
     );
 }
 
-void flash_do_cmd(const uint8_t * txbuf, uint8_t *rxbuf, size_t count) {
-    flash_cs_force(0);
+void picoboot_flash_id_do_cmd(const uint8_t * txbuf, uint8_t *rxbuf, size_t count) {
+    picoboot_flash_id_cs_force(0);
     size_t tx_remaining = count;
     size_t rx_remaining = count;
     // We may be interrupted -- don't want FIFO to overflow if we're distracted.
@@ -66,5 +66,5 @@ void flash_do_cmd(const uint8_t * txbuf, uint8_t *rxbuf, size_t count) {
             --rx_remaining;
         }
     }
-    flash_cs_force(1);
+    picoboot_flash_id_cs_force(1);
 }
