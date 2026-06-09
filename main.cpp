@@ -175,6 +175,21 @@ static string hex_string(int64_t value, int width=8, bool prefix=true, bool uppe
     return ss.str();
 }
 
+std::array<std::array<string, 1>, 12> pin_functions_unknown{{
+    {""},
+    {""},
+    {""},
+    {""},
+    {""},
+    {""},
+    {""},
+    {""},
+    {""},
+    {""},
+    {""},
+    {""},
+}};
+
 std::array<std::array<string, 30>, 10> pin_functions_rp2040{{
     {"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""},
     {"SPI0 RX", "SPI0 CSn", "SPI0 SCK", "SPI0 TX", "SPI0 RX", "SPI0 CSn", "SPI0 SCK", "SPI0 TX", "SPI1 RX", "SPI1 CSn", "SPI1 SCK", "SPI1 TX", "SPI1 RX", "SPI1 CSn", "SPI1 SCK", "SPI1 TX", "SPI0 RX", "SPI0 CSn", "SPI0 SCK", "SPI0 TX", "SPI0 RX", "SPI0 CSn", "SPI0 SCK", "SPI0 TX", "SPI1 RX", "SPI1 CSn", "SPI1 SCK", "SPI1 TX", "SPI1 RX", "SPI1 CSn"},
@@ -202,6 +217,8 @@ std::array<std::array<string, 48>, 12> pin_functions_rp2350{{
     {"USB OVCUR DET", "USB VBUS DET", "USB VBUS EN", "USB OVCUR DET", "USB VBUS DET", "USB VBUS EN", "USB OVCUR DET", "USB VBUS DET", "USB VBUS EN", "USB OVCUR DET", "USB VBUS DET", "USB VBUS EN", "USB OVCUR DET", "USB VBUS DET", "USB VBUS EN", "USB OVCUR DET", "USB VBUS DET", "USB VBUS EN", "USB OVCUR DET", "USB VBUS DET", "USB VBUS EN", "USB OVCUR DET", "USB VBUS DET", "USB VBUS EN", "USB OVCUR DET", "USB VBUS DET", "USB VBUS EN", "USB OVCUR DET", "USB VBUS DET", "USB VBUS EN", "USB OVCUR DET", "USB VBUS DET", "USB VBUS EN", "USB OVCUR DET", "USB VBUS DET", "USB VBUS EN", "USB OVCUR DET", "USB VBUS DET", "USB VBUS EN", "USB OVCUR DET", "USB VBUS DET", "USB VBUS EN", "USB OVCUR DET", "USB VBUS DET", "USB VBUS EN", "USB OVCUR DET", "USB VBUS DET", "USB VBUS EN"},
     {"",        "",         "UART0 TX", "UART0 RX", "",         "",         "UART1 TX", "UART1 RX", "",         "",         "UART1 TX", "UART1 RX", "",         "",         "UART0 TX", "UART0 RX", "",         "",         "UART0 TX", "UART0 RX", "",         "",         "UART1 TX", "UART1 RX", "",         "",         "UART1 TX", "UART1 RX", "",         "",         "UART0 TX", "UART0 RX", "",         "",         "UART0 TX", "UART0 RX", "",         "",         "UART1 TX", "UART1 RX", "",         "",         "UART1 TX", "UART1 RX", "",         "",         "UART0 TX", "UART0 RX"}
 }};
+
+static_assert(pin_functions_unknown.size() >= std::max(pin_functions_rp2040.size(), pin_functions_rp2350.size()));
 
 std::map<uint32_t, otp_reg> otp_regs;
 
@@ -2411,7 +2428,9 @@ private:
 };
 
 struct remapped_memory_access : public memory_access {
-    remapped_memory_access(memory_access &wrap, range_map<uint32_t> rmap) : wrap(wrap), rmap(rmap) {}
+    remapped_memory_access(memory_access &wrap, range_map<uint32_t> rmap) : wrap(wrap), rmap(rmap) {
+        model = wrap.get_model();
+    }
 
     void read(uint32_t address, uint8_t *buffer, unsigned int size, bool zero_fill) override {
         while (size) {
@@ -2605,11 +2624,7 @@ struct bi_visitor_base {
     }
 
     void visit(memory_access& access, const binary_info_header& hdr) {
-        try {
-            chip = access.get_model()->chip();
-        } catch (not_mapped_exception&) {
-            chip = rp2040;
-        }
+        chip = access.get_model()->chip();
         for (const auto &a : hdr.bi_addr) {
             visit(access, a);
         }
@@ -2716,10 +2731,16 @@ struct bi_visitor_base {
     }
 
     virtual void pins(uint64_t pin_mask, int func, string name) {
-        if (chip == rp2350) {
-            pins(pin_mask, func, name, pin_functions_rp2350);
-        } else {
-            pins(pin_mask, func, name, pin_functions_rp2040);
+        switch (chip) {
+            case rp2040:
+                pins(pin_mask, func, name, pin_functions_rp2040);
+                break;
+            case rp2350:
+                pins(pin_mask, func, name, pin_functions_rp2350);
+                break;
+            default:
+                pins(pin_mask, func, name, pin_functions_unknown);
+                break;
         }
     }
 
