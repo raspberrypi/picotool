@@ -218,6 +218,8 @@ std::array<std::array<string, 48>, 12> pin_functions_rp2350{{
     {"",        "",         "UART0 TX", "UART0 RX", "",         "",         "UART1 TX", "UART1 RX", "",         "",         "UART1 TX", "UART1 RX", "",         "",         "UART0 TX", "UART0 RX", "",         "",         "UART0 TX", "UART0 RX", "",         "",         "UART1 TX", "UART1 RX", "",         "",         "UART1 TX", "UART1 RX", "",         "",         "UART0 TX", "UART0 RX", "",         "",         "UART0 TX", "UART0 RX", "",         "",         "UART1 TX", "UART1 RX", "",         "",         "UART1 TX", "UART1 RX", "",         "",         "UART0 TX", "UART0 RX"}
 }};
 
+static_assert(pin_functions_unknown.size() >= std::max(pin_functions_rp2040.size(), pin_functions_rp2350.size()));
+
 std::map<uint32_t, otp_reg> otp_regs;
 
 #if HAS_LIBUSB
