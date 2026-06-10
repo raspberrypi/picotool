@@ -4,6 +4,15 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 #pragma once
+
+#ifdef __cplusplus
+#include <algorithm>
+#include <memory>
+#include <set>
+#include <string>
+#include <utility>
+#endif
+
 #include "boot/uf2.h"
 #include "boot/picoboot.h"
 
@@ -46,12 +55,6 @@ typedef enum {
 } chip_revision_t;
 
 #ifdef __cplusplus
-
-#include <algorithm>
-#include <memory>
-#include <set>
-#include <string>
-#include <utility>
 #include "addresses.h"
 #include "errors.h"
 

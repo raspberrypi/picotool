@@ -77,6 +77,11 @@ static __forceinline int __builtin_ctz(unsigned x) {
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 
+// preprocessor macros
+#define STR_HELPER(x) #x
+#define STR(x) STR_HELPER(x)
+
+
 #define MAX_REBOOT_TRIES 5
 
 #define OTP_PAGE_COUNT 64
@@ -170,6 +175,21 @@ static string hex_string(int64_t value, int width=8, bool prefix=true, bool uppe
     return ss.str();
 }
 
+std::array<std::array<string, 1>, 12> pin_functions_unknown{{
+    {""},
+    {""},
+    {""},
+    {""},
+    {""},
+    {""},
+    {""},
+    {""},
+    {""},
+    {""},
+    {""},
+    {""},
+}};
+
 std::array<std::array<string, 30>, 10> pin_functions_rp2040{{
     {"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""},
     {"SPI0 RX", "SPI0 CSn", "SPI0 SCK", "SPI0 TX", "SPI0 RX", "SPI0 CSn", "SPI0 SCK", "SPI0 TX", "SPI1 RX", "SPI1 CSn", "SPI1 SCK", "SPI1 TX", "SPI1 RX", "SPI1 CSn", "SPI1 SCK", "SPI1 TX", "SPI0 RX", "SPI0 CSn", "SPI0 SCK", "SPI0 TX", "SPI0 RX", "SPI0 CSn", "SPI0 SCK", "SPI0 TX", "SPI1 RX", "SPI1 CSn", "SPI1 SCK", "SPI1 TX", "SPI1 RX", "SPI1 CSn"},
@@ -197,6 +217,8 @@ std::array<std::array<string, 48>, 12> pin_functions_rp2350{{
     {"USB OVCUR DET", "USB VBUS DET", "USB VBUS EN", "USB OVCUR DET", "USB VBUS DET", "USB VBUS EN", "USB OVCUR DET", "USB VBUS DET", "USB VBUS EN", "USB OVCUR DET", "USB VBUS DET", "USB VBUS EN", "USB OVCUR DET", "USB VBUS DET", "USB VBUS EN", "USB OVCUR DET", "USB VBUS DET", "USB VBUS EN", "USB OVCUR DET", "USB VBUS DET", "USB VBUS EN", "USB OVCUR DET", "USB VBUS DET", "USB VBUS EN", "USB OVCUR DET", "USB VBUS DET", "USB VBUS EN", "USB OVCUR DET", "USB VBUS DET", "USB VBUS EN", "USB OVCUR DET", "USB VBUS DET", "USB VBUS EN", "USB OVCUR DET", "USB VBUS DET", "USB VBUS EN", "USB OVCUR DET", "USB VBUS DET", "USB VBUS EN", "USB OVCUR DET", "USB VBUS DET", "USB VBUS EN", "USB OVCUR DET", "USB VBUS DET", "USB VBUS EN", "USB OVCUR DET", "USB VBUS DET", "USB VBUS EN"},
     {"",        "",         "UART0 TX", "UART0 RX", "",         "",         "UART1 TX", "UART1 RX", "",         "",         "UART1 TX", "UART1 RX", "",         "",         "UART0 TX", "UART0 RX", "",         "",         "UART0 TX", "UART0 RX", "",         "",         "UART1 TX", "UART1 RX", "",         "",         "UART1 TX", "UART1 RX", "",         "",         "UART0 TX", "UART0 RX", "",         "",         "UART0 TX", "UART0 RX", "",         "",         "UART1 TX", "UART1 RX", "",         "",         "UART1 TX", "UART1 RX", "",         "",         "UART0 TX", "UART0 RX"}
 }};
+
+static_assert(pin_functions_unknown.size() >= std::max(pin_functions_rp2040.size(), pin_functions_rp2350.size()));
 
 std::map<uint32_t, otp_reg> otp_regs;
 
@@ -489,6 +511,10 @@ private:
      std::vector<std::shared_ptr<cmd>> _sub_commands;
 };
 
+#ifndef DEFAULT_BOOTSEL_LED
+#define DEFAULT_BOOTSEL_LED -1
+#endif
+
 struct _settings {
     std::array<std::string, 6> filenames;
     std::array<std::string, 6> file_types;
@@ -498,6 +524,8 @@ struct _settings {
     int vid=-1;
     int pid=-1;
     string ser;
+    int led=DEFAULT_BOOTSEL_LED;
+    bool active_low=false;
     bool force_rp2040 = false;
     uint32_t offset = 0;
     uint32_t from = 0;
@@ -633,6 +661,15 @@ auto device_selection =
         + option("--rp2040").set(settings.force_rp2040) % "Assume the device is an RP2040 - this is only required when using a custom vid/pid with an RP2040 on Windows, and is ignored on other operating systems"
         + option('f', "--force").set(settings.force) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode" +
                 option('F', "--force-no-reboot").set(settings.force_no_reboot) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the USB drive mounted"
+        + (option("--bootsel-led") & integer("gpio").set(settings.led)) % 
+        "Specify the GPIO for the BOOTSEL activity LED to flash (default "
+    #if DEFAULT_BOOTSEL_LED < 0
+        "none"
+    #else
+        STR(DEFAULT_BOOTSEL_LED)
+    #endif
+        ", ignored by RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to BOOTSEL mode"
+        + option("--bootsel-led-active-low").set(settings.active_low) % "The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)"
     ).min(0).doc_non_optional(true).collapse_synopsys("device-selection");
 
 #define file_types_x(i)\
@@ -2391,7 +2428,9 @@ private:
 };
 
 struct remapped_memory_access : public memory_access {
-    remapped_memory_access(memory_access &wrap, range_map<uint32_t> rmap) : wrap(wrap), rmap(rmap) {}
+    remapped_memory_access(memory_access &wrap, range_map<uint32_t> rmap) : wrap(wrap), rmap(rmap) {
+        model = wrap.get_model();
+    }
 
     void read(uint32_t address, uint8_t *buffer, unsigned int size, bool zero_fill) override {
         while (size) {
@@ -2585,11 +2624,7 @@ struct bi_visitor_base {
     }
 
     void visit(memory_access& access, const binary_info_header& hdr) {
-        try {
-            chip = access.get_model()->chip();
-        } catch (not_mapped_exception&) {
-            chip = rp2040;
-        }
+        chip = access.get_model()->chip();
         for (const auto &a : hdr.bi_addr) {
             visit(access, a);
         }
@@ -2696,10 +2731,16 @@ struct bi_visitor_base {
     }
 
     virtual void pins(uint64_t pin_mask, int func, string name) {
-        if (chip == rp2350) {
-            pins(pin_mask, func, name, pin_functions_rp2350);
-        } else {
-            pins(pin_mask, func, name, pin_functions_rp2040);
+        switch (chip) {
+            case rp2040:
+                pins(pin_mask, func, name, pin_functions_rp2040);
+                break;
+            case rp2350:
+                pins(pin_mask, func, name, pin_functions_rp2350);
+                break;
+            default:
+                pins(pin_mask, func, name, pin_functions_unknown);
+                break;
         }
     }
 
@@ -8341,8 +8382,10 @@ bool otp_permissions_command::execute(device_map &devices) {
     for (auto it = perms_json.begin(); it != perms_json.end(); ++it) {
         settings.otp.lock0 = 0;
         settings.otp.lock1 = 0;
+        int page;
+        if (!get_int(it.key(), page)) continue;
         std::stringstream ss;
-        ss << "page" << it.key();
+        ss << "page" << page;
         settings.config.key = ss.str();
         std::cout << ss.str() << std::endl;
         auto perms = it.value();
@@ -8617,6 +8660,9 @@ static int reboot_device(libusb_device *device, libusb_device_handle *dev_handle
                 fail(ERROR_USB, "Failed to claim interface\n");
             }
             if (bootsel) {
+                if (settings.led >= 0) {
+                    disable_mask |= (settings.led << 9u) | (settings.active_low << 7u) | (1u << 8u);
+                }
                 ret = libusb_control_transfer(dev_handle, LIBUSB_REQUEST_TYPE_CLASS | LIBUSB_RECIPIENT_INTERFACE,
                                               RESET_REQUEST_BOOTSEL, disable_mask, i, nullptr, 0, 2000);
             } else {
@@ -8655,11 +8701,17 @@ bool reboot_command::execute(device_map &devices) {
         picoboot_memory_access raw_access(con);
         model_t model = raw_access.get_model();
         if (model->supports_picoboot_cmd(PC_REBOOT2)) {
+            uint32_t usb_flags = 0u;
+            if (settings.led >= 0) {
+                usb_flags |= BOOTSEL_FLAG_GPIO_PIN_SPECIFIED;
+                if (settings.active_low)
+                    usb_flags |= BOOTSEL_FLAG_GPIO_PIN_ACTIVE_LOW;
+            }
             struct picoboot_reboot2_cmd cmd = {
                     .dFlags = (uint8_t)(settings.reboot_usb ? REBOOT2_FLAG_REBOOT_TYPE_BOOTSEL : REBOOT2_FLAG_REBOOT_TYPE_NORMAL),
                     .dDelayMS = 500,
-                    .dParam0 = settings.reboot_usb ? 0u : (unsigned int)settings.reboot_diagnostic_partition,
-                    .dParam1 = 0,
+                    .dParam0 = settings.reboot_usb ? usb_flags : (unsigned int)settings.reboot_diagnostic_partition,
+                    .dParam1 = (settings.reboot_usb && (settings.led >= 0)) ? settings.led : 0u,
             };
             if (!settings.switch_cpu.empty()) {
                 if (settings.switch_cpu == "arm")
@@ -8682,11 +8734,13 @@ bool reboot_command::execute(device_map &devices) {
             // on RP2040 pass 0 to reboot in to flash
             con.reboot(0, 0, 500);
         } else {
+            uint32_t led_flag = (settings.led >= 0) ? (1u << settings.led) : 0u;
             unsigned int program_base = SRAM_START;
             std::vector<uint32_t> program = {
-                    0x20002100, // movs r0, #0;       movs r1, #0
-                    0x47104a00, // ldr  r2, [pc, #0]; bx r2
-                    bootrom_func_lookup_rp2040(raw_access, rom_table_code('U', 'B'))
+                    0x21004802, // ldr r0, [pc, #8]; movs r1, #0
+                    0x47104a00, // ldr r2, [pc, #0]; bx r2
+                    bootrom_func_lookup_rp2040(raw_access, rom_table_code('U', 'B')),
+                    led_flag,
             };
 
             raw_access.write_vector(program_base, program);
