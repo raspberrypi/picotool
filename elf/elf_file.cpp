@@ -553,7 +553,7 @@ std::vector<const elf32_ph_entry *> elf_file::sorted_segments(void) {
     return const_sorted_segs;
 }
 
-void elf_file::store_compressed(model_t model) {
+void elf_file::store_squashed(model_t model) {
     uint32_t highest_ram_address = 0;
     uint32_t highest_flash_address = 0;
 
@@ -569,7 +569,7 @@ void elf_file::store_compressed(model_t model) {
     }
 
     if (highest_flash_address != 0) {
-        // cannot compress flash binaries
+        // cannot squash flash binaries
         return;
     }
 
@@ -577,7 +577,7 @@ void elf_file::store_compressed(model_t model) {
 
     std::vector<elf32_ph_entry *> xip_sram_segs = {};
 
-    auto compress_seg = [&](elf32_ph_entry *seg) {
+    auto squash_seg = [&](elf32_ph_entry *seg) {
         const uint32_t paddr = seg->physical_address();
         const uint32_t psize = seg->physical_size();
         if (!seg->is_load()) return;
@@ -585,7 +585,7 @@ void elf_file::store_compressed(model_t model) {
 
         if (last_seg_end) {
             if (paddr != last_seg_end) {
-                if (verbose) printf("compressing %08x to %08x\n", paddr, last_seg_end);
+                if (verbose) printf("squashing %08x to %08x\n", paddr, last_seg_end);
                 seg->paddr = last_seg_end;
             }
         }
@@ -602,11 +602,11 @@ void elf_file::store_compressed(model_t model) {
             continue;
         }
 
-        compress_seg(seg);
+        squash_seg(seg);
     }
 
     for (auto &seg : xip_sram_segs) {
-        compress_seg(seg);
+        squash_seg(seg);
     }
 }
 

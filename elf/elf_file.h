@@ -47,7 +47,7 @@ public:
     const elf32_ph_entry* segment_from_virtual_address(uint32_t vaddr);
     const elf32_ph_entry* segment_from_section(const elf32_sh_entry &sh);
     void dump(void) const;
-    void store_compressed(model_t model);
+    void store_squashed(model_t model);
 
     void move_all(int dist);
     void remove_ph_holes(void);
