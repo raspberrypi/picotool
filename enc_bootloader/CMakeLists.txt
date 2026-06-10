@@ -23,8 +23,8 @@ if (NOT USE_PRECOMPILED)
     set(CMAKE_C_STANDARD 11)
     set(CMAKE_CXX_STANDARD 17)
 
-    if (PICO_SDK_VERSION_STRING VERSION_LESS "2.2.0")
-        message(FATAL_ERROR "Raspberry Pi Pico SDK version 2.2.0 (or later) required. Your version is ${PICO_SDK_VERSION_STRING}")
+    if (PICO_SDK_VERSION_STRING VERSION_LESS "2.2.1")
+        message(FATAL_ERROR "Raspberry Pi Pico SDK version 2.2.1 (or later) required. Your version is ${PICO_SDK_VERSION_STRING}")
     endif()
 
     # Initialize the SDK
@@ -64,6 +64,9 @@ if (NOT USE_PRECOMPILED)
             # AES Code & workspace from 0x20080044 -> 0x20081604, so 0x20080200 -> 0x20081200 is inside that
             ROM_CHAIN_WORKSPACE=0x20080200)
 
+        pico_add_linker_script_override_path(enc_bootloader ${CMAKE_CURRENT_LIST_DIR}/memmap_enc_bootloader
+            FILES memory_ram.incl memory_scratch.incl section_no_flash_text.incl sections_no_flash_data.incl
+        )
         pico_set_linker_script(enc_bootloader ${CMAKE_CURRENT_LIST_DIR}/memmap_enc_bootloader.ld)
 
         target_compile_definitions(enc_bootloader PRIVATE
@@ -110,8 +113,13 @@ if (NOT USE_PRECOMPILED)
 
     pico_minimize_runtime(enc_bootloader)
 
+    pico_add_linker_script_override_path(enc_bootloader ${CMAKE_CURRENT_LIST_DIR}/memmap_common
+        FILES memory_aliases_no_flash.incl memory_psram.incl memory_xip_ram.incl section_xip_ram.incl sections_psram.incl
+    )
+
     pico_set_binary_type(enc_bootloader no_flash)
     pico_add_dis_output(enc_bootloader)
+    pico_add_map_output(enc_bootloader)
 
     if (USE_MBEDTLS)
         install(FILES ${CMAKE_CURRENT_BINARY_DIR}/enc_bootloader.elf DESTINATION ${CMAKE_CURRENT_LIST_DIR} RENAME enc_bootloader_mbedtls.elf)
