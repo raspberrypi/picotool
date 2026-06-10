@@ -18,8 +18,8 @@ SYNOPSIS:
                 <offset>] [device-selection]
     picotool encrypt [--quiet] [--verbose] [--embed] [--fast-rosc] [--use-mbedtls] [--otp-key-page <page>] [--hash] [--sign] [--no-clear]
                 [--pin-xip-sram] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] <aes_key> <iv_salt> <signing_key> <otp>
-    picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] [--pin-xip-sram] <infile> [-t <type>] [-o <offset>] <outfile> [-t
-                <type>] <key> <otp> [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
+    picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] [--pin-xip-sram] [--no-squash] <infile> [-t <type>] [-o <offset>]
+                <outfile> [-t <type>] <key> <otp> [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
     picotool link [--quiet] [--verbose] <outfile> [-t <type>] <infile1> [-t <type>] <infile2> [-t <type>] [<infile3>] [-t <type>] [-p <pad>]
     picotool save [-p] [-v] [--family <family_id>] <filename> [-t <type>] [device-selection]
     picotool save -a [-v] [--family <family_id>] <filename> [-t <type>] [device-selection]
@@ -675,8 +675,8 @@ SEAL:
     Add final metadata to a binary, optionally including a hash and/or signature.
 
 SYNOPSIS:
-    picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] [--pin-xip-sram] <infile> [-t <type>] [-o <offset>] <outfile> [-t
-                <type>] <key> <otp> [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
+    picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] [--pin-xip-sram] [--no-squash] <infile> [-t <type>] [-o <offset>]
+                <outfile> [-t <type>] <key> <otp> [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
 
 OPTIONS:
         --quiet
@@ -702,6 +702,8 @@ OPTIONS:
             Clear all of main SRAM on load
         --pin-xip-sram
             Pin XIP SRAM on load
+        --no-squash
+            Don't squash segments in the ELF file
     File to load from
         <infile>
             The file name

@@ -597,6 +597,7 @@ struct _settings {
         bool clear_sram = false;
         bool pin_xip_sram = false;
         bool set_tbyb = false;
+        bool no_squash = false;
         uint16_t major_version = 0;
         uint16_t minor_version = 0;
         uint16_t rollback_version = 0;
@@ -1011,7 +1012,8 @@ struct seal_command : public cmd {
                 option("--hash").set(settings.seal.hash) % "Hash the file" +
                 option("--sign").set(settings.seal.sign) % "Sign the file" +
                 option("--clear").set(settings.seal.clear_sram) % "Clear all of main SRAM on load" +
-                option("--pin-xip-sram").set(settings.seal.pin_xip_sram) % "Pin XIP SRAM on load"
+                option("--pin-xip-sram").set(settings.seal.pin_xip_sram) % "Pin XIP SRAM on load" +
+                option("--no-squash").set(settings.seal.no_squash) % "Don't squash segments in the ELF file"
             ).min(0).doc_non_optional(true) % "Configuration" +
             named_file_selection_x("infile", 0) % "File to load from" +
             (
@@ -5471,8 +5473,6 @@ bool encrypt_command::execute(device_map &devices) {
         elf_file source_file(settings.verbose);
         elf_file *elf = &source_file;
         elf->read_file(get_file(ios::in|ios::binary));
-        // Squash the segments together
-        elf->store_squashed(model);
         // Remove any holes in the ELF file, as these cause issues when encrypting
         elf->remove_ph_holes();
         elf->remove_sh_holes();
@@ -5826,8 +5826,10 @@ bool seal_command::execute(device_map &devices) {
         elf_file source_file(settings.verbose);
         elf_file *elf = &source_file;
         elf->read_file(get_file(ios::in|ios::binary));
-        // Squash the segments together
-        elf->store_squashed(model);
+        if (!settings.seal.no_squash) {
+            // Squash the segments together
+            elf->store_squashed(model);
+        }
         // Remove any holes in the ELF file, as these cause issues when signing/hashing
         elf->remove_sh_holes();
         sign_guts_elf(elf, private_key, public_key, model);
