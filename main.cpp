@@ -1356,15 +1356,15 @@ struct otp_white_label_command : public cmd {
 
 
 vector<std::shared_ptr<cmd>> otp_sub_commands {
-        std::shared_ptr<cmd>(new otp_list_command()),
     #if HAS_LIBUSB
         std::shared_ptr<cmd>(new otp_get_command()),
         std::shared_ptr<cmd>(new otp_set_command()),
         std::shared_ptr<cmd>(new otp_load_command()),
-        std::shared_ptr<cmd>(new otp_dump_command()),
-        std::shared_ptr<cmd>(new otp_permissions_command()),
         std::shared_ptr<cmd>(new otp_white_label_command()),
+        std::shared_ptr<cmd>(new otp_permissions_command()),
+        std::shared_ptr<cmd>(new otp_dump_command()),
     #endif
+        std::shared_ptr<cmd>(new otp_list_command()),
 };
 
 struct otp_command : public multi_cmd {
@@ -1427,10 +1427,10 @@ struct uf2_convert_command : public cmd {
 };
 
 vector<std::shared_ptr<cmd>> uf2_sub_commands {
+        std::shared_ptr<cmd>(new uf2_convert_command()),
     #if HAS_LIBUSB
         std::shared_ptr<cmd>(new uf2_info_command()),
     #endif
-        std::shared_ptr<cmd>(new uf2_convert_command()),
 };
 
 struct uf2_command : public multi_cmd {
@@ -1558,28 +1558,26 @@ auto reboot_cmd = std::shared_ptr<reboot_command>(new reboot_command());
 auto help_cmd = std::shared_ptr<help_command>(new help_command());
 
 vector<std::shared_ptr<cmd>> commands {
+        help_cmd,
+        std::shared_ptr<cmd>(new version_command()),
         std::shared_ptr<cmd>(new info_command()),
         std::shared_ptr<cmd>(new config_command()),
     #if HAS_LIBUSB
         std::shared_ptr<cmd>(new load_command()),
-    #endif
-    #if HAS_MBEDTLS
-        std::shared_ptr<cmd>(new encrypt_command()),
-        std::shared_ptr<cmd>(new seal_command()),
-    #endif
-        std::shared_ptr<cmd>(new link_command()),
-    #if HAS_LIBUSB
         std::shared_ptr<cmd>(new save_command()),
-        std::shared_ptr<cmd>(new erase_command()),
         std::shared_ptr<cmd>(new verify_command()),
+        std::shared_ptr<cmd>(new erase_command()),
         reboot_cmd,
     #endif
-        std::shared_ptr<cmd>(new otp_command()),
+    #if HAS_MBEDTLS
+        std::shared_ptr<cmd>(new seal_command()),
+        std::shared_ptr<cmd>(new encrypt_command()),
+    #endif
         std::shared_ptr<cmd>(new partition_command()),
         std::shared_ptr<cmd>(new uf2_command()),
-        std::shared_ptr<cmd>(new version_command()),
+        std::shared_ptr<cmd>(new otp_command()),
         std::shared_ptr<cmd>(new coprodis_command()),
-        help_cmd
+        std::shared_ptr<cmd>(new link_command()),
 };
 
 template <typename T>

@@ -100,10 +100,57 @@ fi
 mv tmp/README.md README.md
 rm -rf tmp
 
+# Check that command order in README matches picotool help output
+echo "Checking command order..."
+
+order_mismatch=false
+
+check_cmd_order() {
+    local label="$1" tool_order="$2" readme_order="$3"
+    local fp="" fr=""
+    while IFS= read -r cmd; do
+        [ -z "$cmd" ] && continue
+        echo "$readme_order" | grep -qx "$cmd" && fp+="$cmd"$'\n'
+    done <<< "$tool_order"
+    while IFS= read -r cmd; do
+        [ -z "$cmd" ] && continue
+        echo "$tool_order" | grep -qx "$cmd" && fr+="$cmd"$'\n'
+    done <<< "$readme_order"
+    if [ "$fp" != "$fr" ]; then
+        echo "Order mismatch in $label!"
+        echo "  picotool: $(echo "$fp" | tr '\n' ' ')"
+        echo "  README:   $(echo "$fr" | tr '\n' ' ')"
+        order_mismatch=true
+    fi
+}
+
+# Check top-level command order
+tool_top_order=$(picotool help 2>/dev/null | \
+    awk '/^COMMANDS:/{f=1;next} f && /^[A-Z]/{exit} f && /^    [a-z]/{print $1}')
+readme_top_order=$(grep -n '^\$ picotool help [a-z][a-z-]*$' README.md | \
+    sed 's/^\([0-9]*\):.*\$ picotool help \([a-z][a-z-]*\)$/\1 \2/' | \
+    sort -n | awk '{print $2}' | awk '!seen[$0]++')
+check_cmd_order "top-level commands" "$tool_top_order" "$readme_top_order"
+
+# Check sub-command order for each parent command
+for array in $sub_command_arrays; do
+    prefix=${array%_sub_commands}
+    tool_sub_order=$(picotool help "$prefix" 2>/dev/null | \
+        awk '/^SUB COMMANDS:/{f=1;next} f && /^[A-Z]/{exit} f && /^    [a-z]/{print $1}')
+    readme_sub_order=$(grep -n "^\$ picotool help ${prefix} [a-z][a-z-]*$" README.md | \
+        sed "s/^\([0-9]*\):.*\$ picotool help ${prefix} \([a-z][a-z-]*\)$/\1 \2/" | \
+        sort -n | awk '{print $2}' | awk '!seen[$0]++')
+    check_cmd_order "${prefix} sub-commands" "$tool_sub_order" "$readme_sub_order"
+done
+
 echo "Help text sections have been updated in README.md"
 
 # Still fail if there are missing commands
 if [ ${#missing_commands[@]} -ne 0 ]; then
     echo "Failing job due to missing help text sections"
+    exit 1
+fi
+if $order_mismatch; then
+    echo "Failing job due to command order mismatch in README"
     exit 1
 fi
