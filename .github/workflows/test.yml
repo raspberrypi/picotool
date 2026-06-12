@@ -11,7 +11,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        generator: ["Ninja", "Unix Makefiles", "Visual Studio 17 2022"]
+        generator: ["Ninja", "Unix Makefiles", "Visual Studio 18 2026"]
         mbedtls: ["mbedtls", ""]
         libusb: ["libusb", ""]
         compile: ["compile", ""]
@@ -19,15 +19,15 @@ jobs:
           - os: 'windows-latest'
             generator: "Unix Makefiles"
           - os: 'ubuntu-latest'
-            generator: "Visual Studio 17 2022"
+            generator: "Visual Studio 18 2026"
           - os: 'macos-latest'
-            generator: "Visual Studio 17 2022"
+            generator: "Visual Studio 18 2026"
           - libusb: ""
             compile: "compile"
           - os: 'windows-latest'
             # only precompiled ELFs supported for Windows MSVC
             compile: "compile"
-            generator: "Visual Studio 17 2022"
+            generator: "Visual Studio 18 2026"
     runs-on: ${{ matrix.os }}
 
     steps:
