@@ -7,6 +7,7 @@
 #endif
 #include "elf_file.h"
 #include "metadata.h"
+#include "model.h"
 
 typedef enum verified_t {
     none,
@@ -24,9 +25,9 @@ typedef enum verified_t {
 std::unique_ptr<block> find_first_block(elf_file *elf);
 block place_new_block(elf_file *elf, std::unique_ptr<block> &first_block, bool set_others_ignored=false);
 #if HAS_MBEDTLS
-    int hash_andor_sign(elf_file *elf, block *new_block, const public_t public_key, const private_t private_key, bool hash_value, bool sign, bool clear_sram = false);
-    void encrypt_guts(elf_file *elf, block *new_block, const aes_key_t aes_key, std::vector<uint8_t> &iv_data, std::vector<uint8_t> &enc_data);
-    int encrypt(elf_file *elf, block *new_block, const aes_key_t aes_key, const public_t public_key, const private_t private_key, std::vector<uint8_t> iv_salt, bool hash_value, bool sign);
+    int hash_andor_sign(elf_file *elf, block *new_block, const public_t public_key, const private_t private_key, model_t model, bool hash_value, bool sign, bool clear_sram = false, bool pin_xip_sram = false);
+    void encrypt_guts(elf_file *elf, block *new_block, const aes_key_t aes_key, model_t model, std::vector<uint8_t> &iv_data, std::vector<uint8_t> &enc_data);
+    int encrypt(elf_file *elf, block *new_block, const aes_key_t aes_key, const public_t public_key, const private_t private_key, model_t model, std::vector<uint8_t> iv_salt, bool hash_value, bool sign);
 #endif
 
 // Bins
@@ -37,7 +38,7 @@ std::vector<std::unique_ptr<block>> get_all_blocks(std::vector<uint8_t> &bin, ui
 block place_new_block(std::vector<uint8_t> &bin, uint32_t storage_addr, std::unique_ptr<block> &first_block, bool set_others_ignored=false);
 uint32_t calc_checksum(std::vector<uint8_t> bin);
 #if HAS_MBEDTLS
-    std::vector<uint8_t> hash_andor_sign(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *new_block, const public_t public_key, const private_t private_key, bool hash_value, bool sign, bool clear_sram = false);
-    std::vector<uint8_t> encrypt(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *new_block, const aes_key_t aes_key, const public_t public_key, const private_t private_key, std::vector<uint8_t> iv_salt, bool hash_value, bool sign);
-    void verify_block(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *block, verified_t &hash_verified, verified_t &sig_verified, get_more_bin_cb more_cb = nullptr);
+    std::vector<uint8_t> hash_andor_sign(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *new_block, const public_t public_key, const private_t private_key, model_t model, bool hash_value, bool sign, bool clear_sram = false, bool pin_xip_sram = false);
+    std::vector<uint8_t> encrypt(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *new_block, const aes_key_t aes_key, const public_t public_key, const private_t private_key, model_t model, std::vector<uint8_t> iv_salt, bool hash_value, bool sign);
+    void verify_block(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *block, model_t model, verified_t &hash_verified, verified_t &sig_verified, get_more_bin_cb more_cb = nullptr);
 #endif

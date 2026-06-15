@@ -4,6 +4,15 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 #pragma once
+
+#ifdef __cplusplus
+#include <algorithm>
+#include <memory>
+#include <set>
+#include <string>
+#include <utility>
+#endif
+
 #include "boot/uf2.h"
 #include "boot/picoboot.h"
 
@@ -46,12 +55,6 @@ typedef enum {
 } chip_revision_t;
 
 #ifdef __cplusplus
-
-#include <algorithm>
-#include <memory>
-#include <set>
-#include <string>
-#include <utility>
 #include "addresses.h"
 #include "errors.h"
 
@@ -383,6 +386,7 @@ static address_ranges address_ranges_flash(const model_t& model) {
     address_ranges ranges;
     ranges.emplace_back(model->flash_start(), model->flash_end(), address_range::type::CONTENTS);
     ranges.emplace_back(model->sram_start(), model->sram_end(), address_range::type::NO_CONTENTS);
+    ranges.emplace_back(model->xip_sram_start(), model->xip_sram_end(), address_range::type::NO_CONTENTS);
     if (model->chip() == rp2040) {
         ranges.emplace_back(MAIN_RAM_BANKED_START, MAIN_RAM_BANKED_END, address_range::type::NO_CONTENTS);
     }

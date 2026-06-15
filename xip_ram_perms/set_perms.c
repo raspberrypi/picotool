@@ -12,10 +12,6 @@
 #include "pico/binary_info.h"
 
 
-// Very rough - seems to be broken in xip_sram
-#define sleep_ms(x) for(int i=0; i<x*20000; i++) asm volatile("nop");
-
-
 int main() {
     bi_decl(bi_program_feature_group(0x1234, 0x5678, "led_config"));
     bi_decl(bi_ptr_int32(0x1234, 0x5678, led, PICO_DEFAULT_LED_PIN));
