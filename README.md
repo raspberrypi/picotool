@@ -31,7 +31,7 @@ SYNOPSIS:
     picotool encrypt [--quiet] [--verbose] [--embed] [--fast-rosc] [--use-mbedtls] [--otp-key-page <page>] [--hash] [--sign] [--no-clear]
                 [--pin-xip-sram] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] <aes_key> <iv_salt> <signing_key> <otp>
     picotool partition info|create
-    picotool uf2 convert|info
+    picotool uf2 convert|combine|info
     picotool otp get|set|load|white-label|permissions|dump|list
     picotool coprodis [--quiet] [--verbose] <infile> <outfile>
     picotool link [--quiet] [--verbose] <outfile> [-t <type>] <infile1> [-t <type>] <infile2> [-t <type>] [<infile3>] [-t <type>] [-p <pad>]
@@ -956,16 +956,117 @@ OPTIONS:
         <offset>
             Load offset (memory address; default 0x10000000 for BIN file)
     UF2 Family options
+        --family
+            Specify the family ID
         <family_id>
             family ID for UF2
     Platform options
+        --platform
+            Optional platform for memory-address validation
         <platform>
-            optional platform for memory verification (eg rp2040, rp2350)
+            platform to use (eg rp2040, rp2350)
     Errata RP2350-E10 Fix
         --abs-block
             Add an absolute block
         <abs_block_loc>
             absolute block location (default to 0x10ffff00)
+```
+
+### combine
+
+This command is used to combine multiple UF2 files (possibly with different family IDs) into a single file with the same family ID. This can be useful for loading a partition table and multiple partitions onto a device using a single file.
+
+```text
+$ picotool help uf2 combine
+UF2 COMBINE:
+    Combine multiple UF2 files.
+
+SYNOPSIS:
+    picotool uf2 combine [--quiet] [--verbose] <infile1> [-t <type>] <infile2> [-t <type>] <outfile> [-t <type>] [--family <family_id>]
+                [--offset <offset>] [--partition <partition>] [[--abs-block] [<abs_block_loc>]]
+
+OPTIONS:
+        --quiet
+            Don't print any output
+        --verbose
+            Print verbose output
+    First file to combine
+        <infile1>
+            The file name
+        -t <type>
+            Specify file type (uf2) explicitly, ignoring file extension
+    Second file to combine
+        <infile2>
+            The file name
+        -t <type>
+            Specify file type (uf2) explicitly, ignoring file extension
+    File to save output to
+        <outfile>
+            The file name
+        -t <type>
+            Specify file type (uf2) explicitly, ignoring file extension
+    UF2 Family options
+        --family
+            Specify the family ID
+        <family_id>
+            family ID for combined UF2 (defaults to first one)
+    Offset options
+        --offset
+            Offset second UF2 by amount
+        <offset>
+            offset amount (default to 0)
+    Partition options
+        --partition
+            Place second UF2 in partition (first UF2 must contain a partition table)
+        <partition>
+            partition number (default to 0)
+    Errata RP2350-E10 Fix
+        --abs-block
+            Add an absolute block
+        <abs_block_loc>
+            absolute block location (default to 0x10ffff00)
+```
+
+The `--partition` argument can be used to place the second file in a partition number, provided that there is a partition table in the first file. For example, take this `pt.json`
+```json
+{
+    "unpartitioned": {
+        "families": ["absolute"],
+        "permissions": {
+            "secure": "rw",
+            "nonsecure": "rw",
+            "bootloader": "rw"
+        }
+    },
+    "partitions": [
+        {
+            "size": "1024K",
+            "families": ["rp2350-arm-s", "rp2350-riscv"],
+            "permissions": {
+                "secure": "rw",
+                "nonsecure": "rw",
+                "bootloader": "rw"
+            }
+        },
+        {
+            "size": "1024K",
+            "families": ["data"],
+            "permissions": {
+                "secure": "rw",
+                "nonsecure": "rw",
+                "bootloader": "rw"
+            }
+        }
+    ]
+}
+```
+
+If you want to load this partition table, and put `code.uf2` and `data.uf2` into the partitions, all using a single UF2, you would run:
+```text
+$ picotool partition create pt.json pt.uf2
+$ picotool uf2 combine pt.uf2 code.uf2 tmp.uf2 --partition 0
+$ picotool uf2 combine tmp.uf2 data.uf2 combined.uf2 --partition 1
+$ picotool load -x combined.uf2
 ```
 
 ### info

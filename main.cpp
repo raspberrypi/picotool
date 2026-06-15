@@ -643,6 +643,10 @@ struct _settings {
         #else
         uint32_t abs_block_loc = 0;
         #endif
+        uint32_t offset = 0;
+        bool offset_set = false;
+        int partition = -1;
+        bool partition_set = false;
     } uf2;
 };
 _settings settings;
@@ -1407,10 +1411,12 @@ struct uf2_convert_command : public cmd {
                         hex("offset").set(settings.offset) % "Load offset (memory address; default 0x10000000 for BIN file)"
                 ).force_expand_help(true) % "Packaging Options" + 
                 (
-                    option("--family") & family_id("family_id").set(settings.family_id) % "family ID for UF2"
+                    option("--family") % "Specify the family ID" &
+                        family_id("family_id").set(settings.family_id) % "family ID for UF2"
                 ).force_expand_help(true) % "UF2 Family options" +
                 (
-                    option("--platform") & platform_model("platform").set(settings.model) % "optional platform for memory verification (eg rp2040, rp2350)"
+                    option("--platform") % "Optional platform for memory-address validation" &
+                        platform_model("platform").set(settings.model) % "platform to use (eg rp2040, rp2350)"
                 ).force_expand_help(true) % "Platform options"
             #if SUPPORT_RP2350_A2
                 + (
@@ -1426,8 +1432,47 @@ struct uf2_convert_command : public cmd {
     }
 };
 
+struct uf2_combine_command : public cmd {
+    uf2_combine_command() : cmd("combine") {}
+    bool execute(device_map &devices) override;
+    virtual device_support get_device_support() override { return none; }
+
+    group get_cli() override {
+        return (
+                option("--quiet").set(settings.quiet) % "Don't print any output" +
+                option("--verbose").set(settings.verbose) % "Print verbose output" +
+                named_typed_file_selection_x("infile1", 1, "uf2") % "First file to combine" +
+                named_typed_file_selection_x("infile2", 2, "uf2") % "Second file to combine" +
+                named_typed_file_selection_x("outfile", 0, "uf2") % "File to save output to" +
+                (
+                    option("--family") % "Specify the family ID" &
+                        family_id("family_id").set(settings.family_id) % "family ID for combined UF2 (defaults to first one)"
+                ).force_expand_help(true) % "UF2 Family options" +
+                (
+                    option("--offset").set(settings.uf2.offset_set) % "Offset second UF2 by amount" &
+                        hex("offset").set(settings.uf2.offset) % "offset amount (default to 0)"
+                ).force_expand_help(true) % "Offset options" +
+                (
+                    option("--partition").set(settings.uf2.partition_set) % "Place second UF2 in partition (first UF2 must contain a partition table)" &
+                        integer("partition").min_value(0).max_value(PARTITION_TABLE_MAX_PARTITIONS-1).set(settings.uf2.partition) % "partition number (default to 0)"
+                ).force_expand_help(true) % "Partition options"
+            #if SUPPORT_RP2350_A2
+                + (
+                    option("--abs-block").set(settings.uf2.abs_block) % "Add an absolute block" +
+                        hex("abs_block_loc").set(settings.uf2.abs_block_loc).min(0) % "absolute block location (default to 0x10ffff00)"
+                ).force_expand_help(true).min(0) % "Errata RP2350-E10 Fix"
+            #endif
+        );
+    }
+
+    string get_doc() const override {
+        return "Combine multiple UF2 files.";
+    }
+};
+
 vector<std::shared_ptr<cmd>> uf2_sub_commands {
         std::shared_ptr<cmd>(new uf2_convert_command()),
+        std::shared_ptr<cmd>(new uf2_combine_command()),
     #if HAS_LIBUSB
         std::shared_ptr<cmd>(new uf2_info_command()),
     #endif
@@ -3295,6 +3340,25 @@ std::unique_ptr<block> find_last_block(memory_access &raw_access, vector<uint8_t
     }
 
     return nullptr;
+}
+
+std::vector<std::unique_ptr<block>> find_all_blocks(memory_access &raw_access, vector<uint8_t> &bin) {
+    // todo read the right amount
+    uint32_t read_size = 0x1000;
+    DEBUG_LOG("Reading from %x size %x\n", raw_access.get_binary_start(), read_size);
+    bin = raw_access.read_vector<uint8_t>(raw_access.get_binary_start(), read_size, true);
+
+    std::unique_ptr<block> first_block = find_first_block(bin, raw_access.get_binary_start());
+    if (first_block) {
+        // verify stuff
+        get_more_bin_cb more_cb = [&raw_access](std::vector<uint8_t> &bin, uint32_t offset, uint32_t size) {
+            DEBUG_LOG("Now reading from %x size %x\n", offset, size);
+            bin = raw_access.read_vector<uint8_t>(offset, size, true);
+        };
+        return get_all_blocks(bin, raw_access.get_binary_start(), first_block, more_cb);
+    }
+
+    return std::vector<std::unique_ptr<block>>();
 }
 
 std::shared_ptr<memory_access> get_bi_access(memory_access &raw_access) {
@@ -6844,6 +6908,120 @@ bool uf2_convert_command::execute(device_map &devices) {
     } else {
         fail(ERROR_ARGS, "Convert currently only from ELF/BIN to UF2\n");
     }
+    out->close();
+
+    return false;
+}
+
+bool uf2_combine_command::execute(device_map &devices) {
+    if (get_file_type_idx(0) != filetype::uf2 || get_file_type_idx(1) != filetype::uf2) {
+        fail(ERROR_ARGS, "All files must be UF2 files\n");
+    }
+
+    if (settings.uf2.partition_set && settings.uf2.offset_set) {
+        fail(ERROR_ARGS, "Cannot use both partition and offset options together\n");
+    }
+
+    auto out = get_file_idx(ios::out|ios::binary, 0);
+    auto file1 = get_file_idx(ios::in|ios::binary, 1);
+    auto file2 = get_file_idx(ios::in|ios::binary, 2);
+
+    if (settings.uf2.partition_set) {
+        auto access = get_file_memory_access(1);
+
+        vector<uint8_t> bin;
+        auto blocks = find_all_blocks(access, bin);
+        for (auto &block : blocks) {
+            auto partition_table = block->get_item<partition_table_item>();
+            if (partition_table == nullptr) {
+                continue;
+            }
+
+            if (settings.uf2.partition < 0 || settings.uf2.partition >= partition_table->partitions.size()) {
+                fail(ERROR_ARGS, "Partition table only contains partitions 0 -> %d\n", partition_table->partitions.size() - 1);
+            }
+
+            settings.uf2.offset = partition_table->partitions[settings.uf2.partition].first_sector * 4096;
+            settings.uf2.offset_set = true;
+            break;
+        }
+
+        if (!settings.uf2.offset_set) {
+            fail(ERROR_ARGS, "No partition table found in first UF2\n");
+        }
+    }
+
+    out->seekp(0, ios::beg);
+
+    unsigned int num_blocks = 0;
+    for (auto file : {file1, file2}) {
+        uf2_block block;
+        // Seek to 2nd block, in case 1st is abs_block
+        file->seekg(0, ios::beg);
+        file->read((char*)&block, sizeof(uf2_block));
+        if (file->fail()) {
+            fail(ERROR_READ_FAILED, "unexpected end of input file");
+        }
+
+    #if SUPPORT_RP2350_A2
+        if (check_abs_block(block)) {
+            // save abs block address
+            settings.uf2.abs_block = true;
+            settings.uf2.abs_block_loc = block.target_addr;
+            file->read((char*)&block, sizeof(uf2_block));
+        }
+    #endif
+
+        num_blocks += block.num_blocks;
+
+        if (!settings.family_id) {
+            settings.family_id = block.file_size;
+        }
+    }
+
+#if SUPPORT_RP2350_A2
+    if (settings.uf2.abs_block) {
+        uf2_block block = gen_abs_block(settings.uf2.abs_block_loc);
+        out->write((char*)&block, sizeof(uf2_block));
+    }
+#endif
+
+    unsigned int block_no = 0;
+    unsigned int file_no = 0;
+    for (auto file : {file1, file2}) {
+        file->seekg(0, ios::beg);
+        uf2_block block;
+        unsigned int pos = 0;
+        uint32_t next_family_id = 0;
+        do {
+            file->read((char*)&block, sizeof(uf2_block));
+            if (file->fail()) {
+                if (file->eof()) { file->clear(); break; }
+                fail(ERROR_READ_FAILED, "unexpected end of input file");
+            }
+            if (block.magic_start0 == UF2_MAGIC_START0 && block.magic_start1 == UF2_MAGIC_START1 &&
+                block.magic_end == UF2_MAGIC_END) {
+                if (block.flags & UF2_FLAG_FAMILY_ID_PRESENT &&
+                    !(block.flags & UF2_FLAG_NOT_MAIN_FLASH) && block.payload_size == PAGE_SIZE) {
+                    // ignore the absolute block
+                    if (check_abs_block(block)) {
+                        DEBUG_LOG("Ignoring RP2350-E10 absolute block\n");
+                    } else {
+                        block.block_no = block_no; block_no++;
+                        block.num_blocks = num_blocks;
+                        block.file_size = settings.family_id;
+                        if (settings.uf2.offset_set && file_no == 1) {
+                            block.target_addr += settings.uf2.offset;
+                        }
+                        out->write((char*)&block, sizeof(uf2_block));
+                    }
+                }
+            }
+            pos += sizeof(uf2_block);
+        } while (true);
+        file_no++;
+    }
+
     out->close();
 
     return false;
