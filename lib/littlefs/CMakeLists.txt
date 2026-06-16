@@ -6,4 +6,4 @@ target_sources(littlefs INTERFACE
 
 target_include_directories(littlefs INTERFACE ${CMAKE_CURRENT_LIST_DIR})
 
-target_compile_definitions(littlefs INTERFACE LFS_NO_ERROR=1)
+target_compile_definitions(littlefs INTERFACE LFS_NO_ERROR=1 LFS_NO_WARN=1 LFS_NO_DEBUG=1)
