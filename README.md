@@ -10,50 +10,50 @@ PICOTOOL:
     Tool for interacting with RP-series device(s) in BOOTSEL mode, or with an RP-series binary
 
 SYNOPSIS:
+    picotool help [<cmd>]
+    picotool version [-s] [<version>]
     picotool info [-b] [-m] [-p] [-d] [--debug] [-l] [-a] [device-selection]
     picotool info [-b] [-m] [-p] [-d] [--debug] [-l] [-a] <filename> [-t <type>]
     picotool config [-s <key> <value>] [-g <group>] [device-selection]
     picotool config [-s <key> <value>] [-g <group>] <filename> [-t <type>]
     picotool load [--ignore-partitions] [--family <family_id>] [-p <partition>] [-n] [-N] [-u] [-v] [-x] <filename> [-t <type>] [-o
                 <offset>] [device-selection]
-    picotool encrypt [--quiet] [--verbose] [--embed] [--fast-rosc] [--use-mbedtls] [--otp-key-page <page>] [--hash] [--sign] [--no-clear]
-                [--pin-xip-sram] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] <aes_key> <iv_salt> <signing_key> <otp>
-    picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] [--pin-xip-sram] [--no-squash] <infile> [-t <type>] [-o <offset>]
-                <outfile> [-t <type>] <key> <otp> [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
-    picotool link [--quiet] [--verbose] <outfile> [-t <type>] <infile1> [-t <type>] <infile2> [-t <type>] [<infile3>] [-t <type>] [-p <pad>]
     picotool save [-p] [-v] [--family <family_id>] <filename> [-t <type>] [device-selection]
     picotool save -a [-v] [--family <family_id>] <filename> [-t <type>] [device-selection]
     picotool save -r <from> <to> [-v] [--family <family_id>] <filename> [-t <type>] [device-selection]
+    picotool verify <filename> [-t <type>] [device-selection] [-r <from> <to>] [-o <offset>] [device-selection]
     picotool erase [-a] [device-selection]
     picotool erase -p <partition> [device-selection]
     picotool erase -r <from> <to> [device-selection]
-    picotool verify <filename> [-t <type>] [device-selection] [-r <from> <to>] [-o <offset>] [device-selection]
     picotool reboot [-a] [-u] [-g <partition>] [-c <cpu>] [device-selection]
-    picotool otp list|get|set|load|dump|permissions|white-label
+    picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] [--pin-xip-sram] [--no-squash] <infile> [-t <type>] [-o <offset>]
+                <outfile> [-t <type>] <key> <otp> [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
+    picotool encrypt [--quiet] [--verbose] [--embed] [--fast-rosc] [--use-mbedtls] [--otp-key-page <page>] [--hash] [--sign] [--no-clear]
+                [--pin-xip-sram] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] <aes_key> <iv_salt> <signing_key> <otp>
     picotool partition info|create
-    picotool uf2 info|convert
-    picotool version [-s] [<version>]
+    picotool uf2 convert|combine|info
+    picotool otp get|set|load|white-label|permissions|dump|list
     picotool coprodis [--quiet] [--verbose] <infile> <outfile>
-    picotool help [<cmd>]
+    picotool link [--quiet] [--verbose] <outfile> [-t <type>] <infile1> [-t <type>] <infile2> [-t <type>] [<infile3>] [-t <type>] [-p <pad>]
 
 COMMANDS:
+    help        Show general help or help for a specific command
+    version     Display picotool version
     info        Display information from the target device(s) or file.
                 Without any arguments, this will display basic information for all connected RP-series devices in BOOTSEL mode
     config      Display or change program configuration settings from the target device(s) or file.
     load        Load the program / memory range stored in a file onto the device.
-    encrypt     Encrypt the program.
-    seal        Add final metadata to a binary, optionally including a hash and/or signature.
-    link        Link multiple binaries into one block loop.
     save        Save the program / memory stored in flash on the device to a file.
-    erase       Erase the program / memory stored in flash on the device.
     verify      Check that the device contents match those in the file.
+    erase       Erase the program / memory stored in flash on the device.
     reboot      Reboot the device
-    otp         Commands related to the RP2350 OTP (One-Time-Programmable) Memory
+    seal        Add final metadata to a binary, optionally including a hash and/or signature.
+    encrypt     Encrypt the program.
     partition   Commands related to RP2350 Partition Tables
     uf2         Commands related to UF2 creation and status
-    version     Display picotool version
+    otp         Commands related to the RP2350 OTP (One-Time-Programmable) Memory
     coprodis    Post-process coprocessor instructions in disassembly files.
-    help        Show general help or help for a specific command
+    link        Link multiple binaries into one block loop.
 
 Use "picotool help <cmd>" for more info
 ```
@@ -958,16 +958,117 @@ OPTIONS:
         <offset>
             Load offset (memory address; default 0x10000000 for BIN file)
     UF2 Family options
+        --family
+            Specify the family ID
         <family_id>
             family ID for UF2
     Platform options
+        --platform
+            Optional platform for memory-address validation
         <platform>
-            optional platform for memory verification (eg rp2040, rp2350)
+            platform to use (eg rp2040, rp2350)
     Errata RP2350-E10 Fix
         --abs-block
             Add an absolute block
         <abs_block_loc>
             absolute block location (default to 0x10ffff00)
+```
+
+### combine
+
+This command is used to combine multiple UF2 files (possibly with different family IDs) into a single file with the same family ID. This can be useful for loading a partition table and multiple partitions onto a device using a single file.
+
+```text
+$ picotool help uf2 combine
+UF2 COMBINE:
+    Combine multiple UF2 files.
+
+SYNOPSIS:
+    picotool uf2 combine [--quiet] [--verbose] <infile1> [-t <type>] <infile2> [-t <type>] <outfile> [-t <type>] [--family <family_id>]
+                [--offset <offset>] [--partition <partition>] [[--abs-block] [<abs_block_loc>]]
+
+OPTIONS:
+        --quiet
+            Don't print any output
+        --verbose
+            Print verbose output
+    First file to combine
+        <infile1>
+            The file name
+        -t <type>
+            Specify file type (uf2) explicitly, ignoring file extension
+    Second file to combine
+        <infile2>
+            The file name
+        -t <type>
+            Specify file type (uf2) explicitly, ignoring file extension
+    File to save output to
+        <outfile>
+            The file name
+        -t <type>
+            Specify file type (uf2) explicitly, ignoring file extension
+    UF2 Family options
+        --family
+            Specify the family ID
+        <family_id>
+            family ID for combined UF2 (defaults to first one)
+    Offset options
+        --offset
+            Offset second UF2 by amount
+        <offset>
+            offset amount (default to 0)
+    Partition options
+        --partition
+            Place second UF2 in partition (first UF2 must contain a partition table)
+        <partition>
+            partition number (default to 0)
+    Errata RP2350-E10 Fix
+        --abs-block
+            Add an absolute block
+        <abs_block_loc>
+            absolute block location (default to 0x10ffff00)
+```
+
+The `--partition` argument can be used to place the second file in a partition number, provided that there is a partition table in the first file. For example, take this `pt.json`
+```json
+{
+    "unpartitioned": {
+        "families": ["absolute"],
+        "permissions": {
+            "secure": "rw",
+            "nonsecure": "rw",
+            "bootloader": "rw"
+        }
+    },
+    "partitions": [
+        {
+            "size": "1024K",
+            "families": ["rp2350-arm-s", "rp2350-riscv"],
+            "permissions": {
+                "secure": "rw",
+                "nonsecure": "rw",
+                "bootloader": "rw"
+            }
+        },
+        {
+            "size": "1024K",
+            "families": ["data"],
+            "permissions": {
+                "secure": "rw",
+                "nonsecure": "rw",
+                "bootloader": "rw"
+            }
+        }
+    ]
+}
+```
+
+If you want to load this partition table, and put `code.uf2` and `data.uf2` into the partitions, all using a single UF2, you would run:
+```text
+$ picotool partition create pt.json pt.uf2
+$ picotool uf2 combine pt.uf2 code.uf2 tmp.uf2 --partition 0
+$ picotool uf2 combine tmp.uf2 data.uf2 combined.uf2 --partition 1
+$ picotool load -x combined.uf2
 ```
 
 ### info
@@ -1026,24 +1127,24 @@ OTP:
     Commands related to the RP2350 OTP (One-Time-Programmable) Memory
 
 SYNOPSIS:
-    picotool otp list [-p] [-n] [-f] [-i <filename>] [<selector>..]
     picotool otp get [-c <copies>] [-r] [-e] [-n] [-i <filename>] [device-selection] [-z] [<selector>..]
     picotool otp set [-c <copies>] [-r] [-e] [-s] [-i <filename>] [-z] <selector> <value> [device-selection]
     picotool otp load [-r] [-e] [-s <row>] [-i <filename>] <filename> [-t <type>] [device-selection]
+    picotool otp white-label -s <row> <filename> [device-selection]
+    picotool otp permissions <filename> [--led <pin>] [--hash] [--sign] <key> [device-selection]
     picotool otp dump [-r] [-e] [-p] [--output <filename>] [device-selection]
     picotool otp dump [-r] [-e] [-p] [--output <filename>] <input> [-t <type>]
-    picotool otp permissions <filename> [--led <pin>] [--hash] [--sign] <key> [device-selection]
-    picotool otp white-label -s <row> <filename> [device-selection]
+    picotool otp list [-p] [-n] [-f] [-i <filename>] [<selector>..]
 
 SUB COMMANDS:
-    list          List matching known registers/fields
     get           Get the value of one or more OTP registers/fields (RP2350 only)
     set           Set the value of an OTP row/field (RP2350 only)
     load          Load the row range stored in a file into OTP and verify. Data is 2 bytes/row for ECC, 4 bytes/row for raw (MSB is
                   ignored). (RP2350 only)
-    dump          Dump entire OTP (RP2350 only)
-    permissions   Set the OTP access permissions (RP2350 only)
     white-label   Set the white labelling values in OTP (RP2350 only)
+    permissions   Set the OTP access permissions (RP2350 only)
+    dump          Dump entire OTP (RP2350 only)
+    list          List matching known registers/fields
 ```
 
 ### set/get

@@ -11,7 +11,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        generator: ["Ninja", "Unix Makefiles", "Visual Studio 17 2022"]
+        generator: ["Ninja", "Unix Makefiles", "Visual Studio 18 2026"]
         mbedtls: ["mbedtls", ""]
         libusb: ["libusb", ""]
         compile: ["compile", ""]
@@ -19,24 +19,20 @@ jobs:
           - os: 'windows-latest'
             generator: "Unix Makefiles"
           - os: 'ubuntu-latest'
-            generator: "Visual Studio 17 2022"
+            generator: "Visual Studio 18 2026"
           - os: 'macos-latest'
-            generator: "Visual Studio 17 2022"
+            generator: "Visual Studio 18 2026"
           - libusb: ""
             compile: "compile"
           - os: 'windows-latest'
             # only precompiled ELFs supported for Windows MSVC
             compile: "compile"
-            generator: "Visual Studio 17 2022"
+            generator: "Visual Studio 18 2026"
     runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Install mingw (Windows mingw)
-        if: runner.os == 'Windows' && matrix.generator == 'Ninja'
-        run: |
-          choco install -y mingw --version=12.2.0
       - name: Install arm-none-eabi-gcc (Windows & MacOS)
         if: runner.os == 'Windows' || runner.os == 'macOS'
         uses: carlosperate/arm-none-eabi-gcc-action@v1
