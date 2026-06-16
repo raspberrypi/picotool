@@ -20,8 +20,8 @@ if (NOT USE_PRECOMPILED)
     set(CMAKE_C_STANDARD 11)
     set(CMAKE_CXX_STANDARD 17)
 
-    if (PICO_SDK_VERSION_STRING VERSION_LESS "2.0.0")
-        message(FATAL_ERROR "Raspberry Pi Pico SDK version 2.0.0 (or later) required. Your version is ${PICO_SDK_VERSION_STRING}")
+    if (PICO_SDK_VERSION_STRING VERSION_LESS "2.2.1")
+        message(FATAL_ERROR "Raspberry Pi Pico SDK version 2.2.1 (or later) required. Your version is ${PICO_SDK_VERSION_STRING}")
     endif()
 
     # Initialize the SDK
@@ -36,12 +36,7 @@ if (NOT USE_PRECOMPILED)
         pico_stdlib
     )
 
-    pico_set_binary_type(xip_ram_perms no_flash)
-    # create linker script to run from 0x20070000
-    file(READ ${PICO_LINKER_SCRIPT_PATH}/memmap_no_flash.ld LINKER_SCRIPT)
-    string(REPLACE "RAM(rwx) : ORIGIN =  0x20000000, LENGTH = 512k" "RAM(rwx) : ORIGIN =  0x13ffc000, LENGTH = 16k" LINKER_SCRIPT "${LINKER_SCRIPT}")
-    file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/memmap_xip_ram.ld "${LINKER_SCRIPT}")
-    pico_set_linker_script(xip_ram_perms ${CMAKE_CURRENT_BINARY_DIR}/memmap_xip_ram.ld)
+    pico_set_binary_type(xip_ram_perms xip_ram)
 
     install(FILES ${CMAKE_CURRENT_BINARY_DIR}/xip_ram_perms.elf DESTINATION ${CMAKE_CURRENT_LIST_DIR})
 else()

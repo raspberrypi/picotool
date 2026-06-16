@@ -345,6 +345,10 @@ else()
         ${LIBUSB_LIBRARIES})
 endif()
 
+if (DEFAULT_BOOTSEL_LED)
+    target_compile_definitions(picotool PRIVATE DEFAULT_BOOTSEL_LED=${DEFAULT_BOOTSEL_LED})
+endif()
+
 if (GENERATE_FIXED_DOCS_WIDTH)
     target_compile_definitions(picotool PRIVATE DOCS_WIDTH=140)
 endif()

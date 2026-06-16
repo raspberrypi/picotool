@@ -47,7 +47,6 @@ namespace picoboot {
         void reboot(uint32_t pc, uint32_t sp, uint32_t delay_ms);
         void reboot2(struct picoboot_reboot2_cmd *cmd);
         void exec(uint32_t addr);
-        // void exec2(struct picoboot_exec2_cmd *cmd); // currently unused
         void get_info(struct picoboot_get_info_cmd *get_info_cmd, uint8_t *buffer, uint32_t len);
         void flash_erase(uint32_t addr, uint32_t len);
         void vector(uint32_t addr);

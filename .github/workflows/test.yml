@@ -11,24 +11,36 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        generator: ["Ninja", "Unix Makefiles"]
+        generator: ["Ninja", "Unix Makefiles", "Visual Studio 18 2026"]
         mbedtls: ["mbedtls", ""]
         libusb: ["libusb", ""]
         compile: ["compile", ""]
         exclude:
           - os: 'windows-latest'
             generator: "Unix Makefiles"
+          - os: 'ubuntu-latest'
+            generator: "Visual Studio 18 2026"
+          - os: 'macos-latest'
+            generator: "Visual Studio 18 2026"
           - libusb: ""
             compile: "compile"
+          - os: 'windows-latest'
+            # only precompiled ELFs supported for Windows MSVC
+            compile: "compile"
+            generator: "Visual Studio 18 2026"
     runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Install arm-none-eabi-gcc (Windows & MacOS)
+        if: runner.os == 'Windows' || runner.os == 'macOS'
+        uses: carlosperate/arm-none-eabi-gcc-action@v1
+        with:
+          release: 14.3.Rel1
       - name: Install dependencies (Windows)
         if: runner.os == 'Windows'
         run: |
-          choco install -y .github/workflows/choco_packages.config
           curl -L https://github.com/libusb/libusb/releases/download/v1.0.27/libusb-1.0.27.7z -o libusb.7z
           7z x libusb.7z -olibusb
           ls libusb
@@ -45,7 +57,6 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           brew install libusb ninja
-          brew install --cask gcc-arm-embedded
 
       - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
@@ -62,7 +73,7 @@ jobs:
         run: |
           cmake -S . -B build -G "${{ matrix.generator }}" -D PICO_SDK_PATH="${{ github.workspace }}/pico-sdk" ${{ !matrix.libusb && '-D PICOTOOL_NO_LIBUSB=1' || '' }} ${{ matrix.compile && '-D USE_PRECOMPILED=false' || '' }}
           cmake --build build
-          ${{ runner.os != 'Windows' && 'sudo' || '' }} cmake --install build
+          ${{ runner.os != 'Windows' && 'sudo' || '' }} cmake --install build --config Debug
       - name: Add to path (Windows)
         if: runner.os == 'Windows'
         run: echo "C:\Program Files (x86)\picotool\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
@@ -71,8 +82,11 @@ jobs:
         run: |
           picotool help
           curl -L https://datasheets.raspberrypi.com/soft/blink.uf2 -o blink.uf2
+          unzip -o blink.uf2 || true
           curl -L https://datasheets.raspberrypi.com/soft/hello_world.uf2 -o hello_world.uf2
+          unzip -o hello_world.uf2 || true
           curl -L https://datasheets.raspberrypi.com/soft/flash_nuke.uf2 -o flash_nuke.uf2
+          unzip -o flash_nuke.uf2 || true
           picotool info -a blink.uf2
           picotool info -a hello_world.uf2
           picotool info -a flash_nuke.uf2
