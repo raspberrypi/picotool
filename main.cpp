@@ -1762,9 +1762,6 @@ vector<std::shared_ptr<cmd>> commands {
         help_cmd,
         std::shared_ptr<cmd>(new version_command()),
         std::shared_ptr<cmd>(new info_command()),
-    #if HAS_LIBUSB
-        std::shared_ptr<cmd>(new bdev_command()),
-    #endif
         std::shared_ptr<cmd>(new config_command()),
     #if HAS_LIBUSB
         std::shared_ptr<cmd>(new load_command()),
@@ -1782,6 +1779,9 @@ vector<std::shared_ptr<cmd>> commands {
         std::shared_ptr<cmd>(new otp_command()),
         std::shared_ptr<cmd>(new coprodis_command()),
         std::shared_ptr<cmd>(new link_command()),
+    #if HAS_LIBUSB
+        std::shared_ptr<cmd>(new bdev_command()),
+    #endif
 };
 
 template <typename T>
