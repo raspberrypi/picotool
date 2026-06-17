@@ -581,7 +581,7 @@ void elf_file::store_squashed(model_t model) {
         const uint32_t paddr = seg->physical_address();
         const uint32_t psize = seg->physical_size();
         if (!seg->is_load()) return;
-        if (!psize) return;
+        if (psize == 0) return;
 
         if (last_seg_end) {
             if (paddr != last_seg_end) {
