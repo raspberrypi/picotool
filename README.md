@@ -1672,11 +1672,16 @@ BDEV:
     Commands related to embedded block devices
 
 SYNOPSIS:
-    picotool bdev ls <dirname> [-r] [-p <partition>] [--filesystem <fs>] [--format] [device-selection]
-    picotool bdev mkdir <dirname> [-p <partition>] [--filesystem <fs>] [--format] [device-selection]
-    picotool bdev cp <src> <dest> [-p <partition>] [--filesystem <fs>] [--format] [device-selection]
-    picotool bdev rm <filename> [-p <partition>] [--filesystem <fs>] [--format] [device-selection]
-    picotool bdev cat <filename> [-p <partition>] [--filesystem <fs>] [--format] [device-selection]
+    picotool bdev ls <dirname> [-r] [-p <partition number>] [--partition-name <partition name>] [--partition-id <partition id>]
+                [--filesystem <fs>] [--format] [device-selection]
+    picotool bdev mkdir <dirname> [-p <partition number>] [--partition-name <partition name>] [--partition-id <partition id>] [--filesystem
+                <fs>] [--format] [device-selection]
+    picotool bdev cp <src> <dest> [-p <partition number>] [--partition-name <partition name>] [--partition-id <partition id>] [--filesystem
+                <fs>] [--format] [device-selection]
+    picotool bdev rm <filename> [-p <partition number>] [--partition-name <partition name>] [--partition-id <partition id>] [--filesystem
+                <fs>] [--format] [device-selection]
+    picotool bdev cat <filename> [-p <partition number>] [--partition-name <partition name>] [--partition-id <partition id>] [--filesystem
+                <fs>] [--format] [device-selection]
 
 SUB COMMANDS:
     ls      List contents of the block device
@@ -1697,7 +1702,8 @@ BDEV LS:
     List contents of the block device
 
 SYNOPSIS:
-    picotool bdev ls <dirname> [-r] [-p <partition>] [--filesystem <fs>] [--format] [device-selection]
+    picotool bdev ls <dirname> [-r] [-p <partition number>] [--partition-name <partition name>] [--partition-id <partition id>]
+                [--filesystem <fs>] [--format] [device-selection]
 
 OPTIONS:
         <dirname>
@@ -1705,10 +1711,18 @@ OPTIONS:
         -r, --recursive
             List files in directories recursively
     Block device options
-        -p, --partition
-            Partition to use as block device
-        <partition>
+        -p, --partition-number
+            Partition number to use as block device
+        <partition number>
             partition number
+        --partition-name
+            Partition name to use as block device
+        <partition name>
+            partition name
+        --partition-id
+            Partition ID to use as block device
+        <partition id>
+            partition id
         --filesystem
             Specify filesystem to use
         <fs>
@@ -1753,16 +1767,25 @@ BDEV MKDIR:
     Create directory on the block device
 
 SYNOPSIS:
-    picotool bdev mkdir <dirname> [-p <partition>] [--filesystem <fs>] [--format] [device-selection]
+    picotool bdev mkdir <dirname> [-p <partition number>] [--partition-name <partition name>] [--partition-id <partition id>] [--filesystem
+                <fs>] [--format] [device-selection]
 
 OPTIONS:
         <dirname>
             The directory name
     Block device options
-        -p, --partition
-            Partition to use as block device
-        <partition>
+        -p, --partition-number
+            Partition number to use as block device
+        <partition number>
             partition number
+        --partition-name
+            Partition name to use as block device
+        <partition name>
+            partition name
+        --partition-id
+            Partition ID to use as block device
+        <partition id>
+            partition id
         --filesystem
             Specify filesystem to use
         <fs>
@@ -1808,7 +1831,8 @@ BDEV CP:
     Copy file to/from the block device - use :filename to indicate files on the device (eg `cp main.py :main.py` to upload to the device)
 
 SYNOPSIS:
-    picotool bdev cp <src> <dest> [-p <partition>] [--filesystem <fs>] [--format] [device-selection]
+    picotool bdev cp <src> <dest> [-p <partition number>] [--partition-name <partition name>] [--partition-id <partition id>] [--filesystem
+                <fs>] [--format] [device-selection]
 
 OPTIONS:
         <src>
@@ -1816,10 +1840,18 @@ OPTIONS:
         <dest>
             The file name
     Block device options
-        -p, --partition
-            Partition to use as block device
-        <partition>
+        -p, --partition-number
+            Partition number to use as block device
+        <partition number>
             partition number
+        --partition-name
+            Partition name to use as block device
+        <partition name>
+            partition name
+        --partition-id
+            Partition ID to use as block device
+        <partition id>
+            partition id
         --filesystem
             Specify filesystem to use
         <fs>
@@ -1864,16 +1896,25 @@ BDEV RM:
     Delete a file or an empty directory on the block device
 
 SYNOPSIS:
-    picotool bdev rm <filename> [-p <partition>] [--filesystem <fs>] [--format] [device-selection]
+    picotool bdev rm <filename> [-p <partition number>] [--partition-name <partition name>] [--partition-id <partition id>] [--filesystem
+                <fs>] [--format] [device-selection]
 
 OPTIONS:
         <filename>
             The file name
     Block device options
-        -p, --partition
-            Partition to use as block device
-        <partition>
+        -p, --partition-number
+            Partition number to use as block device
+        <partition number>
             partition number
+        --partition-name
+            Partition name to use as block device
+        <partition name>
+            partition name
+        --partition-id
+            Partition ID to use as block device
+        <partition id>
+            partition id
         --filesystem
             Specify filesystem to use
         <fs>
@@ -1918,16 +1959,25 @@ BDEV CAT:
     Print contents of file on the block device
 
 SYNOPSIS:
-    picotool bdev cat <filename> [-p <partition>] [--filesystem <fs>] [--format] [device-selection]
+    picotool bdev cat <filename> [-p <partition number>] [--partition-name <partition name>] [--partition-id <partition id>] [--filesystem
+                <fs>] [--format] [device-selection]
 
 OPTIONS:
         <filename>
             The file name
     Block device options
-        -p, --partition
-            Partition to use as block device
-        <partition>
+        -p, --partition-number
+            Partition number to use as block device
+        <partition number>
             partition number
+        --partition-name
+            Partition name to use as block device
+        <partition name>
+            partition name
+        --partition-id
+            Partition ID to use as block device
+        <partition id>
+            partition id
         --filesystem
             Specify filesystem to use
         <fs>
