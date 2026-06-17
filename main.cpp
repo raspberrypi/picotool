@@ -687,7 +687,9 @@ struct _settings {
     struct {
         bdev_fs_t fs = fs_detect;
         bool recursive = false;
-        int partition = -1;
+        int partition_number = -1;
+        uint64_t partition_id = BLOCK_DEVICE_PARTITION_ID;
+        string partition_name = "";
         bool format = false;
     } bdev;
 };
@@ -895,8 +897,12 @@ struct config_command : public cmd {
 
 #if HAS_LIBUSB
 auto bdev_options = (
-    (option('p', "--partition") % "Partition to use as block device" &
-            integer("partition").set(settings.bdev.partition) % "partition number").force_expand_help(true) +
+    (option('p', "--partition-number") % "Partition number to use as block device" &
+            integer("partition number").set(settings.bdev.partition_number) % "partition number").force_expand_help(true) +
+    (option("--partition-name") % "Partition name to use as block device" &
+            value("partition name").set(settings.bdev.partition_name) % "partition name").force_expand_help(true) +
+    (option("--partition-id") % "Partition ID to use as block device" &
+            integer("partition id").set(settings.bdev.partition_id) % "partition id").force_expand_help(true) +
     (option("--filesystem") % "Specify filesystem to use" &
             bdev_fs("fs").set(settings.bdev.fs) % "littlefs|fatfs").force_expand_help(true) +
     (option("--format").set(settings.bdev.format) % "Format the drive if necessary (may result in data loss)")
@@ -4507,8 +4513,19 @@ model_t get_model(uint8_t file_idx) {
 }
 
 #if HAS_LIBUSB
-// Returns [(start, end, permissions, id)]
-std::shared_ptr<vector<tuple<uint32_t, uint32_t, uint32_t, uint64_t>>> get_partitions(picoboot::connection &con) {
+
+struct partition_details {
+    uint32_t start = 0;
+    uint32_t end = 0;
+    uint32_t flags_and_permissions = 0;
+    bool has_id = false;
+    uint64_t id = 0;
+    bool has_name = false;
+    string name = "";
+    vector<uint32_t> extra_families = {};
+};
+
+std::shared_ptr<tuple<resident_partition_t, std::shared_ptr<vector<partition_details>>>> get_partition_info(picoboot::connection &con) {
     picoboot_memory_access raw_access(con);
     auto model = raw_access.get_model();
     if (!model->supports_partition_table()) {
@@ -4536,38 +4553,66 @@ std::shared_ptr<vector<tuple<uint32_t, uint32_t, uint32_t, uint64_t>>> get_parti
     resident_partition_t unpartitioned = *(resident_partition_t *) &loc_flags_id_buf_32[lfi_pos];
     lfi_pos += 2;
 
-    vector<tuple<uint32_t, uint32_t, uint32_t, uint64_t>> ret;
-
-    if (!has_pt || !partition_count) {
-        // there is no partition table, or it is empty
-        return nullptr;
+    if (!has_pt) {
+        // there is no partition table
+        return std::make_shared<tuple<resident_partition_t, std::shared_ptr<vector<partition_details>>>>(std::make_tuple(unpartitioned, nullptr));
     }
 
-    if (has_pt) {
-        for (unsigned int i = 0; i < partition_count; i++) {
-            uint32_t location_and_permissions = loc_flags_id_buf_32[lfi_pos++];
-            uint32_t flags_and_permissions = loc_flags_id_buf_32[lfi_pos++];
-            uint32_t permissions = location_and_permissions & flags_and_permissions & PICOBIN_PARTITION_PERMISSIONS_BITS;
-            uint64_t id = 0;
-            if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_HAS_ID_BITS) {
-                id = loc_flags_id_buf_32[lfi_pos] | ((uint64_t) loc_flags_id_buf_32[lfi_pos + 1] << 32u);
-                lfi_pos += 2;
+    vector<partition_details> ret;
+
+    for (unsigned int i = 0; i < partition_count; i++) {
+        uint32_t location_and_permissions = loc_flags_id_buf_32[lfi_pos++];
+        uint32_t flags_and_permissions = loc_flags_id_buf_32[lfi_pos++];
+        uint64_t id = 0;
+        string name = "";
+        vector<uint32_t> extra_families = {};
+        if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_HAS_ID_BITS) {
+            id = loc_flags_id_buf_32[lfi_pos] | ((uint64_t) loc_flags_id_buf_32[lfi_pos + 1] << 32u);
+            lfi_pos += 2;
+        }
+        uint32_t num_extra_families =
+                (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_NUM_EXTRA_FAMILIES_BITS)
+                        >> PICOBIN_PARTITION_FLAGS_ACCEPTS_NUM_EXTRA_FAMILIES_LSB;
+        if (num_extra_families | (flags_and_permissions & PICOBIN_PARTITION_FLAGS_HAS_NAME_BITS)) {
+            cmd.dParams[0] = PT_INFO_SINGLE_PARTITION | PT_INFO_PARTITION_FAMILY_IDS | PT_INFO_PARTITION_NAME |
+                            (i << 24);
+            con.get_info(&cmd, family_id_name_buf, sizeof(family_id_name_buf));
+            unsigned int got = family_id_name_buf_32[0];
+            assert(family_id_name_buf_32[1] == (cmd.dParams[0] & 0xffffffu));
+            assert((flags_and_permissions & PICOBIN_PARTITION_FLAGS_HAS_NAME_BITS) ||
+                    got == num_extra_families + 1);
+            for (unsigned int j = 1; j < num_extra_families + 1; j++) {
+                extra_families.push_back(family_id_name_buf_32[j + 1]);
             }
-            ret.push_back(std::make_tuple(
-                ((location_and_permissions >> PICOBIN_PARTITION_LOCATION_FIRST_SECTOR_LSB) & 0x1fffu) * 4096,
-                (((location_and_permissions >> PICOBIN_PARTITION_LOCATION_LAST_SECTOR_LSB) & 0x1fffu) + 1) * 4096,
-                permissions,
-                id
-            ));
-            if ((location_and_permissions ^ flags_and_permissions) &
-                PICOBIN_PARTITION_PERMISSIONS_BITS) {
-                printf("PARTITION TABLE PERMISSION MISMATCH!\n");
-                return nullptr;
+            if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_HAS_NAME_BITS) {
+                uint8_t *bytes = &family_id_name_buf[(num_extra_families + 2) * 4];
+                for (int l = *(bytes++) & 0x7f; l > 0; l--) {
+                    name += (char)*bytes++;
+                }
             }
+        }
+        ret.push_back({
+            .start = ((location_and_permissions >> PICOBIN_PARTITION_LOCATION_FIRST_SECTOR_LSB) & 0x1fffu) * 4096,
+            .end = (((location_and_permissions >> PICOBIN_PARTITION_LOCATION_LAST_SECTOR_LSB) & 0x1fffu) + 1) * 4096,
+            .flags_and_permissions = flags_and_permissions,
+            .has_id = (bool)(flags_and_permissions & PICOBIN_PARTITION_FLAGS_HAS_ID_BITS),
+            .id = id,
+            .has_name = (bool)(flags_and_permissions & PICOBIN_PARTITION_FLAGS_HAS_NAME_BITS),
+            .name = name,
+            .extra_families = extra_families,
+        });
+        if ((location_and_permissions ^ flags_and_permissions) &
+            PICOBIN_PARTITION_PERMISSIONS_BITS) {
+            printf("PARTITION TABLE PERMISSION MISMATCH!\n");
+            return nullptr;
         }
     }
 
-    return std::make_shared<vector<tuple<uint32_t, uint32_t, uint32_t, uint64_t>>>(ret);
+    return std::make_shared<tuple<resident_partition_t, std::shared_ptr<vector<partition_details>>>>(std::make_tuple(unpartitioned, std::make_shared<vector<partition_details>>(ret)));
+}
+
+std::shared_ptr<vector<partition_details>> get_partitions(picoboot::connection &con) {
+    return std::get<1>(*get_partition_info(con));
 }
 #endif
 
@@ -4602,8 +4647,8 @@ bool config_command::execute(device_map &devices) {
             auto partitions = get_partitions(connection);
             vector<uint32_t> starts;
             if (partitions) {
-                for (auto range : *partitions) {
-                    starts.push_back(std::get<0>(range));
+                for (auto partition : *partitions) {
+                    starts.push_back(partition.start);
                 }
                 for (unsigned int i=0; i < starts.size(); i++) {
                     uint32_t start = starts[i];
@@ -4700,8 +4745,8 @@ bool info_command::execute(device_map &devices) {
                 if ((settings.info.show_basic || settings.info.show_pins || settings.info.show_build || settings.info.show_metadata) || !(settings.info.show_device || settings.info.show_debug)) {
                     settings.info.show_device = false;
                     settings.info.show_debug = false;
-                    for (auto range : *partitions) {
-                        starts.push_back(std::get<0>(range));
+                    for (auto partition : *partitions) {
+                        starts.push_back(partition.start);
                     }
                     if (has_bootloader && std::none_of(starts.cbegin(), starts.cend(), [](int i) { return i == 0; })) {
                         // Print bootloader info, only if bootloader is present and not in a partition
@@ -5026,12 +5071,12 @@ bool erase_command::execute(device_map &devices) {
             fail(ERROR_NOT_POSSIBLE, "There are only %d partitions on the device", partitions->size());
         }
         size_t tmp;
-        tmp = std::get<0>((*partitions)[settings.load.partition]);
+        tmp = (*partitions)[settings.load.partition].start;
         if (tmp > UINT32_MAX) {
             fail(ERROR_NOT_POSSIBLE, "Partition start address is too large");
         }
         start = tmp;
-        tmp = std::get<1>((*partitions)[settings.load.partition]);
+        tmp = (*partitions)[settings.load.partition].end;
         if (tmp > UINT32_MAX) {
             fail(ERROR_NOT_POSSIBLE, "Partition end address is too large");
         }
@@ -5318,8 +5363,8 @@ bool load_command::execute(device_map &devices) {
         if (settings.load.partition >= partitions->size()) {
             fail(ERROR_NOT_POSSIBLE, "There are only %d partitions on the device", partitions->size());
         }
-        uint32_t start = std::get<0>((*partitions)[settings.load.partition]);
-        uint32_t end = std::get<1>((*partitions)[settings.load.partition]);
+        uint32_t start = (*partitions)[settings.load.partition].start;
+        uint32_t end = (*partitions)[settings.load.partition].end;
         printf("Downloading into partition %d:\n", settings.load.partition);
         printf("  %08x->%08x\n", start, end);
         settings.offset = start + FLASH_START;
@@ -6287,35 +6332,50 @@ void setup_bdevfs_internal() {
 
     bool block_device_found = false;
 
-    if (settings.bdev.partition >= 0) { // use specified partition
-        if (!partitions) {
-            fail(ERROR_NOT_POSSIBLE, "There is no partition table on the device");
-        }
-        if (settings.bdev.partition >= partitions->size()) {
-            fail(ERROR_NOT_POSSIBLE, "There are only %d partitions on the device", partitions->size());
-        }
-        uint32_t start = std::get<0>((*partitions)[settings.bdev.partition]);
-        uint32_t end = std::get<1>((*partitions)[settings.bdev.partition]);
-        bdevfs_setup.writeable = std::get<2>((*partitions)[settings.bdev.partition]) & PICOBIN_PARTITION_PERMISSION_NSBOOT_W_BITS;
-        start += FLASH_START;
-        end += FLASH_START;
-        if (end <= start) {
-            fail(ERROR_ARGS, "Partition range is invalid/empty");
-        }
-        bdevfs_setup.base_addr = start;
-        bdevfs_setup.size = end - start;
-        block_device_found = true;
-    } else if (partitions) { // use first partition with id "blockdev"
-        for (auto &partition : *partitions) {
-            if (std::get<3>(partition) != BLOCK_DEVICE_PARTITION_ID) {
-                continue;
+    if (partitions) {
+        auto chosen_partition = (*partitions)[0];
+        if (settings.bdev.partition_number >= 0) { // use specified partition number
+            if (!partitions) {
+                fail(ERROR_NOT_POSSIBLE, "There is no partition table on the device");
             }
-            bdevfs_setup.base_addr = std::get<0>(partition) + FLASH_START;
-            bdevfs_setup.size = std::get<1>(partition) - std::get<0>(partition);
-            bdevfs_setup.writeable = std::get<2>(partition) & PICOBIN_PARTITION_PERMISSION_NSBOOT_W_BITS;
+            if (settings.bdev.partition_number >= partitions->size()) {
+                fail(ERROR_NOT_POSSIBLE, "There are only %d partitions on the device", partitions->size());
+            }
+            chosen_partition = (*partitions)[settings.bdev.partition_number];
             block_device_found = true;
-            break;
+        } else { // name and ID search
+            for (auto &partition : *partitions) {
+                if (settings.bdev.partition_name.empty()) { // no partition name specified
+                    if (!partition.has_id || partition.id != settings.bdev.partition_id) { // match partition ID, which defaults to BLOCK_DEVICE_PARTITION_ID
+                        continue;
+                    }
+                } else { // partition name specified
+                    if (!partition.has_name || partition.name != settings.bdev.partition_name) { // match partition name
+                        continue;
+                    }
+                }
+                chosen_partition = partition;
+                block_device_found = true;
+                break;
+            }
         }
+
+        if (block_device_found) {
+            bdevfs_setup.base_addr = chosen_partition.start + FLASH_START;
+            bdevfs_setup.size = chosen_partition.end - chosen_partition.start;
+            bdevfs_setup.writeable = chosen_partition.flags_and_permissions & PICOBIN_PARTITION_PERMISSION_NSBOOT_W_BITS;
+        } else if (!settings.bdev.partition_name.empty()) {
+            fail(ERROR_NOT_POSSIBLE, "There is no partition with name %s on the device", settings.bdev.partition_name.c_str());
+        } else if (settings.bdev.partition_id != BLOCK_DEVICE_PARTITION_ID) {
+            fail(ERROR_NOT_POSSIBLE, "There is no partition with ID %016" PRIx64 " on the device", settings.bdev.partition_id);
+        }
+    } else if (
+        settings.bdev.partition_number >= 0 ||
+        !settings.bdev.partition_name.empty() ||
+        settings.bdev.partition_id != BLOCK_DEVICE_PARTITION_ID
+    ) {
+        // Partition table arguments were specified, but none was present
+        fail(ERROR_NOT_POSSIBLE, "There is no partition table on the device");
     }
     
     if (!block_device_found) { // use binary info
@@ -7458,36 +7518,21 @@ std::map<std::pair<uint32_t,uint32_t>, otp_match> filter_otp(std::vector<string>
     return matches;
 }
 
-
 #if HAS_LIBUSB
 bool partition_info_command::execute(device_map &devices) {
     auto con = get_single_picoboot_cmd_compatible_device_connection("partition info", devices, {PC_GET_INFO}, false);
 
-    picoboot_memory_access raw_access(con);
-    model_t model = raw_access.get_model();
-    if (model->chip_revision() == rp2350_a2) con.exit_xip();
+    auto partition_info = get_partition_info(con);
+    if (partition_info == nullptr) {
+        // get_partition_info had an error
+        return -1;
+    }
+    auto unpartitioned = std::get<0>(*partition_info);
+    auto partitions = std::get<1>(*partition_info);
 
-    uint8_t loc_flags_id_buf[256];
-    uint8_t family_id_name_buf[256];
-    uint32_t *loc_flags_id_buf_32 = (uint32_t *)loc_flags_id_buf;
-    uint32_t *family_id_name_buf_32 = (uint32_t *)family_id_name_buf;
-    picoboot_get_info_cmd cmd;
-    cmd.bType = PICOBOOT_GET_INFO_PARTTION_TABLE;
-    cmd.dParams[0] = PT_INFO_PT_INFO | PT_INFO_PARTITION_LOCATION_AND_FLAGS | PT_INFO_PARTITION_ID;
-    con.get_info(&cmd, loc_flags_id_buf, sizeof(loc_flags_id_buf));
-    unsigned int lfi_pos = 0;
-    unsigned int words = loc_flags_id_buf_32[lfi_pos++];
-    unsigned int included_fields = loc_flags_id_buf_32[lfi_pos++];
-    assert(included_fields == cmd.dParams[0]);
-    unsigned int partition_count = loc_flags_id_buf[lfi_pos * 4];
-    unsigned int has_pt = loc_flags_id_buf[lfi_pos * 4 + 1];
-    lfi_pos++;
-    resident_partition_t unpartitioned = *(resident_partition_t *) &loc_flags_id_buf_32[lfi_pos];
-    lfi_pos += 2;
-
-    if (!has_pt) {
+    if (!partitions) {
         printf("there is no partition table\n");
-    } else if (!partition_count) {
+    } else if (partitions->size() == 0) {
         printf("the partition table is empty\n");
     }
     printf("un-partitioned_space : ");
@@ -7496,16 +7541,12 @@ bool partition_info_command::execute(device_map &devices) {
     insert_default_families(unpartitioned.permissions_and_flags, family_names);
     printf(", uf2 { %s }\n", cli::join(family_names, ", ").c_str());
 
-    if (has_pt) {
+    if (partitions) {
         printf("partitions:\n");
-        for (unsigned int i = 0; i < partition_count; i++) {
-            uint32_t location_and_permissions = loc_flags_id_buf_32[lfi_pos++];
-            uint32_t flags_and_permissions = loc_flags_id_buf_32[lfi_pos++];
-            uint64_t id = 0;
-            if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_HAS_ID_BITS) {
-                id = loc_flags_id_buf_32[lfi_pos] | ((uint64_t) loc_flags_id_buf_32[lfi_pos + 1] << 32u);
-                lfi_pos += 2;
-            }
+        for (int i = 0; i < (*partitions).size(); i++) {
+            auto partition = (*partitions)[i];
+            uint32_t flags_and_permissions = partition.flags_and_permissions;
+            uint64_t id = partition.id;
             printf("  %d", i);
             if ((flags_and_permissions & PICOBIN_PARTITION_FLAGS_LINK_TYPE_BITS) ==
                 PICOBIN_PARTITION_FLAGS_LINK_TYPE_AS_BITS(A_PARTITION)) {
@@ -7520,43 +7561,20 @@ bool partition_info_command::execute(device_map &devices) {
                 printf("(A)      ");
             }
             printf(" %08x->%08x",
-                   ((location_and_permissions >> PICOBIN_PARTITION_LOCATION_FIRST_SECTOR_LSB) & 0x1fffu) * 4096,
-                   (((location_and_permissions >> PICOBIN_PARTITION_LOCATION_LAST_SECTOR_LSB) & 0x1fffu) + 1) *
-                   4096);
-            if ((location_and_permissions ^ flags_and_permissions) &
-                PICOBIN_PARTITION_PERMISSIONS_BITS) {
-                printf(" (PERMISSION MISMATCH)");
-                return -1;
-            }
-            unsigned int p = location_and_permissions & flags_and_permissions;
-            fos << str_permissions(p);
-            if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_HAS_ID_BITS) {
+                   partition.start,
+                   partition.end);
+            unsigned int permissions = flags_and_permissions & PICOBIN_PARTITION_PERMISSIONS_BITS;
+            fos << str_permissions(permissions);
+            if (partition.has_id) {
                 printf(", id=%016" PRIx64, id);
             }
-            uint32_t num_extra_families =
-                    (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_NUM_EXTRA_FAMILIES_BITS)
-                            >> PICOBIN_PARTITION_FLAGS_ACCEPTS_NUM_EXTRA_FAMILIES_LSB;
             family_names.clear();
             insert_default_families(flags_and_permissions, family_names);
-            if (num_extra_families | (flags_and_permissions & PICOBIN_PARTITION_FLAGS_HAS_NAME_BITS)) {
-                cmd.dParams[0] = PT_INFO_SINGLE_PARTITION | PT_INFO_PARTITION_FAMILY_IDS | PT_INFO_PARTITION_NAME |
-                                (i << 24);
-                con.get_info(&cmd, family_id_name_buf, sizeof(family_id_name_buf));
-                unsigned int got = family_id_name_buf_32[0];
-                assert(family_id_name_buf_32[1] == (cmd.dParams[0] & 0xffffffu));
-                assert((flags_and_permissions & PICOBIN_PARTITION_FLAGS_HAS_NAME_BITS) ||
-                       got == num_extra_families + 1);
-                for (unsigned int j = 1; j < num_extra_families + 1; j++) {
-                    family_names.emplace_back(family_name(family_id_name_buf_32[j + 1]));
-                }
-                if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_HAS_NAME_BITS) {
-                    uint8_t *bytes = &family_id_name_buf[(num_extra_families + 2) * 4];
-                    printf(", \"");
-                    for (int l = *(bytes++) & 0x7f; l > 0; l--) {
-                        putchar(*bytes++);
-                    }
-                    putchar('"');
-                }
+            for (auto extra_family : partition.extra_families) {
+                family_names.emplace_back(family_name(extra_family));
+            }
+            if (partition.has_name) {
+                printf(", \"%s\"", partition.name.c_str());
             }
             printf(", uf2 { %s }", cli::join(family_names, ", ").c_str());
             printf(", arm_boot %d", !(flags_and_permissions & PICOBIN_PARTITION_FLAGS_IGNORED_DURING_ARM_BOOT_BITS));
