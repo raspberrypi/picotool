@@ -103,8 +103,7 @@ static __forceinline int __builtin_ctz(unsigned x) {
 #define BOOTROM_FAMILY_ID_MAX       RP2350_ARM_NS_FAMILY_ID
 #endif
 #ifndef BLOCK_DEVICE_PARTITION_ID
-// The default 0x626C6F636B646576 value is the ASCII encoding of "blockdev"
-#define BLOCK_DEVICE_PARTITION_ID 0x626C6F636B646576
+#define BLOCK_DEVICE_PARTITION_ID   0x626C6F636B646576
 #endif
 // ------
 
