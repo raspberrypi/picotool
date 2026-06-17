@@ -1664,7 +1664,7 @@ OPTIONS:
 
 ## bdev
 
-The `bdev` commands are for interacting with block devices in Flash. These can either be defined using binary info, or you can specify a partition to use as a block device. They work with a LittleFS filesystem, or a FatFS filesystem.
+The `bdev` commands are for interacting with block devices in Flash. The block device location can either be determined using binary info, or you can specify a partition to use as a block device. The commands work with a LittleFS filesystem, or a FatFS filesystem.
 
 ```text
 $ picotool help bdev
