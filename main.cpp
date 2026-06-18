@@ -6680,6 +6680,7 @@ bool partition_create_command::execute(device_map &devices) {
 #endif
 
     uint32_t cur_pos = 2;
+    uint32_t max_pos = 0;
 
     for (auto p : partitions) {
         partition_table_item::partition new_p;
@@ -6690,13 +6691,14 @@ bool partition_create_command::execute(device_map &devices) {
         if (start >= 4096 || size >= 4096) {
             if (start == cur_pos) start *= 0x1000;
             if (start % 0x1000 || size % 0x1000) {
-                fail(ERROR_INCOMPATIBLE, "Partition table start (%dK) and size (%dK) must be 4K aligned", start/1024, size/1024);
+                fail(ERROR_INCOMPATIBLE, "Partition start (%dK) and size (%dK) must be 4K aligned", start/1024, size/1024);
             }
             start /= 0x1000;
             size /= 0x1000;
         }
 
         cur_pos = start + size;
+        if (cur_pos > max_pos) max_pos = cur_pos;
     #if SUPPORT_RP2350_A2
         if (start <= (settings.uf2.abs_block_loc - FLASH_START)/0x1000 && start + size > (settings.uf2.abs_block_loc - FLASH_START)/0x1000) {
             fail(ERROR_INCOMPATIBLE, "The address %" PRIx32 " cannot be in a partition for the RP2350-E10 fix to work", settings.uf2.abs_block_loc);
@@ -6786,10 +6788,10 @@ bool partition_create_command::execute(device_map &devices) {
     }
 #endif
 
-    if (round_up_power_2(cur_pos) - cur_pos < num_end_sectors) {
+    if (round_up_power_2(max_pos) - max_pos < num_end_sectors) {
         // Likely this partition table doesn't account for BTStack flash bank at end
         fos << "WARNING: This partition table covers the last " << num_end_sectors;
-        fos << " Flash sectors for flash size " << round_up_power_2(cur_pos) / (1024/4);
+        fos << " Flash sectors for flash size " << round_up_power_2(max_pos) / (1024/4);
         fos << "M, which will interfere with the BTStack flash bank";
     #if SUPPORT_RP2350_A2
         if (abs_block_at_end) fos << ", and the RP2350-E10 absolute block,";
