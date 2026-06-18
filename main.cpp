@@ -6621,6 +6621,17 @@ uint32_t families_to_flags(std::vector<string> families, bool fail_invalid = fal
     return ret;
 }
 
+uint32_t round_up_power_2(uint32_t v) {
+    v--;
+    v |= v >> 1;
+    v |= v >> 2;
+    v |= v >> 4;
+    v |= v >> 8;
+    v |= v >> 16;
+    v++;
+    return v;
+}
+
 bool partition_create_command::execute(device_map &devices) {
     if (get_file_type_idx(0) != filetype::json) {
         fail(ERROR_ARGS, "json must be a json file\n");
@@ -6759,6 +6770,31 @@ bool partition_create_command::execute(device_map &devices) {
             }  
         }
         pt.partitions.push_back(new_p);
+    }
+
+    // Catch partition tables which cover the end of Flash, which the SDK uses for the BTStack flash bank
+    uint num_end_sectors = 2; // for BTStack flash bank
+#if SUPPORT_RP2350_A2
+    bool abs_block_at_end = false;
+    if (settings.uf2.abs_block_loc) {
+        uint32_t abs_block_flash_loc = settings.uf2.abs_block_loc - FLASH_START;
+        if (round_up_power_2(abs_block_flash_loc) <= abs_block_flash_loc + 0x1000) {
+            // if abs_block within 4k of end, also keep space for that
+            num_end_sectors++;
+            abs_block_at_end = true;
+        }
+    }
+#endif
+
+    if (round_up_power_2(cur_pos) - cur_pos < num_end_sectors) {
+        // Likely this partition table doesn't account for BTStack flash bank at end
+        fos << "WARNING: This partition table covers the last " << num_end_sectors;
+        fos << " Flash sectors for flash size " << round_up_power_2(cur_pos) / (1024/4);
+        fos << "M, which will interfere with the BTStack flash bank";
+    #if SUPPORT_RP2350_A2
+        if (abs_block_at_end) fos << ", and the RP2350-E10 absolute block,";
+    #endif
+        fos << " if that is the actual flash size\n";
     }
 
     pt_block->items.push_back(std::make_shared<partition_table_item>(pt));
