@@ -691,6 +691,7 @@ struct _settings {
         uint64_t partition_id = BLOCK_DEVICE_DEFAULT_PARTITION_ID;
         string partition_name = "";
         bool format = false;
+        bool always_format = false;
         bool force_formattable = false;
         bool force_writeable = false;
     } bdev;
@@ -898,7 +899,7 @@ struct config_command : public cmd {
 };
 
 #if HAS_LIBUSB
-auto bdev_options = (
+auto bdev_base_options = (
     (option('p', "--partition-number") % "Partition number to use as block device" &
             integer("partition number").set(settings.bdev.partition_number) % "partition number").force_expand_help(true) +
     (option("--partition-name") % "Partition name to use as block device" &
@@ -907,10 +908,12 @@ auto bdev_options = (
             integer("partition id").set(settings.bdev.partition_id) % "partition id").force_expand_help(true) +
     (option("--filesystem") % "Specify filesystem to use" &
             bdev_fs("fs").set(settings.bdev.fs) % "littlefs|fatfs").force_expand_help(true) +
-    (option("--format").set(settings.bdev.format) % "Format the drive if necessary (may result in data loss)") +
     (option("--force-formattable").set(settings.bdev.force_formattable) % "Allow formatting, even if the block device is not marked as fomattable") +
     (option("--force-writeable").set(settings.bdev.force_writeable) % "Allow writing, even if the block device is not marked as writeable")
 ).min(0).doc_non_optional(true) % "Block device options";
+auto bdev_format_option = (option("--format").set(settings.bdev.format) % "Format the drive if necessary (may result in data loss)");
+auto bdev_options_no_format = bdev_base_options;
+auto bdev_options = bdev_base_options + bdev_format_option;
 
 struct bdev_ls_command : public cmd {
     bdev_ls_command() : cmd("ls") {}
@@ -999,12 +1002,29 @@ struct bdev_cat_command : public cmd {
     }
 };
 
+struct bdev_format_command : public cmd {
+    bdev_format_command() : cmd("format") {}
+    bool execute(device_map& devices) override;
+
+    group get_cli() override {
+        return (
+            bdev_options_no_format +
+            device_selection % "Target device selection"
+        );
+    }
+
+    string get_doc() const override {
+        return "Format the block device";
+    }
+};
+
 vector<std::shared_ptr<cmd>> bdev_sub_commands {
     std::shared_ptr<cmd>(new bdev_ls_command()),
     std::shared_ptr<cmd>(new bdev_mkdir_command()),
     std::shared_ptr<cmd>(new bdev_cp_command()),
     std::shared_ptr<cmd>(new bdev_rm_command()),
     std::shared_ptr<cmd>(new bdev_cat_command()),
+    std::shared_ptr<cmd>(new bdev_format_command()),
 };
 struct bdev_command : public multi_cmd {
     bdev_command() : multi_cmd("bdev", bdev_sub_commands) {}
@@ -6457,7 +6477,12 @@ void setup_bdevfs_internal() {
         }
 
         // No FS Found
-        fail(ERROR_CONNECTION, "No file system detected - to format the drive use `--format --filesystem <littlefs|fatfs>`");
+        if (settings.bdev.format) {
+            fail(ERROR_CONNECTION, "No file system detected - must pass `--filesystem <littlefs|fatfs>` to specify which filesystem to format");
+        } else {
+            fail(ERROR_CONNECTION, "No file system detected - to format the drive use `--format --filesystem <littlefs|fatfs>`");
+        }
+        
     }
 }
 
@@ -6649,7 +6674,7 @@ void do_fatfs_op(fatfs_op_fn fatfs_op) {
     bdevfs_setup.access->enable_ftl = true;
 
     int err = f_mount(&fatfs);
-    if (err == FR_NO_FILESYSTEM) {
+    if (err == FR_NO_FILESYSTEM || settings.bdev.always_format) {
         if (settings.bdev.format) {
             if (bdevfs_setup.formattable) {
                 fos << "Formatting FatFS file system\n";
@@ -6810,7 +6835,7 @@ void do_lfs_op(lfs_op_fn lfs_op) {
     };
 
     int err = lfs_mount(&lfs, &cfg);
-    if (err == LFS_ERR_CORRUPT) {
+    if (err == LFS_ERR_CORRUPT || settings.bdev.always_format) {
         if (settings.bdev.format) {
             if (bdevfs_setup.formattable) {
                 fos << "Formatting LittleFS file system\n";
@@ -7143,6 +7168,36 @@ bool bdev_cat_command::execute(device_map &devices) {
 
                 string out(data_buf.begin(), data_buf.end());
                 printf("%s", out.c_str());
+            };
+            do_fatfs_op(fatfs_op);
+            break;
+        }
+
+        default:
+            fail(ERROR_ARGS, "Unknown filesystem specified");
+    }
+    return false;
+}
+
+bool bdev_format_command::execute(device_map &devices) {
+    settings.bdev.always_format = true;
+    settings.bdev.format = true;
+
+    auto con = get_single_bootsel_device_connection(devices);
+    setup_bdevfs(con);
+
+    switch (settings.bdev.fs) {
+        case fs_littlefs: {
+            lfs_op_fn lfs_op = [&](lfs_t *lfs) {
+                printf("LittleFS formatting complete\n");
+            };
+            do_lfs_op(lfs_op);
+            break;
+        }
+
+        case fs_fatfs: {
+            fatfs_op_fn fatfs_op = [&](FATFS *fatfs) {
+                printf("FatFS formatting complete\n");
             };
             do_fatfs_op(fatfs_op);
             break;
