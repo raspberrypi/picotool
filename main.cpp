@@ -102,8 +102,8 @@ static __forceinline int __builtin_ctz(unsigned x) {
 #ifndef BOOTROM_FAMILY_ID_MAX
 #define BOOTROM_FAMILY_ID_MAX       RP2350_ARM_NS_FAMILY_ID
 #endif
-#ifndef BLOCK_DEVICE_PARTITION_ID
-#define BLOCK_DEVICE_PARTITION_ID   0x626C6F636B646576
+#ifndef BLOCK_DEVICE_DEFAULT_PARTITION_ID
+#define BLOCK_DEVICE_DEFAULT_PARTITION_ID 0x626C6F636B646576
 #endif
 // ------
 
@@ -688,7 +688,7 @@ struct _settings {
         bdev_fs_t fs = fs_detect;
         bool recursive = false;
         int partition_number = -1;
-        uint64_t partition_id = BLOCK_DEVICE_PARTITION_ID;
+        uint64_t partition_id = BLOCK_DEVICE_DEFAULT_PARTITION_ID;
         string partition_name = "";
         bool format = false;
         bool force_formattable = false;
@@ -6350,7 +6350,7 @@ void setup_bdevfs_internal() {
         } else { // name and ID search
             for (auto &partition : *partitions) {
                 if (settings.bdev.partition_name.empty()) { // no partition name specified
-                    if (!partition.has_id || partition.id != settings.bdev.partition_id) { // match partition ID, which defaults to BLOCK_DEVICE_PARTITION_ID
+                    if (!partition.has_id || partition.id != settings.bdev.partition_id) { // match partition ID, which defaults to BLOCK_DEVICE_DEFAULT_PARTITION_ID
                         continue;
                     }
                 } else { // partition name specified
@@ -6370,13 +6370,13 @@ void setup_bdevfs_internal() {
             bdevfs_setup.writeable = chosen_partition.flags_and_permissions & PICOBIN_PARTITION_PERMISSION_NSBOOT_W_BITS;
         } else if (!settings.bdev.partition_name.empty()) {
             fail(ERROR_NOT_POSSIBLE, "There is no partition with name %s on the device", settings.bdev.partition_name.c_str());
-        } else if (settings.bdev.partition_id != BLOCK_DEVICE_PARTITION_ID) {
+        } else if (settings.bdev.partition_id != BLOCK_DEVICE_DEFAULT_PARTITION_ID) {
             fail(ERROR_NOT_POSSIBLE, "There is no partition with ID %016" PRIx64 " on the device", settings.bdev.partition_id);
         }
     } else if (
         settings.bdev.partition_number >= 0 ||
         !settings.bdev.partition_name.empty() ||
-        settings.bdev.partition_id != BLOCK_DEVICE_PARTITION_ID
+        settings.bdev.partition_id != BLOCK_DEVICE_DEFAULT_PARTITION_ID
     ) {
         // Partition table arguments were specified, but none was present
         fail(ERROR_NOT_POSSIBLE, "There is no partition table on the device");
