@@ -3416,12 +3416,16 @@ static chip_t image_type_exe_chip_to_chip(uint image_type_exe_chip) {
 }
 
 #if HAS_LIBUSB
-void info_guts(memory_access &raw_access, picoboot::connection *con) {
+void info_guts(memory_access &raw_access, picoboot::connection *con, bool no_pt_loaded=false) {
+    model_t model = raw_access.get_model();
 #else
-void info_guts(memory_access &raw_access, void *con) {
+void info_guts(memory_access &raw_access, void *con, bool no_pt_loaded=false) {
 #endif
     // Use flash caching
     settings.use_flash_cache = true;
+    // Track if a valid partition table was found in the block loop
+    bool has_valid_pt = false;
+    bool has_invalid_pt = false;
     // Callback to pass to bintool, to get more bin data
     get_more_bin_cb more_cb = [&raw_access](std::vector<uint8_t> &bin, uint32_t offset, uint32_t size) {
         DEBUG_LOG("Now reading from %x size %x\n", offset, size);
@@ -3459,6 +3463,7 @@ void info_guts(memory_access &raw_access, void *con) {
             }
         };
         auto info_metadata = [&](block *current_block, bool verbose_metadata = false) {
+            bool is_pt = false;
             verified_t hash_verified = none;
             verified_t sig_verified = none;
         #if HAS_MBEDTLS
@@ -3514,6 +3519,8 @@ void info_guts(memory_access &raw_access, void *con) {
             // Partition Table
             auto partition_table = current_block->get_item<partition_table_item>();
             if (partition_table != nullptr) {
+                is_pt = true; // this block is a partition table
+                has_valid_pt = true; // assume it is valid - hash and sig checks will invalidate it if not
                 if (verbose_metadata) info_pair("block type", "partition table");
                 info_pair("partition table", partition_table->singleton ? "singleton" : "non-singleton");
                 std::stringstream unpartitioned;
@@ -3642,6 +3649,10 @@ void info_guts(memory_access &raw_access, void *con) {
                     }
                     info_pair("hash value", val.str());
                 }
+                if (is_pt && hash_verified != passed) {
+                    has_valid_pt = false; // partition table has bad hash
+                    has_invalid_pt = true;
+                }
             }
             if (sig_verified != none) {
                 info_pair("signature", sig_verified == passed ? "verified" : "incorrect");
@@ -3658,6 +3669,10 @@ void info_guts(memory_access &raw_access, void *con) {
                         pkey << hex_string(i, 2, false, true);
                     }
                     info_pair("public key", pkey.str());
+                }
+                if (is_pt && sig_verified != passed) {
+                    has_valid_pt = false; // partition table has bad signature
+                    has_invalid_pt = true;
                 }
             }
         };
@@ -3879,7 +3894,6 @@ void info_guts(memory_access &raw_access, void *con) {
         std::vector<std::pair<string,string>> device_state_pairs;
         if ((settings.info.show_device || settings.info.all) && raw_access.is_device()) {
             select_group(device_info);
-            model_t model = raw_access.get_model();
             uint8_t rom_version;
             raw_access.read_raw(0x13, rom_version);
             info_pair("type", model->name());
@@ -4063,6 +4077,24 @@ void info_guts(memory_access &raw_access, void *con) {
     } catch (not_mapped_exception&e) {
         std::cout << "\nfailed to read memory at " << hex_string(e.addr) << "\n";
     }
+
+#if HAS_LIBUSB
+    if (no_pt_loaded && model->chip() != rp2040) {
+        if (has_valid_pt) {
+            fos.first_column(0); fos.hanging_indent(0);
+            fos << "\nWARNING: Device has no partition table loaded, but has a partition table at the start of flash.\n";
+            fos.first_column(sizeof("WARNING: ") - 1);
+            fos << "This may cause picotool to behave unpredictably.\n";
+            fos << "This could be due to using a custom board which is missing the resistor inline with the BOOTSEL button, ";
+            fos << "or if BOOT_FLAGS0.HASHED_PARTITION_TABLE or BOOT_FLAGS0.SECURE_PARTITION_TABLE is set in OTP and the partition table is not hashed/signed\n";
+        } else if (has_invalid_pt) {
+            fos.first_column(0); fos.hanging_indent(0);
+            fos << "\nWARNING: Device has no partition table loaded, but has an incorrectly hashed/signed partition table at the start of flash.\n";
+            fos.first_column(sizeof("WARNING: ") - 1);
+            fos << "This may cause picotool to behave unpredictably.\n";
+        }
+    }
+#endif
 }
 
 void config_guts(memory_access &raw_access) {
@@ -4545,7 +4577,7 @@ bool info_command::execute(device_map &devices) {
                     info_guts(access, &connection);
                 }
             } else {
-                info_guts(access, &connection);
+                info_guts(access, &connection, true);
             }
         }
     } else {
