@@ -4089,7 +4089,7 @@ void info_guts(memory_access &raw_access, void *con, bool no_pt_loaded=false) {
             fos << "or if BOOT_FLAGS0.HASHED_PARTITION_TABLE or BOOT_FLAGS0.SECURE_PARTITION_TABLE is set in OTP and the partition table is not hashed/signed\n";
         } else if (has_invalid_pt) {
             fos.first_column(0); fos.hanging_indent(0);
-            fos << "\nWARNING: Device has no partition table loaded, but has an incorrectly hashed/signed partition table at the start of flash.\n";
+            fos << "\nWARNING: Device has an incorrectly hashed/signed partition table at the start of flash.\n";
             fos.first_column(sizeof("WARNING: ") - 1);
             fos << "This may cause picotool to behave unpredictably.\n";
         }
