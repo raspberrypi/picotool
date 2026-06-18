@@ -691,6 +691,8 @@ struct _settings {
         uint64_t partition_id = BLOCK_DEVICE_PARTITION_ID;
         string partition_name = "";
         bool format = false;
+        bool force_formattable = false;
+        bool force_writeable = false;
     } bdev;
 };
 _settings settings;
@@ -905,7 +907,9 @@ auto bdev_options = (
             integer("partition id").set(settings.bdev.partition_id) % "partition id").force_expand_help(true) +
     (option("--filesystem") % "Specify filesystem to use" &
             bdev_fs("fs").set(settings.bdev.fs) % "littlefs|fatfs").force_expand_help(true) +
-    (option("--format").set(settings.bdev.format) % "Format the drive if necessary (may result in data loss)")
+    (option("--format").set(settings.bdev.format) % "Format the drive if necessary (may result in data loss)") +
+    (option("--force-formattable").set(settings.bdev.force_formattable) % "Allow formatting, even if the block device is not marked as fomattable") +
+    (option("--force-writeable").set(settings.bdev.force_writeable) % "Allow writing, even if the block device is not marked as writeable")
 ).min(0).doc_non_optional(true) % "Block device options";
 
 struct bdev_ls_command : public cmd {
@@ -6417,6 +6421,14 @@ void setup_bdevfs_internal() {
         } else {
             fail(ERROR_NOT_POSSIBLE, "No binary info found on device");
         }
+    }
+
+    if (settings.bdev.force_formattable) {
+        bdevfs_setup.formattable = true;
+    }
+
+    if (settings.bdev.force_writeable) {
+        bdevfs_setup.writeable = true;
     }
 
     if (settings.bdev.fs == fs_detect) {

@@ -1673,15 +1673,15 @@ BDEV:
 
 SYNOPSIS:
     picotool bdev ls <dirname> [-r] [-p <partition number>] [--partition-name <partition name>] [--partition-id <partition id>]
-                [--filesystem <fs>] [--format] [device-selection]
+                [--filesystem <fs>] [--format] [--force-formattable] [--force-writeable] [device-selection]
     picotool bdev mkdir <dirname> [-p <partition number>] [--partition-name <partition name>] [--partition-id <partition id>] [--filesystem
-                <fs>] [--format] [device-selection]
+                <fs>] [--format] [--force-formattable] [--force-writeable] [device-selection]
     picotool bdev cp <src> <dest> [-p <partition number>] [--partition-name <partition name>] [--partition-id <partition id>] [--filesystem
-                <fs>] [--format] [device-selection]
+                <fs>] [--format] [--force-formattable] [--force-writeable] [device-selection]
     picotool bdev rm <filename> [-p <partition number>] [--partition-name <partition name>] [--partition-id <partition id>] [--filesystem
-                <fs>] [--format] [device-selection]
+                <fs>] [--format] [--force-formattable] [--force-writeable] [device-selection]
     picotool bdev cat <filename> [-p <partition number>] [--partition-name <partition name>] [--partition-id <partition id>] [--filesystem
-                <fs>] [--format] [device-selection]
+                <fs>] [--format] [--force-formattable] [--force-writeable] [device-selection]
 
 SUB COMMANDS:
     ls      List contents of the block device
@@ -1703,7 +1703,7 @@ BDEV LS:
 
 SYNOPSIS:
     picotool bdev ls <dirname> [-r] [-p <partition number>] [--partition-name <partition name>] [--partition-id <partition id>]
-                [--filesystem <fs>] [--format] [device-selection]
+                [--filesystem <fs>] [--format] [--force-formattable] [--force-writeable] [device-selection]
 
 OPTIONS:
         <dirname>
@@ -1729,6 +1729,10 @@ OPTIONS:
             littlefs|fatfs
         --format
             Format the drive if necessary (may result in data loss)
+        --force-formattable
+            Allow formatting, even if the block device is not marked as fomattable
+        --force-writeable
+            Allow writing, even if the block device is not marked as writeable
     Target device selection
         --bus <bus>
             Filter devices by USB bus number
@@ -1768,7 +1772,7 @@ BDEV MKDIR:
 
 SYNOPSIS:
     picotool bdev mkdir <dirname> [-p <partition number>] [--partition-name <partition name>] [--partition-id <partition id>] [--filesystem
-                <fs>] [--format] [device-selection]
+                <fs>] [--format] [--force-formattable] [--force-writeable] [device-selection]
 
 OPTIONS:
         <dirname>
@@ -1792,6 +1796,10 @@ OPTIONS:
             littlefs|fatfs
         --format
             Format the drive if necessary (may result in data loss)
+        --force-formattable
+            Allow formatting, even if the block device is not marked as fomattable
+        --force-writeable
+            Allow writing, even if the block device is not marked as writeable
     Target device selection
         --bus <bus>
             Filter devices by USB bus number
@@ -1832,7 +1840,7 @@ BDEV CP:
 
 SYNOPSIS:
     picotool bdev cp <src> <dest> [-p <partition number>] [--partition-name <partition name>] [--partition-id <partition id>] [--filesystem
-                <fs>] [--format] [device-selection]
+                <fs>] [--format] [--force-formattable] [--force-writeable] [device-selection]
 
 OPTIONS:
         <src>
@@ -1858,6 +1866,10 @@ OPTIONS:
             littlefs|fatfs
         --format
             Format the drive if necessary (may result in data loss)
+        --force-formattable
+            Allow formatting, even if the block device is not marked as fomattable
+        --force-writeable
+            Allow writing, even if the block device is not marked as writeable
     Target device selection
         --bus <bus>
             Filter devices by USB bus number
@@ -1897,7 +1909,7 @@ BDEV RM:
 
 SYNOPSIS:
     picotool bdev rm <filename> [-p <partition number>] [--partition-name <partition name>] [--partition-id <partition id>] [--filesystem
-                <fs>] [--format] [device-selection]
+                <fs>] [--format] [--force-formattable] [--force-writeable] [device-selection]
 
 OPTIONS:
         <filename>
@@ -1921,6 +1933,10 @@ OPTIONS:
             littlefs|fatfs
         --format
             Format the drive if necessary (may result in data loss)
+        --force-formattable
+            Allow formatting, even if the block device is not marked as fomattable
+        --force-writeable
+            Allow writing, even if the block device is not marked as writeable
     Target device selection
         --bus <bus>
             Filter devices by USB bus number
@@ -1960,7 +1976,7 @@ BDEV CAT:
 
 SYNOPSIS:
     picotool bdev cat <filename> [-p <partition number>] [--partition-name <partition name>] [--partition-id <partition id>] [--filesystem
-                <fs>] [--format] [device-selection]
+                <fs>] [--format] [--force-formattable] [--force-writeable] [device-selection]
 
 OPTIONS:
         <filename>
@@ -1984,6 +2000,10 @@ OPTIONS:
             littlefs|fatfs
         --format
             Format the drive if necessary (may result in data loss)
+        --force-formattable
+            Allow formatting, even if the block device is not marked as fomattable
+        --force-writeable
+            Allow writing, even if the block device is not marked as writeable
     Target device selection
         --bus <bus>
             Filter devices by USB bus number
