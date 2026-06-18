@@ -27,9 +27,9 @@ SYNOPSIS:
     picotool erase -r <from> <to> [device-selection]
     picotool reboot [-a] [-u] [-g <partition>] [-c <cpu>] [device-selection]
     picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] [--pin-xip-sram] <infile> [-t <type>] [-o <offset>] <outfile> [-t
-                <type>] <key> <otp> [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
+                <type>] [<key>] [<otp>] [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
     picotool encrypt [--quiet] [--verbose] [--embed] [--fast-rosc] [--use-mbedtls] [--otp-key-page <page>] [--hash] [--sign] [--no-clear]
-                [--pin-xip-sram] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] <aes_key> <iv_salt> <signing_key> <otp>
+                [--pin-xip-sram] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] <aes_key> <iv_salt> [<signing_key>] [<otp>]
     picotool partition info|create
     picotool uf2 convert|combine|info
     picotool otp get|set|load|white-label|permissions|dump|list
@@ -678,7 +678,7 @@ SEAL:
 
 SYNOPSIS:
     picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] [--pin-xip-sram] <infile> [-t <type>] [-o <offset>] <outfile> [-t
-                <type>] <key> <otp> [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
+                <type>] [<key>] [<otp>] [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
 
 OPTIONS:
         --quiet
@@ -750,7 +750,7 @@ ENCRYPT:
 
 SYNOPSIS:
     picotool encrypt [--quiet] [--verbose] [--embed] [--fast-rosc] [--use-mbedtls] [--otp-key-page <page>] [--hash] [--sign] [--no-clear]
-                [--pin-xip-sram] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] <aes_key> <iv_salt> <signing_key> <otp>
+                [--pin-xip-sram] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] <aes_key> <iv_salt> [<signing_key>] [<otp>]
 
 OPTIONS:
         --quiet
@@ -1131,7 +1131,7 @@ SYNOPSIS:
     picotool otp set [-c <copies>] [-r] [-e] [-s] [-i <filename>] [-z] <selector> <value> [device-selection]
     picotool otp load [-r] [-e] [-s <row>] [-i <filename>] <filename> [-t <type>] [device-selection]
     picotool otp white-label -s <row> <filename> [device-selection]
-    picotool otp permissions <filename> [--led <pin>] [--hash] [--sign] <key> [device-selection]
+    picotool otp permissions <filename> [--led <pin>] [--hash] [--sign] [<key>] [device-selection]
     picotool otp dump [-r] [-e] [-p] [--output <filename>] [device-selection]
     picotool otp dump [-r] [-e] [-p] [--output <filename>] <input> [-t <type>]
     picotool otp list [-p] [-n] [-f] [-i <filename>] [<selector>..]
@@ -1445,7 +1445,7 @@ OTP PERMISSIONS:
     Set the OTP access permissions
 
 SYNOPSIS:
-    picotool otp permissions <filename> [--led <pin>] [--hash] [--sign] <key> [device-selection]
+    picotool otp permissions <filename> [--led <pin>] [--hash] [--sign] [<key>] [device-selection]
 
 OPTIONS:
         <filename>
@@ -1672,7 +1672,7 @@ BDEV:
     Commands related to embedded block devices
 
 SYNOPSIS:
-    picotool bdev ls <dirname> [-r] [-p <partition number>] [--partition-name <partition name>] [--partition-id <partition id>]
+    picotool bdev ls [<dirname>] [-r] [-p <partition number>] [--partition-name <partition name>] [--partition-id <partition id>]
                 [--filesystem <fs>] [--force-formattable] [--force-writeable] [--format] [device-selection]
     picotool bdev mkdir <dirname> [-p <partition number>] [--partition-name <partition name>] [--partition-id <partition id>] [--filesystem
                 <fs>] [--force-formattable] [--force-writeable] [--format] [device-selection]
@@ -1705,7 +1705,7 @@ BDEV LS:
     List contents of the block device
 
 SYNOPSIS:
-    picotool bdev ls <dirname> [-r] [-p <partition number>] [--partition-name <partition name>] [--partition-id <partition id>]
+    picotool bdev ls [<dirname>] [-r] [-p <partition number>] [--partition-name <partition name>] [--partition-id <partition id>]
                 [--filesystem <fs>] [--force-formattable] [--force-writeable] [--format] [device-selection]
 
 OPTIONS:

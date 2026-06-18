@@ -786,7 +786,7 @@ auto device_selection =
     value(name).with_exclusion_filter([](const string &value) {\
             return value.find_first_of('-') == 0;\
         }).set(settings.filenames[i]).min(0) % desc\
-).min(0).doc_non_optional(true)
+).min(0)
 
 #define optional_untyped_file_selection_x(name, i) optional_untyped_path_selection_x(name, "The file name", i)
 
