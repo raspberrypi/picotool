@@ -634,6 +634,7 @@ struct _settings {
         #endif
         bool sign = false;
         bool singleton = false;
+        bool no_btstack_flash_bank = false;
     } partition;
 
     struct {
@@ -1114,7 +1115,8 @@ struct partition_create_command : public cmd {
                     named_file_types_x("pem", 3)) % "Sign the partition table" + 
                     (option("--no-hash").clear(settings.partition.hash) % "Don't hash the partition table") + 
                 #endif
-                    (option("--singleton").set(settings.partition.singleton) % "Singleton partition table")
+                    (option("--singleton").set(settings.partition.singleton) % "Singleton partition table") +
+                    (option("--no-btstack-flash-bank").set(settings.partition.no_btstack_flash_bank) % "Don't check for compatibility with BTStack flash bank")
                 ).min(0).force_expand_help(true) % "Partition Table Options"
             #if SUPPORT_RP2350_A2
                 + (
@@ -6775,15 +6777,20 @@ bool partition_create_command::execute(device_map &devices) {
     }
 
     // Catch partition tables which cover the end of Flash, which the SDK uses for the BTStack flash bank
-    uint num_end_sectors = 2; // for BTStack flash bank
+    uint num_end_sectors = 0;
+    string end_sectors_warning_output = "";
+    if (!settings.partition.no_btstack_flash_bank) {
+        num_end_sectors += 2; // for BTStack flash bank
+        end_sectors_warning_output += "the BTStack flash bank";
+    }
 #if SUPPORT_RP2350_A2
-    bool abs_block_at_end = false;
     if (settings.uf2.abs_block_loc) {
         uint32_t abs_block_flash_loc = settings.uf2.abs_block_loc - FLASH_START;
         if (round_up_power_2(abs_block_flash_loc) <= abs_block_flash_loc + 0x1000) {
             // if abs_block within 4k of end, also keep space for that
-            num_end_sectors++;
-            abs_block_at_end = true;
+            num_end_sectors += 1;
+            if (!end_sectors_warning_output.empty()) end_sectors_warning_output += ", and ";
+            end_sectors_warning_output += "the RP2350-E10 absolute block";
         }
     }
 #endif
@@ -6792,10 +6799,8 @@ bool partition_create_command::execute(device_map &devices) {
         // Likely this partition table doesn't account for BTStack flash bank at end
         fos << "WARNING: This partition table covers the last " << num_end_sectors;
         fos << " Flash sectors for flash size " << round_up_power_2(max_pos) / (1024/4);
-        fos << "M, which will interfere with the BTStack flash bank";
-    #if SUPPORT_RP2350_A2
-        if (abs_block_at_end) fos << ", and the RP2350-E10 absolute block,";
-    #endif
+        fos << "M, which will interfere with ";
+        fos << end_sectors_warning_output;
         fos << " if that is the actual flash size\n";
     }
 
