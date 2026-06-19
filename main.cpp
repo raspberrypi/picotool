@@ -4085,7 +4085,7 @@ void info_guts(memory_access &raw_access, void *con, bool no_pt_loaded=false) {
             fos << "\nWARNING: Device has no partition table loaded, but has a partition table at the start of flash.\n";
             fos.first_column(sizeof("WARNING: ") - 1);
             fos << "This may cause picotool to behave unpredictably.\n";
-            fos << "This could be due to using a custom board which is missing the resistor inline with the BOOTSEL button, ";
+            fos << "This could be due to using a custom board which is missing the resistor in series with the BOOTSEL button, ";
             fos << "or if BOOT_FLAGS0.HASHED_PARTITION_TABLE or BOOT_FLAGS0.SECURE_PARTITION_TABLE is set in OTP and the partition table is not hashed/signed\n";
         } else if (has_invalid_pt) {
             fos.first_column(0); fos.hanging_indent(0);
