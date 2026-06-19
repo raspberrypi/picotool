@@ -9,14 +9,16 @@
 #define FLASH_END_RP2040        0x11000000 // +32 MiB -- remainder has no external devices mapped
 #define FLASH_END_RP2350        0x12000000 // +32 MiB -- remainder has no external devices mapped
 // todo amy based on what sort of elf
-#define XIP_SRAM_START_RP2040   0x15000000
-#define XIP_SRAM_END_RP2040     0x15004000
+#define XIP_SRAM_START_RP2040   0x15000000 // same as XIP_SRAM_BASE in addressmap.h
+#define XIP_SRAM_END_RP2040     0x15004000 // same as XIP_SRAM_END in addressmap.h
 #define XIP_SRAM_START_RP2350   0x13ffc000 // same as XIP_SRAM_BASE in addressmap.h
 #define XIP_SRAM_END_RP2350     0x14000000 // same as XIP_SRAM_END in addressmap.h
 
 #define SRAM_START              0x20000000 // same as SRAM_BASE in addressmap.h
-#define SRAM_END_RP2040         0x20042000
-#define SRAM_END_RP2350         0x20082000
+#define SRAM_STRIPED_END_RP2040 0x20040000 // same as SRAM_STRIPED_END in addressmap.h
+#define SRAM_END_RP2040         0x20042000 // same as SRAM_END in addressmap.h
+#define SRAM_STRIPED_END_RP2350 0x20080000 // same as SRAM_STRIPED_END in addressmap.h
+#define SRAM_END_RP2350         0x20082000 // same as SRAM_END in addressmap.h
 // todo amy no more banked alias
 #define MAIN_RAM_BANKED_START   0x21000000
 #define MAIN_RAM_BANKED_END     0x21040000

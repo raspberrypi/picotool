@@ -120,6 +120,7 @@ public:
     virtual uint32_t flash_start() { fail(ERROR_NOT_POSSIBLE, "unknown flash start"); return 0; }
     virtual uint32_t flash_end() { fail(ERROR_NOT_POSSIBLE, "unknown flash end"); return 0; }
     virtual uint32_t sram_start() { fail(ERROR_NOT_POSSIBLE, "unknown sram start"); return 0; }
+    virtual uint32_t sram_striped_end() { fail(ERROR_NOT_POSSIBLE, "unknown striped sram end"); return 0; }
     virtual uint32_t sram_end() { fail(ERROR_NOT_POSSIBLE, "unknown sram end"); return 0; }
     virtual uint32_t xip_sram_start() { fail(ERROR_NOT_POSSIBLE, "unknown xip sram start"); return 0; }
     virtual uint32_t xip_sram_end() { fail(ERROR_NOT_POSSIBLE, "unknown xip sram end"); return 0; }
@@ -184,6 +185,10 @@ public:
         return std::max({XIP_SRAM_END_RP2040, XIP_SRAM_END_RP2350});
     }
 
+    uint32_t sram_striped_end() override {
+        return std::max({SRAM_STRIPED_END_RP2040, SRAM_STRIPED_END_RP2350});
+    }
+
     uint32_t sram_end() override {
         return std::max({SRAM_END_RP2040, SRAM_END_RP2350});
     }
@@ -226,6 +231,10 @@ public:
 
     uint32_t xip_sram_end() override {
         return XIP_SRAM_END_RP2040;
+    }
+
+    uint32_t sram_striped_end() override {
+        return SRAM_STRIPED_END_RP2040;
     }
 
     uint32_t sram_end() override {
@@ -282,6 +291,10 @@ public:
 
     uint32_t xip_sram_end() override {
         return XIP_SRAM_END_RP2350;
+    }
+
+    uint32_t sram_striped_end() override {
+        return SRAM_STRIPED_END_RP2350;
     }
 
     uint32_t sram_end() override {

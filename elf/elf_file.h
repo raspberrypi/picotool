@@ -16,6 +16,7 @@
 #include <string>
 #include <vector>
 #include "elf.h"
+#include "model.h"
 
 #include "addresses.h"
 
@@ -33,6 +34,7 @@ public:
 
     std::vector<uint8_t> content(const elf32_ph_entry &ph) const;
     std::vector<uint8_t> content(const elf32_sh_entry &sh) const;
+    std::vector<const elf32_ph_entry *> sorted_segments(void);
     void content(const elf32_ph_entry &ph, const std::vector<uint8_t> &content);
     void content(const elf32_sh_entry &sh, const std::vector<uint8_t> &content);
 
@@ -45,6 +47,7 @@ public:
     const elf32_ph_entry* segment_from_virtual_address(uint32_t vaddr);
     const elf32_ph_entry* segment_from_section(const elf32_sh_entry &sh);
     void dump(void) const;
+    void store_squashed(model_t model);
 
     void move_all(int dist);
     void remove_ph_holes(void);
@@ -55,6 +58,7 @@ public:
 
     bool editable = true;
 private:
+    std::vector<elf32_ph_entry *> sorted_segments_modifiable(void);
     int read_header(void);
     void read_ph(void);
     void read_sh(void);
