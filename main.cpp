@@ -6858,6 +6858,9 @@ bool bdev_ls_command::execute(device_map &devices) {
     auto con = get_single_bootsel_device_connection(devices);
     setup_bdevfs(con);
 
+    // Remove starting ':' if present, as ls only operates on the device
+    if ((char)(settings.filenames[0].front()) == ':') settings.filenames[0].erase(0, 1);
+
     string dir = "/";
     if (settings.filenames[0].length() > 0) {
         if (settings.filenames[0].front() == '/') {
@@ -6899,6 +6902,9 @@ bool bdev_ls_command::execute(device_map &devices) {
 bool bdev_mkdir_command::execute(device_map &devices) {
     auto con = get_single_bootsel_device_connection(devices);
     setup_bdevfs(con);
+
+    // Remove starting ':' if present, as mkdir only operates on the device
+    if ((char)(settings.filenames[0].front()) == ':') settings.filenames[0].erase(0, 1);
 
     switch (settings.bdev.fs) {
         case fs_littlefs: {
@@ -6946,6 +6952,7 @@ bool bdev_cp_command::execute(device_map &devices) {
         settings.filenames[1] += settings.filenames[0].substr(filenamestart, filenamelen);
     }
 
+    // Remote files start with ':', so detect and remove the ':'
     bool srcRemote = false;
     bool destRemote = false;
     if ((char)(settings.filenames[0].front()) == ':') {
@@ -7074,6 +7081,9 @@ bool bdev_rm_command::execute(device_map &devices) {
     auto con = get_single_bootsel_device_connection(devices);
     setup_bdevfs(con);
 
+    // Remove starting ':' if present, as rm only operates on the device
+    if ((char)(settings.filenames[0].front()) == ':') settings.filenames[0].erase(0, 1);
+
     switch (settings.bdev.fs) {
         case fs_littlefs: {
             lfs_op_fn lfs_op = [&](lfs_t *lfs) {
@@ -7120,6 +7130,9 @@ bool bdev_cat_command::execute(device_map &devices) {
 
     auto con = get_single_bootsel_device_connection(devices);
     setup_bdevfs(con);
+
+    // Remove starting ':' if present, as cat only operates on the device
+    if ((char)(settings.filenames[0].front()) == ':') settings.filenames[0].erase(0, 1);
 
     switch (settings.bdev.fs) {
         case fs_littlefs: {
