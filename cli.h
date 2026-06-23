@@ -20,6 +20,7 @@
 #include <sstream>
 #include <limits>
 #include <cstdint>
+#include <iterator>
 
 /**
  * Note this is a hastily hacked together command line parser.
