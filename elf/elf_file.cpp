@@ -533,6 +533,83 @@ const elf32_ph_entry* elf_file::segment_from_section(const elf32_sh_entry &sh) {
     return nullptr;
 }
 
+std::vector<elf32_ph_entry *> elf_file::sorted_segments_modifiable(void) {
+    std::vector<elf32_ph_entry *> phys_sorted_segs;
+    std::transform(ph_entries.begin(), ph_entries.end(), std::back_inserter(phys_sorted_segs), [](elf32_ph_entry &seg) {
+        return &seg;
+    });
+    std::sort(phys_sorted_segs.begin(), phys_sorted_segs.end(), [](elf32_ph_entry *first, elf32_ph_entry *second) {
+        return first->physical_address() < second->physical_address();
+    });
+    return phys_sorted_segs;
+}
+
+std::vector<const elf32_ph_entry *> elf_file::sorted_segments(void) {
+    std::vector<const elf32_ph_entry *> const_sorted_segs;
+    auto sorted_segs = sorted_segments_modifiable();
+    std::transform(sorted_segs.begin(), sorted_segs.end(), std::back_inserter(const_sorted_segs), [](const elf32_ph_entry *seg) {
+        return (const elf32_ph_entry *)seg;
+    });
+    return const_sorted_segs;
+}
+
+void elf_file::store_squashed(model_t model) {
+    uint32_t highest_ram_address = 0;
+    uint32_t highest_flash_address = 0;
+
+    for(const auto &seg : sorted_segments()) {
+        const uint32_t paddr = seg->physical_address();
+        const uint32_t psize = seg->physical_size();
+        if (psize == 0) continue;
+        if (paddr >= model->sram_start() && paddr < model->sram_striped_end()) {
+            highest_ram_address = std::max(paddr + psize, highest_ram_address);
+        } else if (paddr >=  model->flash_start() && paddr < model->flash_end()) {
+            highest_flash_address = std::max(paddr + psize, highest_flash_address);
+        }
+    }
+
+    if (highest_flash_address != 0) {
+        // cannot squash flash binaries
+        return;
+    }
+
+    uint32_t last_seg_end = 0;
+
+    std::vector<elf32_ph_entry *> xip_sram_segs = {};
+
+    auto squash_seg = [&](elf32_ph_entry *seg) {
+        const uint32_t paddr = seg->physical_address();
+        const uint32_t psize = seg->physical_size();
+        if (!seg->is_load()) return;
+        if (psize == 0) return;
+
+        if (last_seg_end) {
+            if (paddr != last_seg_end) {
+                if (verbose) printf("squashing %08x to %08x\n", paddr, last_seg_end);
+                seg->paddr = last_seg_end;
+            }
+        }
+        // May have been modified, so read again
+        last_seg_end = seg->physical_address() + seg->physical_size();
+    };
+
+    for(auto &seg : sorted_segments_modifiable()) {
+        const uint32_t paddr = seg->physical_address();
+        if (paddr >= model->xip_sram_start() && paddr < model->xip_sram_end()) {
+            // XIP SRAM segments go at end, as we assume either the entry point
+            // is in main SRAM, or there is no main SRAM
+            xip_sram_segs.push_back(seg);
+            continue;
+        }
+
+        squash_seg(seg);
+    }
+
+    for (auto &seg : xip_sram_segs) {
+        squash_seg(seg);
+    }
+}
+
 // Appends a new segment and section - filled with zeros
 // Use content to replace the content
 const elf32_ph_entry& elf_file::append_segment(uint32_t vaddr, uint32_t paddr, uint32_t size, const std::string &name) {

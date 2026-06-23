@@ -81,12 +81,9 @@ jobs:
       - name: Test
         run: |
           picotool help
-          curl -L https://datasheets.raspberrypi.com/soft/blink.uf2 -o blink.uf2
-          unzip -o blink.uf2 || true
-          curl -L https://datasheets.raspberrypi.com/soft/hello_world.uf2 -o hello_world.uf2
-          unzip -o hello_world.uf2 || true
-          curl -L https://datasheets.raspberrypi.com/soft/flash_nuke.uf2 -o flash_nuke.uf2
-          unzip -o flash_nuke.uf2 || true
+          curl -L https://github.com/raspberrypi/pico-sdk-prebuilts/releases/latest/download/blink_universal.uf2 -o blink.uf2
+          curl -L https://github.com/raspberrypi/pico-sdk-prebuilts/releases/latest/download/hello_universal.uf2 -o hello_world.uf2
+          curl -L https://github.com/raspberrypi/pico-sdk-prebuilts/releases/latest/download/nuke_universal.uf2 -o flash_nuke.uf2
           picotool info -a blink.uf2
           picotool info -a hello_world.uf2
           picotool info -a flash_nuke.uf2

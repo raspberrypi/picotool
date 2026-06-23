@@ -632,6 +632,7 @@ struct _settings {
         bool clear_sram = false;
         bool pin_xip_sram = false;
         bool set_tbyb = false;
+        bool no_squash = false;
         uint16_t major_version = 0;
         uint16_t minor_version = 0;
         uint16_t rollback_version = 0;
@@ -1200,7 +1201,8 @@ struct seal_command : public cmd {
                 option("--hash").set(settings.seal.hash) % "Hash the file" +
                 option("--sign").set(settings.seal.sign) % "Sign the file" +
                 option("--clear").set(settings.seal.clear_sram) % "Clear all of main SRAM on load" +
-                option("--pin-xip-sram").set(settings.seal.pin_xip_sram) % "Pin XIP SRAM on load"
+                option("--pin-xip-sram").set(settings.seal.pin_xip_sram) % "Pin XIP SRAM on load" +
+                option("--no-squash").set(settings.seal.no_squash) % "Don't squash segments in the ELF file"
             ).min(0).doc_non_optional(true) % "Configuration" +
             named_file_selection_x("infile", 0) % "File to load from" +
             (
@@ -3367,7 +3369,7 @@ uint32_t find_binary_start(range_map<size_t>& rmap) {
         if (r.contains(FLASH_START)) {
             return FLASH_START;
         }
-        if (sram.contains(r.from) || xip_sram.contains((r.from))) {
+        if (sram.contains(r.from) || (xip_sram.contains(r.from) && !sram.contains(binary_start))) {
             if (r.from < binary_start || (xip_sram.contains(binary_start) && sram.contains(r.from))) {
                 binary_start = r.from;
             }
@@ -5459,7 +5461,7 @@ void sign_guts_elf(elf_file* elf, private_t private_key, public_t public_key, mo
     }
 
     // Workaround RP2350-E13, which means when using rollback versions, all other blocks must be set as ignored
-    block new_block = place_new_block(elf, first_block, settings.seal.rollback_version);
+    block new_block = place_new_block(elf, first_block, model, settings.seal.rollback_version);
 
     if (settings.seal.set_tbyb) {
         // Set the TBYB bit on the image_type_item
@@ -5537,7 +5539,7 @@ void sign_guts_elf(elf_file* elf, private_t private_key, public_t public_key, mo
     );
 }
 
-vector<uint8_t> sign_guts_bin(iostream_memory_access in, private_t private_key, public_t public_key, uint32_t bin_start, uint32_t bin_size) {
+vector<uint8_t> sign_guts_bin(iostream_memory_access in, private_t private_key, public_t public_key, uint32_t bin_start, uint32_t bin_size, model_t model) {
     vector<uint8_t> bin = in.read_vector<uint8_t>(bin_start, bin_size, false);
 
     std::unique_ptr<block> first_block = find_first_block(bin, bin_start);
@@ -5552,7 +5554,7 @@ vector<uint8_t> sign_guts_bin(iostream_memory_access in, private_t private_key, 
     }
 
     // Workaround RP2350-E13, which means when using rollback versions, all other blocks must be set as ignored
-    block new_block = place_new_block(bin, bin_start, first_block, settings.seal.rollback_version);
+    block new_block = place_new_block(bin, bin_start, first_block, model, settings.seal.rollback_version);
 
     if (settings.seal.major_version || settings.seal.minor_version || settings.seal.rollback_version) {
         std::shared_ptr<version_item> version = new_block.get_item<version_item>();
@@ -5783,6 +5785,8 @@ bool encrypt_command::execute(device_map &devices) {
         iv_salt_file->read((char*)iv_salt.data(), iv_salt.size());
     }
 
+    model_t model = get_model(0);
+
     if (isElf) {
         elf_file source_file(settings.verbose);
         elf_file *elf = &source_file;
@@ -5796,18 +5800,19 @@ bool encrypt_command::execute(device_map &devices) {
             fail(ERROR_FORMAT, "No first block found");
         }
         elf->editable = false;
-        block new_block = place_new_block(elf, first_block);
+        block new_block = place_new_block(elf, first_block, model);
         elf->editable = true;
 
-        // Delete existing load_map, as it will be invalid after encryption
-        std::shared_ptr<load_map_item> load_map = new_block.get_item<load_map_item>();
-        if (load_map != nullptr) {
-            new_block.items.erase(std::remove(new_block.items.begin(), new_block.items.end(), load_map), new_block.items.end());
-        }
-
-        model_t model = get_model(0);
+        // Delete any non-generic load_map entries, as they will be invalid after encryption
+        remove_non_generic_load_map_entries(&new_block, model);
 
         if (settings.encrypt.embed) {
+            // Detect generic load maps from the encrypted binary, and populate options to propogate them
+            std::shared_ptr<load_map_item> load_map = new_block.get_item<load_map_item>();
+            if (load_map != nullptr) {
+                detect_generic_load_map(load_map, model, settings.seal.pin_xip_sram);
+            }
+
             std::vector<uint8_t> iv_data;
             std::vector<uint8_t> enc_data;
             uint32_t data_start_address = SRAM_START;
@@ -5930,13 +5935,10 @@ bool encrypt_command::execute(device_map &devices) {
             fail(ERROR_FORMAT, "No first block found");
         }
         auto bin_cp = bin;
-        block new_block = place_new_block(bin_cp, bin_start, first_block);
+        block new_block = place_new_block(bin_cp, bin_start, first_block, model);
 
-        // Delete existing load_map, as it will be invalid after encryption
-        std::shared_ptr<load_map_item> load_map = new_block.get_item<load_map_item>();
-        if (load_map != nullptr) {
-            new_block.items.erase(std::remove(new_block.items.begin(), new_block.items.end(), load_map), new_block.items.end());
-        }
+        // Delete any non-generic load_map entries, as they will be invalid after encryption
+        remove_non_generic_load_map_entries(&new_block, model);
 
         auto enc_data = encrypt(bin, bin_start, bin_start, &new_block, aes_key, public_key, private_key, binfile.get_model(), iv_salt, settings.seal.hash, settings.seal.sign);
 
@@ -6136,13 +6138,19 @@ bool seal_command::execute(device_map &devices) {
 
     if (settings.seal.sign) read_keys(settings.filenames[2], &public_key, &private_key);
 
+    model_t model = get_model(0);
+
     if (isElf) {
         elf_file source_file(settings.verbose);
         elf_file *elf = &source_file;
         elf->read_file(get_file(ios::in|ios::binary));
+        if (!settings.seal.no_squash) {
+            // Squash the segments together
+            elf->store_squashed(model);
+        }
         // Remove any holes in the ELF file, as these cause issues when signing/hashing
         elf->remove_sh_holes();
-        sign_guts_elf(elf, private_key, public_key, get_model(0));
+        sign_guts_elf(elf, private_key, public_key, model);
 
         auto out = get_file_idx(ios::out|ios::binary, 1);
         elf->write(out);
@@ -6155,7 +6163,7 @@ bool seal_command::execute(device_map &devices) {
         auto bin_start = ranges[0].from;
         auto bin_size = ranges[0].len();
 
-        auto sig_data = sign_guts_bin(access, private_key, public_key, bin_start, bin_size);
+        auto sig_data = sign_guts_bin(access, private_key, public_key, bin_start, bin_size, model);
         auto out = get_file_idx(ios::out|ios::binary, 1);
         out->write((const char *)sig_data.data(), sig_data.size());
         out->close();
@@ -6167,7 +6175,7 @@ bool seal_command::execute(device_map &devices) {
         auto bin_size = ranges.back().to - bin_start;
         auto family_id = get_family_id(0);
 
-        auto sig_data = sign_guts_bin(access, private_key, public_key, bin_start, bin_size);
+        auto sig_data = sign_guts_bin(access, private_key, public_key, bin_start, bin_size, model);
         auto tmp = std::make_shared<std::stringstream>();
         tmp->write(reinterpret_cast<const char*>(sig_data.data()), sig_data.size());
         auto out = get_file_idx(ios::out|ios::binary, 1);
@@ -6282,7 +6290,7 @@ bool link_command::execute(device_map &devices) {
         }
 
         // Use last block items in new block
-        block new_block = place_new_block(bin, bin_start, first_block);
+        block new_block = place_new_block(bin, bin_start, first_block, models::largest);
         new_block.items.clear();
         std::copy(last_block->items.begin(),
             last_block->items.end(),
@@ -7744,13 +7752,14 @@ bool partition_create_command::execute(device_map &devices) {
     elf_file *elf = &source_file;
     std::shared_ptr<block> pt_block;
     if (!settings.filenames[2].empty()) {
+        model_t model = get_model(2);
         elf->read_file(get_file_idx(ios::in|ios::binary, 2));
         std::unique_ptr<block> first_block = find_first_block(elf);
         if (!first_block) {
             fail(ERROR_FORMAT, "No first block found");
         }
 
-        block new_block = place_new_block(elf, first_block);
+        block new_block = place_new_block(elf, first_block, model);
         new_block.items.erase(new_block.items.begin(), new_block.items.end());
         pt_block = std::make_shared<block>(new_block);
     } else {
