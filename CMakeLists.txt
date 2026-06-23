@@ -57,6 +57,7 @@ endif()
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
 
 add_subdirectory(lib)
+suppress_oofatfs_warnings()
 
 if (NOT DEFINED USE_PRECOMPILED)
     set(USE_PRECOMPILED true)
