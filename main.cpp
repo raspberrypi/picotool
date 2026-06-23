@@ -6699,7 +6699,7 @@ void do_fatfs_op(fatfs_op_fn fatfs_op) {
                 fail(ERROR_NOT_POSSIBLE, "This block device is not formattable");
             }
         } else {
-            fail(ERROR_CONNECTION, "FatFS file system is corrupted - add -f flag to format it (this may result in data loss)");
+            fail(ERROR_CONNECTION, "FatFS file system is corrupted - add --format flag to format it (this may result in data loss)");
         }
     } else if (err) {
         fail(ERROR_CONNECTION, "FatFS Mount Error: %s", fatfs_err_str(err).c_str());
