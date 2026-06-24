@@ -57,6 +57,7 @@ endif()
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
 
 add_subdirectory(lib)
+suppress_oofatfs_warnings()
 
 if (NOT DEFINED USE_PRECOMPILED)
     set(USE_PRECOMPILED true)
@@ -340,6 +341,8 @@ else()
     target_compile_definitions(picotool PRIVATE HAS_LIBUSB=1)
     target_link_libraries(picotool 
         picoboot_connection_cxx
+        fatfs
+        littlefs
         ${LIBUSB_LIBRARIES})
 endif()
 

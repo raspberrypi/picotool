@@ -1,0 +1,16 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "littlefs",
+    srcs = [
+        "lfs.c",
+        "lfs_util.c",
+    ],
+    hdrs = [
+        "lfs.h",
+        "lfs_util.h",
+    ],
+    includes = ["."],
+)
