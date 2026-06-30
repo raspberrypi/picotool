@@ -1009,6 +1009,19 @@ void verify_block(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runt
 }
 
 
+void encrypt_vector(std::vector<uint8_t> &enc_data, const aes_key_t aes_key, std::vector<uint8_t> &iv_data) {
+    iv_t iv;
+    for(auto &e : iv.bytes) {
+        e = rand();
+    }
+
+    iv_data.resize(sizeof(iv.bytes));
+    memcpy(iv_data.data(), iv.bytes, sizeof(iv.bytes));
+
+    aes256_buffer(enc_data.data(), enc_data.size(), enc_data.data(), &aes_key, &iv);
+}
+
+
 void encrypt_guts(elf_file *elf, block *new_block, const aes_key_t aes_key, model_t model, std::vector<uint8_t> &iv_data, std::vector<uint8_t> &enc_data) {
     std::vector<uint8_t> to_enc = get_lm_hash_data(elf, new_block, model);
 

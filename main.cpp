@@ -606,6 +606,8 @@ struct _settings {
 
     struct {
         bool embed = false;
+        bool partial = false;
+        string partial_name = ".enc_data";
         bool otp_key_page_set = false;
         bool fast_rosc = false;
         bool use_mbedtls = false;
@@ -973,6 +975,11 @@ struct encrypt_command : public cmd {
             option("--quiet").set(settings.quiet) % "Don't print any output" +
             option("--verbose").set(settings.verbose) % "Print verbose output" +
             option("--embed").set(settings.encrypt.embed) % "Embed bootloader in output file" +
+            option("--partial").set(settings.encrypt.partial) % "Only encrypt the .encrypted ELF segment" +
+            (
+                option("--partial-name") &
+                    value("section").set(settings.encrypt.partial_name)
+            ).min(0) % "Set section name to encrypt when using --partial (default .enc_data)" +
             option("--fast-rosc").set(settings.encrypt.fast_rosc) % "Use ~180MHz ROSC configuration for embedded bootloader" +
             option("--use-mbedtls").set(settings.encrypt.use_mbedtls) % "Use MbedTLS implementation of embedded bootloader (faster but less secure)" +
             (
@@ -5372,11 +5379,18 @@ bool encrypt_command::execute(device_map &devices) {
     std::vector<uint8_t> iv_salt;
     iv_salt.resize(16);
 
+    if (settings.encrypt.embed && settings.encrypt.partial) {
+        fail(ERROR_ARGS, "Only one of --embed or --partial is supported");
+    }
+
     if (get_file_type() == filetype::elf) {
         isElf = true;
     } else if (get_file_type() == filetype::bin) {
         if (settings.encrypt.embed) {
             fail(ERROR_ARGS, "Can only embed decrypting bootloader into ELFs");
+        }
+        if (settings.encrypt.partial) {
+            fail(ERROR_ARGS, "Can only partially encrypt ELFs");
         }
         isBin = true;
     } else {
@@ -5547,10 +5561,36 @@ bool encrypt_command::execute(device_map &devices) {
         block new_block = place_new_block(elf, first_block, model);
         elf->editable = true;
 
-        // Delete any non-generic load_map entries, as they will be invalid after encryption
-        remove_non_generic_load_map_entries(&new_block, model);
+        if (!settings.encrypt.partial) {
+            // Delete any non-generic load_map entries, as they will be invalid after encryption
+            remove_non_generic_load_map_entries(&new_block, model);
+        }
 
-        if (settings.encrypt.embed) {
+        if (settings.encrypt.partial) {
+            auto enc_section = elf->get_section(settings.encrypt.partial_name);
+            assert(enc_section);
+
+            std::vector<uint8_t> iv_data;
+            std::vector<uint8_t> enc_data = elf->content(*enc_section);
+
+            if (enc_data.size() % 16 != 0) {
+                fail(ERROR_INCOMPATIBLE,
+                    "The section for partial encryption must have a size that is a multiple of 16, but %s has size %d",
+                    settings.encrypt.partial_name.c_str(), enc_data.size()
+                );
+            }
+
+            encrypt_vector(enc_data, aes_key, iv_data);
+
+            elf->content(*enc_section, enc_data);
+
+            // Sign the final thing
+            sign_guts_elf(elf, private_key, public_key, model);
+
+            auto out = get_file_idx(ios::out|ios::binary, 1);
+            elf->write(out);
+            out->close();
+        } else if (settings.encrypt.embed) {
             // Detect generic load maps from the encrypted binary, and populate options to propogate them
             std::shared_ptr<load_map_item> load_map = new_block.get_item<load_map_item>();
             if (load_map != nullptr) {

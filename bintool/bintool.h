@@ -30,6 +30,7 @@ block place_new_block(elf_file *elf, std::unique_ptr<block> &first_block, model_
     int hash_andor_sign(elf_file *elf, block *new_block, const public_t public_key, const private_t private_key, model_t model, bool hash_value, bool sign, bool clear_sram = false, bool pin_xip_sram = false);
     void encrypt_guts(elf_file *elf, block *new_block, const aes_key_t aes_key, model_t model, std::vector<uint8_t> &iv_data, std::vector<uint8_t> &enc_data);
     int encrypt(elf_file *elf, block *new_block, const aes_key_t aes_key, const public_t public_key, const private_t private_key, model_t model, std::vector<uint8_t> iv_salt, bool hash_value, bool sign);
+    void encrypt_vector(std::vector<uint8_t> &enc_data, const aes_key_t aes_key, std::vector<uint8_t> &iv_data);
 #endif
 
 // Bins
