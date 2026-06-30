@@ -302,6 +302,10 @@ target_compile_definitions(picotool PRIVATE
         SUPPORT_RP2350_A2=1
         CODE_OTP=${PICOTOOL_CODE_OTP}
         )
+# Just GCC 15.1 I think, but harmless on other versions
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_definitions(picotool PRIVATE _GTHREAD_USE_COND_INIT_FUNC)
+endif()
 # for OTP info
 target_include_directories(picotool PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_link_libraries(picotool

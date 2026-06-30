@@ -5,6 +5,11 @@ target_include_directories(model PUBLIC ${CMAKE_CURRENT_LIST_DIR} ${CMAKE_CURREN
 
 target_link_libraries(model PUBLIC boot_uf2_headers boot_picoboot_headers pico_platform_headers errors)
 
+# Just GCC 15.1 I think, but harmless on other versions
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_definitions(model PRIVATE _GTHREAD_USE_COND_INIT_FUNC)
+endif()
+
 add_custom_target(unreadable_rom_data DEPENDS
         ${CMAKE_CURRENT_BINARY_DIR}/rp2350_a2_rom_end.h
         ${CMAKE_CURRENT_BINARY_DIR}/rp2350_a3_rom_end.h
