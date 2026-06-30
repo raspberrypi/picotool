@@ -670,6 +670,7 @@ struct _settings {
         #endif
         bool sign = false;
         bool singleton = false;
+        bool no_btstack_flash_bank = false;
     } partition;
 
     struct {
@@ -1301,7 +1302,8 @@ struct partition_create_command : public cmd {
                     named_file_types_x("pem", 3)) % "Sign the partition table" + 
                     (option("--no-hash").clear(settings.partition.hash) % "Don't hash the partition table") + 
                 #endif
-                    (option("--singleton").set(settings.partition.singleton) % "Singleton partition table")
+                    (option("--singleton").set(settings.partition.singleton) % "Singleton partition table") +
+                    (option("--no-btstack-flash-bank").set(settings.partition.no_btstack_flash_bank) % "Don't check for compatibility with BTStack flash bank")
                 ).min(0).force_expand_help(true) % "Partition Table Options"
             #if SUPPORT_RP2350_A2
                 + (
@@ -7728,6 +7730,17 @@ uint32_t families_to_flags(std::vector<string> families, bool fail_invalid = fal
     return ret;
 }
 
+uint32_t round_up_power_2(uint32_t v) {
+    v--;
+    v |= v >> 1;
+    v |= v >> 2;
+    v |= v >> 4;
+    v |= v >> 8;
+    v |= v >> 16;
+    v++;
+    return v;
+}
+
 bool partition_create_command::execute(device_map &devices) {
     if (get_file_type_idx(0) != filetype::json) {
         fail(ERROR_ARGS, "json must be a json file\n");
@@ -7777,6 +7790,7 @@ bool partition_create_command::execute(device_map &devices) {
 #endif
 
     uint32_t cur_pos = 2;
+    uint32_t max_pos = 0;
 
     for (auto p : partitions) {
         partition_table_item::partition new_p;
@@ -7787,13 +7801,14 @@ bool partition_create_command::execute(device_map &devices) {
         if (start >= 4096 || size >= 4096) {
             if (start == cur_pos) start *= 0x1000;
             if (start % 0x1000 || size % 0x1000) {
-                fail(ERROR_INCOMPATIBLE, "Partition table start (%dK) and size (%dK) must be 4K aligned", start/1024, size/1024);
+                fail(ERROR_INCOMPATIBLE, "Partition start (%dK) and size (%dK) must be 4K aligned", start/1024, size/1024);
             }
             start /= 0x1000;
             size /= 0x1000;
         }
 
         cur_pos = start + size;
+        if (cur_pos > max_pos) max_pos = cur_pos;
     #if SUPPORT_RP2350_A2
         if (start <= (settings.uf2.abs_block_loc - FLASH_START)/0x1000 && start + size > (settings.uf2.abs_block_loc - FLASH_START)/0x1000) {
             fail(ERROR_INCOMPATIBLE, "The address %" PRIx32 " cannot be in a partition for the RP2350-E10 fix to work", settings.uf2.abs_block_loc);
@@ -7867,6 +7882,34 @@ bool partition_create_command::execute(device_map &devices) {
             }  
         }
         pt.partitions.push_back(new_p);
+    }
+
+    // Catch partition tables which cover the end of Flash, which the SDK uses for the BTStack flash bank
+    uint num_end_sectors = 0;
+    string end_sectors_warning_output = "";
+    if (!settings.partition.no_btstack_flash_bank) {
+        num_end_sectors += 2; // for BTStack flash bank
+        end_sectors_warning_output += "the BTStack flash bank";
+    }
+#if SUPPORT_RP2350_A2
+    if (settings.uf2.abs_block_loc) {
+        uint32_t abs_block_flash_loc = settings.uf2.abs_block_loc - FLASH_START;
+        if (round_up_power_2(abs_block_flash_loc) <= abs_block_flash_loc + 0x1000) {
+            // if abs_block within 4k of end, also keep space for that
+            num_end_sectors += 1;
+            if (!end_sectors_warning_output.empty()) end_sectors_warning_output += ", and ";
+            end_sectors_warning_output += "the RP2350-E10 absolute block";
+        }
+    }
+#endif
+
+    if (round_up_power_2(max_pos) - max_pos < num_end_sectors) {
+        // Likely this partition table doesn't account for BTStack flash bank at end
+        fos << "WARNING: This partition table covers the last " << num_end_sectors;
+        fos << " Flash sectors for flash size " << round_up_power_2(max_pos) / (1024/4);
+        fos << "M, which will interfere with ";
+        fos << end_sectors_warning_output;
+        fos << " if that is the actual flash size\n";
     }
 
     pt_block->items.push_back(std::make_shared<partition_table_item>(pt));

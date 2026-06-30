@@ -878,7 +878,8 @@ PARTITION CREATE:
 
 SYNOPSIS:
     picotool partition create [--quiet] [--verbose] <infile> <outfile> [-t <type>] [[-o <offset>] [--family <family_id>]] [<bootloader>] [-t
-                <type>] [[--sign <keyfile>] [-t <type>] [--no-hash] [--singleton]] [[--abs-block] [<abs_block_loc>]]
+                <type>] [[--sign <keyfile>] [-t <type>] [--no-hash] [--singleton] [--no-btstack-flash-bank]] [[--abs-block]
+                [<abs_block_loc>]]
 
 OPTIONS:
         --quiet
@@ -915,6 +916,8 @@ OPTIONS:
             Don't hash the partition table
         --singleton
             Singleton partition table
+        --no-btstack-flash-bank
+            Don't check for compatibility with BTStack flash bank
     Errata RP2350-E10 Fix
         --abs-block
             Enforce support for an absolute block
