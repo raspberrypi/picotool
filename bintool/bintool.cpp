@@ -941,11 +941,10 @@ std::vector<uint8_t> hash_andor_sign(std::vector<uint8_t> bin, uint32_t storage_
 
 
 void verify_block(std::vector<uint8_t> bin, uint32_t storage_addr, uint32_t runtime_addr, block *block, model_t model, verified_t &hash_verified, verified_t &sig_verified, get_more_bin_cb more_cb) {
-    std::shared_ptr<load_map_item> load_map = block->get_item<load_map_item>();
     std::shared_ptr<hash_def_item> hash_def = block->get_item<hash_def_item>();
     hash_verified = none;
     sig_verified = none;
-    if (load_map == nullptr || hash_def == nullptr) {
+    if (hash_def == nullptr) {
         return;
     }
     std::vector<uint8_t> to_hash = get_lm_hash_data(bin, storage_addr, runtime_addr, block, more_cb, model);
