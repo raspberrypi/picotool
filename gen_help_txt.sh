@@ -97,6 +97,19 @@ if [ ${#missing_commands[@]} -ne 0 ]; then
     done
 fi
 
+# Regenerate the links to documentation for picotool commands section
+echo "Regenerating links to documentation for picotool commands..."
+links_line=$(picotool help 2>/dev/null | \
+    awk '/^COMMANDS:/{f=1;next} f && /^[A-Z]/{exit} f && /^    [a-z]/{print $1}' | \
+    grep -vE "^(help|$(echo "$ALLOWED_MISSING_COMMANDS" | tr ' ' '|'))$" | \
+    while IFS= read -r cmd; do
+        printf '[`%s`](#%s) ' "$cmd" "$cmd"
+    done | sed 's/ $//')
+export LINKS_LINE="$links_line"
+perl -i -0777 -pe '
+    s{(## Links to documentation for `picotool` commands\n)[^\n]+}{$1$ENV{LINKS_LINE}};
+' tmp/README.md
+
 mv tmp/README.md README.md
 rm -rf tmp
 

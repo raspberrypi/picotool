@@ -62,6 +62,9 @@ Use "picotool help <cmd>" for more info
 
 Note commands that aren't acting on files require a device in BOOTSEL mode to be connected.
 
+## Links to documentation for `picotool` commands
+[`info`](#info) [`config`](#config) [`load`](#load) [`save`](#save) [`verify`](#verify) [`erase`](#erase) [`reboot`](#reboot) [`seal`](#seal) [`encrypt`](#encrypt) [`partition`](#partition) [`uf2`](#uf2) [`otp`](#otp) [`coprodis`](#coprodis) [`link`](#link) [`bdev`](#bdev)
+
 ## Building & Installing
 
 If you don't want to build picotool yourself, you can find pre-built executables for Windows, macOS, and Linux in the [pico-sdk-tools](https://github.com/raspberrypi/pico-sdk-tools/releases) repository. Assuming you've extracted that archive to `<extract_location>` (with the actual picotool executable at `<extract_location>/picotool/picotool`), you can point the Pico SDK at this binary by setting the `picotool_DIR` environment variable to `<extract_location>/picotool`, or by passing `-Dpicotool_DIR=<extract_location>/picotool` to your `cmake` command or setting it in your `CMakeLists.txt` file.
