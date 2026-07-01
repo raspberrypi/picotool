@@ -255,23 +255,37 @@ void elf_file::read_sh(void) {
 // This is necessary to ensure that segments are contiguous, which is required for encrypting,
 // but this is not necessary for signing/hashing
 void elf_file::remove_ph_holes(void) {
+    auto sorted_ph_entries = sorted_segments();
     for (int i=0; i+1 < ph_entries.size(); i++) {
         auto ph0 = &(ph_entries[i]);
-        elf32_ph_entry ph1 = ph_entries[i+1];
-        if (
-            (ph0->type == PT_LOAD && ph1.type == PT_LOAD)
-            && (ph0->filez && ph1.filez)
-            && (ph0->paddr + ph0->filez < ph1.paddr)
-        ) {
-            uint32_t gap = ph1.paddr - ph0->paddr - ph0->filez;
-            if (gap > ph1.align) {
-                fail(ERROR_INCOMPATIBLE, "Segment %d: Cannot plug gap greater than alignment - gap %d, alignment %d", i, gap, ph1.align);
+        const elf32_ph_entry* ph1 = nullptr;
+        // ph1 is the next segment by address
+        for (int j=0; j+1 < sorted_ph_entries.size(); j++) {
+            auto tst_ph0 = sorted_ph_entries[j];
+            if (tst_ph0->offset == ph0->offset) {
+                ph1 = sorted_ph_entries[j+1];
             }
-            if (ph0->offset + ph0->filez + gap > ph1.offset) {
+        }
+        if (ph1 == nullptr) {
+            // ph0 was the last segment by address - so no gap to plug after it
+            continue;
+        }
+        // ph1file is the next segment in the file
+        elf32_ph_entry ph1file = ph_entries[i+1];
+        if (
+            (ph0->type == PT_LOAD && ph1->type == PT_LOAD)
+            && (ph0->filez && ph1->filez)
+            && (ph0->paddr + ph0->filez < ph1->paddr)
+        ) {
+            uint32_t gap = ph1->paddr - ph0->paddr - ph0->filez;
+            if (gap > ph1->align) {
+                fail(ERROR_INCOMPATIBLE, "Segment %d: Cannot plug gap greater than alignment - gap %d, alignment %d", i, gap, ph1->align);
+            }
+            if (ph0->offset + ph0->filez + gap > ph1file.offset) {
                 fail(ERROR_INCOMPATIBLE, "Segment %d: Cannot plug gap without space in file - gap %d", i, gap);
             }
-            if (verbose) printf("Segment %d: Moving end from 0x%08x to 0x%08x to plug gap\n", i, ph0->paddr + ph0->filez, ph1.paddr);
-            ph0->filez = ph1.paddr - ph0->paddr;
+            if (verbose) printf("Segment %d: Moving end from 0x%08x to 0x%08x to plug gap\n", i, ph0->paddr + ph0->filez, ph1->paddr);
+            ph0->filez = ph1->paddr - ph0->paddr;
             ph0->memsz = ph0->filez;
         }
     }
