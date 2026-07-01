@@ -262,14 +262,12 @@ void elf_file::remove_ph_holes(void) {
         // ph1 is the next segment by address
         for (int j=0; j+1 < sorted_ph_entries.size(); j++) {
             auto tst_ph0 = sorted_ph_entries[j];
-            printf("tst_ph0->offset %08x\n", tst_ph0->offset);
-            printf("ph0->offset %08x\n", ph0->offset);
             if (tst_ph0->offset == ph0->offset) {
                 ph1 = sorted_ph_entries[j+1];
             }
         }
         if (ph1 == nullptr) {
-            printf("No entry after that ph0->paddr %08x\n", ph0->paddr);
+            // ph0 was the last segment by address - so no gap to plug after it
             continue;
         }
         // ph1file is the next segment in the file
