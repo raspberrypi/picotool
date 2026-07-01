@@ -355,7 +355,7 @@ if (DEFAULT_BOOTSEL_LED)
 endif()
 
 if (GENERATE_FIXED_DOCS_WIDTH)
-    target_compile_definitions(picotool PRIVATE DOCS_WIDTH=140)
+    target_compile_definitions(picotool PRIVATE DOCS_WIDTH=100)
 endif()
 
 # allow `make install`
