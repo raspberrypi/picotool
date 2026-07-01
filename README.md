@@ -16,8 +16,8 @@ SYNOPSIS:
     picotool info [-b] [-m] [-p] [-d] [--debug] [-l] [-a] <filename> [-t <type>]
     picotool config [-s <key> <value>] [-g <group>] [device-selection]
     picotool config [-s <key> <value>] [-g <group>] <filename> [-t <type>]
-    picotool load [--ignore-partitions] [--family <family_id>] [-p <partition>] [-n] [-N] [-u] [-v]
-                [-x] <filename> [-t <type>] [-o <offset>] [device-selection]
+    picotool load [--ignore-partitions] [--family <family_id>] [-p <partition>] [-n] [-N] [-u]
+                [-v] [-x] <filename> [-t <type>] [-o <offset>] [device-selection]
     picotool save [-p] [-v] [--family <family_id>] <filename> [-t <type>] [device-selection]
     picotool save -a [-v] [--family <family_id>] <filename> [-t <type>] [device-selection]
     picotool save -r <from> <to> [-v] [--family <family_id>] <filename> [-t <type>]
@@ -28,18 +28,19 @@ SYNOPSIS:
     picotool erase -p <partition> [device-selection]
     picotool erase -r <from> <to> [device-selection]
     picotool reboot [-a] [-u] [-g <partition>] [-c <cpu>] [device-selection]
-    picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] [--pin-xip-sram] [--no-squash]
-                <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] [<key>] [<otp>] [--major
-                <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
-    picotool encrypt [--quiet] [--verbose] [--embed] [--fast-rosc] [--use-mbedtls] [--otp-key-page
-                <page>] [--hash] [--sign] [--no-clear] [--pin-xip-sram] <infile> [-t <type>] [-o
-                <offset>] <outfile> [-t <type>] <aes_key> <iv_salt> [<signing_key>] [<otp>]
+    picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] [--pin-xip-sram]
+                [--no-squash] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] [<key>]
+                [<otp>] [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
+    picotool encrypt [--quiet] [--verbose] [--embed] [--fast-rosc] [--use-mbedtls]
+                [--otp-key-page <page>] [--hash] [--sign] [--no-clear] [--pin-xip-sram]
+                <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] <aes_key> <iv_salt>
+                [<signing_key>] [<otp>]
     picotool partition info|create
     picotool uf2 convert|combine|info
     picotool otp get|set|load|white-label|permissions|dump|list
     picotool coprodis [--quiet] [--verbose] <infile> <outfile>
-    picotool link [--quiet] [--verbose] <outfile> [-t <type>] <infile1> [-t <type>] <infile2> [-t
-                <type>] [<infile3>] [-t <type>] [-p <pad>]
+    picotool link [--quiet] [--verbose] <outfile> [-t <type>] <infile1> [-t <type>] <infile2>
+                [-t <type>] [<infile3>] [-t <type>] [-p <pad>]
     picotool bdev ls|mkdir|cp|rm|cat|format
 
 COMMANDS:
@@ -48,7 +49,8 @@ COMMANDS:
     info        Display information from the target device(s) or file.
                 Without any arguments, this will display basic information for all connected
                 RP-series devices in BOOTSEL mode
-    config      Display or change program configuration settings from the target device(s) or file.
+    config      Display or change program configuration settings from the target device(s) or
+                file.
     load        Load the program / memory range stored in a file onto the device.
     save        Save the program / memory stored in flash on the device to a file.
     verify      Check that the device contents match those in the file.
@@ -89,8 +91,8 @@ a file. This file can be an ELF, a UF2 or a BIN file.
 $ picotool help info
 INFO:
     Display information from the target device(s) or file.
-    Without any arguments, this will display basic information for all connected RP-series devices
-    in BOOTSEL mode
+    Without any arguments, this will display basic information for all connected RP-series
+    devices in BOOTSEL mode
 
 SYNOPSIS:
     picotool info [-b] [-m] [-p] [-d] [--debug] [-l] [-a] [device-selection]
@@ -126,21 +128,21 @@ TARGET SELECTION:
         --ser <ser>
             Filter by serial number
         --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid with
-            an RP2040 on Windows, and is ignored on other operating systems
+            Assume the device is an RP2040 - this is only required when using a custom vid/pid
+            with an RP2040 on Windows, and is ignored on other operating systems
         -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be rebooted back to application mode
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be rebooted back to application mode
         -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be left connected and accessible to picotool, but without the USB drive
-            mounted
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be left connected and accessible to picotool, but
+            without the USB drive mounted
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to BOOTSEL
-            mode
+            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
+            BOOTSEL mode
         --bootsel-led-active-low
             The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
     To target a file
@@ -243,21 +245,21 @@ TARGET SELECTION:
         --ser <ser>
             Filter by serial number
         --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid with
-            an RP2040 on Windows, and is ignored on other operating systems
+            Assume the device is an RP2040 - this is only required when using a custom vid/pid
+            with an RP2040 on Windows, and is ignored on other operating systems
         -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be rebooted back to application mode
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be rebooted back to application mode
         -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be left connected and accessible to picotool, but without the USB drive
-            mounted
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be left connected and accessible to picotool, but
+            without the USB drive mounted
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to BOOTSEL
-            mode
+            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
+            BOOTSEL mode
         --bootsel-led-active-low
             The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
     To target a file
@@ -306,8 +308,8 @@ LOAD:
     Load the program / memory range stored in a file onto the device.
 
 SYNOPSIS:
-    picotool load [--ignore-partitions] [--family <family_id>] [-p <partition>] [-n] [-N] [-u] [-v]
-                [-x] <filename> [-t <type>] [-o <offset>] [device-selection]
+    picotool load [--ignore-partitions] [--family <family_id>] [-p <partition>] [-n] [-N] [-u]
+                [-v] [-x] <filename> [-t <type>] [-o <offset>] [device-selection]
 
 OPTIONS:
     Post load actions
@@ -326,15 +328,16 @@ OPTIONS:
             cannot determine the size/presence of the program in flash, the command fails
         -N, --no-overwrite-unsafe
             When writing flash data, do not overwrite an existing program in flash. If picotool
-            cannot determine the size/presence of the program in flash, the load continues anyway
+            cannot determine the size/presence of the program in flash, the load continues
+            anyway
         -u, --update
             Skip writing flash sectors that already contain identical data
         -v, --verify
             Verify the data was written correctly
         -x, --execute
-            Perform a bootrom reboot to execute the downloaded file as a program after the load -
-            either a flash update boot for binaries in flash, or a RAM image boot for other binaries
-
+            Perform a bootrom reboot to execute the downloaded file as a program after the load
+            - either a flash update boot for binaries in flash, or a RAM image boot for other
+            binaries 
     File to load from
         <filename>
             The file name
@@ -357,21 +360,21 @@ OPTIONS:
         --ser <ser>
             Filter by serial number
         --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid with
-            an RP2040 on Windows, and is ignored on other operating systems
+            Assume the device is an RP2040 - this is only required when using a custom vid/pid
+            with an RP2040 on Windows, and is ignored on other operating systems
         -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be rebooted back to application mode
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be rebooted back to application mode
         -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be left connected and accessible to picotool, but without the USB drive
-            mounted
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be left connected and accessible to picotool, but
+            without the USB drive mounted
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to BOOTSEL
-            mode
+            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
+            BOOTSEL mode
         --bootsel-led-active-low
             The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
 ```
@@ -405,8 +408,8 @@ OPTIONS:
         -a, --all
             Save all of flash memory
         -r, --range
-            Save a range of memory. Note that UF2s always store complete 256 byte-aligned blocks of
-            256 bytes, and the range is expanded accordingly
+            Save a range of memory. Note that UF2s always store complete 256 byte-aligned
+            blocks of 256 bytes, and the range is expanded accordingly
         <from>
             The lower address bound in hex
         <to>
@@ -435,21 +438,21 @@ OPTIONS:
         --ser <ser>
             Filter by serial number
         --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid with
-            an RP2040 on Windows, and is ignored on other operating systems
+            Assume the device is an RP2040 - this is only required when using a custom vid/pid
+            with an RP2040 on Windows, and is ignored on other operating systems
         -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be rebooted back to application mode
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be rebooted back to application mode
         -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be left connected and accessible to picotool, but without the USB drive
-            mounted
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be left connected and accessible to picotool, but
+            without the USB drive mounted
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to BOOTSEL
-            mode
+            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
+            BOOTSEL mode
         --bootsel-led-active-low
             The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
 ```
@@ -520,21 +523,21 @@ OPTIONS:
         --ser <ser>
             Filter by serial number
         --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid with
-            an RP2040 on Windows, and is ignored on other operating systems
+            Assume the device is an RP2040 - this is only required when using a custom vid/pid
+            with an RP2040 on Windows, and is ignored on other operating systems
         -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be rebooted back to application mode
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be rebooted back to application mode
         -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be left connected and accessible to picotool, but without the USB drive
-            mounted
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be left connected and accessible to picotool, but
+            without the USB drive mounted
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to BOOTSEL
-            mode
+            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
+            BOOTSEL mode
         --bootsel-led-active-low
             The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
 ```
@@ -563,8 +566,8 @@ OPTIONS:
         <partition>
             Partition number to erase
         -r, --range
-            Erase a range of memory. Note that erases must be 4096 byte-aligned, so the range is
-            expanded accordingly
+            Erase a range of memory. Note that erases must be 4096 byte-aligned, so the range
+            is expanded accordingly
         <from>
             The lower address bound in hex
         <to>
@@ -581,21 +584,21 @@ OPTIONS:
         --ser <ser>
             Filter by serial number
         --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid with
-            an RP2040 on Windows, and is ignored on other operating systems
+            Assume the device is an RP2040 - this is only required when using a custom vid/pid
+            with an RP2040 on Windows, and is ignored on other operating systems
         -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be rebooted back to application mode
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be rebooted back to application mode
         -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be left connected and accessible to picotool, but without the USB drive
-            mounted
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be left connected and accessible to picotool, but
+            without the USB drive mounted
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to BOOTSEL
-            mode
+            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
+            BOOTSEL mode
         --bootsel-led-active-low
             The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
 ```
@@ -674,21 +677,21 @@ OPTIONS:
         --ser <ser>
             Filter by serial number
         --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid with
-            an RP2040 on Windows, and is ignored on other operating systems
+            Assume the device is an RP2040 - this is only required when using a custom vid/pid
+            with an RP2040 on Windows, and is ignored on other operating systems
         -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be rebooted back to application mode
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be rebooted back to application mode
         -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be left connected and accessible to picotool, but without the USB drive
-            mounted
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be left connected and accessible to picotool, but
+            without the USB drive mounted
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to BOOTSEL
-            mode
+            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
+            BOOTSEL mode
         --bootsel-led-active-low
             The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
 ```
@@ -711,9 +714,9 @@ SEAL:
     Add final metadata to a binary, optionally including a hash and/or signature.
 
 SYNOPSIS:
-    picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] [--pin-xip-sram] [--no-squash]
-                <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] [<key>] [<otp>] [--major
-                <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
+    picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] [--pin-xip-sram]
+                [--no-squash] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] [<key>]
+                [<otp>] [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
 
 OPTIONS:
         --quiet
@@ -786,9 +789,10 @@ ENCRYPT:
     Encrypt the program.
 
 SYNOPSIS:
-    picotool encrypt [--quiet] [--verbose] [--embed] [--fast-rosc] [--use-mbedtls] [--otp-key-page
-                <page>] [--hash] [--sign] [--no-clear] [--pin-xip-sram] <infile> [-t <type>] [-o
-                <offset>] <outfile> [-t <type>] <aes_key> <iv_salt> [<signing_key>] [<otp>]
+    picotool encrypt [--quiet] [--verbose] [--embed] [--fast-rosc] [--use-mbedtls]
+                [--otp-key-page <page>] [--hash] [--sign] [--no-clear] [--pin-xip-sram]
+                <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] <aes_key> <iv_salt>
+                [<signing_key>] [<otp>]
 
 OPTIONS:
         --quiet
@@ -868,21 +872,21 @@ OPTIONS:
         --ser <ser>
             Filter by serial number
         --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid with
-            an RP2040 on Windows, and is ignored on other operating systems
+            Assume the device is an RP2040 - this is only required when using a custom vid/pid
+            with an RP2040 on Windows, and is ignored on other operating systems
         -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be rebooted back to application mode
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be rebooted back to application mode
         -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be left connected and accessible to picotool, but without the USB drive
-            mounted
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be left connected and accessible to picotool, but
+            without the USB drive mounted
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to BOOTSEL
-            mode
+            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
+            BOOTSEL mode
         --bootsel-led-active-low
             The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
 ```
@@ -916,10 +920,10 @@ PARTITION CREATE:
     Create a partition table from json
 
 SYNOPSIS:
-    picotool partition create [--quiet] [--verbose] <infile> <outfile> [-t <type>] [[-o <offset>]
-                [--family <family_id>]] [<bootloader>] [-t <type>] [[--sign <keyfile>] [-t <type>]
-                [--no-hash] [--singleton] [--no-btstack-flash-bank]] [[--abs-block]
-                [<abs_block_loc>]]
+    picotool partition create [--quiet] [--verbose] <infile> <outfile> [-t <type>] [[-o
+                <offset>] [--family <family_id>]] [<bootloader>] [-t <type>] [[--sign
+                <keyfile>] [-t <type>] [--no-hash] [--singleton] [--no-btstack-flash-bank]]
+                [[--abs-block] [<abs_block_loc>]]
 
 OPTIONS:
         --quiet
@@ -1030,9 +1034,9 @@ UF2 COMBINE:
     Combine multiple UF2 files.
 
 SYNOPSIS:
-    picotool uf2 combine [--quiet] [--verbose] <infile1> [-t <type>] <infile2> [-t <type>] <outfile>
-                [-t <type>] [--family <family_id>] [--offset <offset>] [--partition <partition>]
-                [[--abs-block] [<abs_block_loc>]]
+    picotool uf2 combine [--quiet] [--verbose] <infile1> [-t <type>] <infile2> [-t <type>]
+                <outfile> [-t <type>] [--family <family_id>] [--offset <offset>] [--partition
+                <partition>] [[--abs-block] [<abs_block_loc>]]
 
 OPTIONS:
         --quiet
@@ -1143,21 +1147,21 @@ OPTIONS:
         --ser <ser>
             Filter by serial number
         --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid with
-            an RP2040 on Windows, and is ignored on other operating systems
+            Assume the device is an RP2040 - this is only required when using a custom vid/pid
+            with an RP2040 on Windows, and is ignored on other operating systems
         -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be rebooted back to application mode
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be rebooted back to application mode
         -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be left connected and accessible to picotool, but without the USB drive
-            mounted
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be left connected and accessible to picotool, but
+            without the USB drive mounted
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to BOOTSEL
-            mode
+            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
+            BOOTSEL mode
         --bootsel-led-active-low
             The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
 ```
@@ -1181,9 +1185,11 @@ SYNOPSIS:
                 [<selector>..]
     picotool otp set [-c <copies>] [-r] [-e] [-s] [-i <filename>] [-z] <selector> <value>
                 [device-selection]
-    picotool otp load [-r] [-e] [-s <row>] [-i <filename>] <filename> [-t <type>] [device-selection]
+    picotool otp load [-r] [-e] [-s <row>] [-i <filename>] <filename> [-t <type>]
+                [device-selection]
     picotool otp white-label -s <row> <filename> [device-selection]
-    picotool otp permissions <filename> [--led <pin>] [--hash] [--sign] [<key>] [device-selection]
+    picotool otp permissions <filename> [--led <pin>] [--hash] [--sign] [<key>]
+                [device-selection]
     picotool otp dump [-r] [-e] [-p] [--output <filename>] [device-selection]
     picotool otp dump [-r] [-e] [-p] [--output <filename>] <input> [-t <type>]
     picotool otp list [-p] [-n] [-f] [-i <filename>] [<selector>..]
@@ -1191,8 +1197,8 @@ SYNOPSIS:
 SUB COMMANDS:
     get           Get the value of one or more OTP registers/fields (RP2350 only)
     set           Set the value of an OTP row/field (RP2350 only)
-    load          Load the row range stored in a file into OTP and verify. Data is 2 bytes/row for
-                  ECC, 4 bytes/row for raw (MSB is ignored). (RP2350 only)
+    load          Load the row range stored in a file into OTP and verify. Data is 2 bytes/row
+                  for ECC, 4 bytes/row for raw (MSB is ignored). (RP2350 only)
     white-label   Set the white labelling values in OTP (RP2350 only)
     permissions   Set the OTP access permissions (RP2350 only)
     dump          Dump entire OTP (RP2350 only)
@@ -1234,8 +1240,8 @@ OPTIONS:
             ROW_NUMBER to select a whole row by number.
             PAGE:PAGE_ROW_NUMBER to select a whole row by page and number within page.
 
-            ... or can select a single field/subset of a row (where ROW_SEL is one of the above row
-            selectors):
+            ... or can select a single field/subset of a row (where ROW_SEL is one of the above
+            row selectors):
 
             ROW_SEL.FIELD_NAME to select a field within a row by name.
             ROW_SEL.n-m to select a range of bits within a row.
@@ -1257,21 +1263,21 @@ TARGET SELECTION:
         --ser <ser>
             Filter by serial number
         --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid with
-            an RP2040 on Windows, and is ignored on other operating systems
+            Assume the device is an RP2040 - this is only required when using a custom vid/pid
+            with an RP2040 on Windows, and is ignored on other operating systems
         -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be rebooted back to application mode
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be rebooted back to application mode
         -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be left connected and accessible to picotool, but without the USB drive
-            mounted
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be left connected and accessible to picotool, but
+            without the USB drive mounted
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to BOOTSEL
-            mode
+            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
+            BOOTSEL mode
         --bootsel-led-active-low
             The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
 ```
@@ -1309,8 +1315,8 @@ OPTIONS:
             ROW_NUMBER to select a whole row by number.
             PAGE:PAGE_ROW_NUMBER to select a whole row by page and number within page.
 
-            ... or can select a single field/subset of a row (where ROW_SEL is one of the above row
-            selectors):
+            ... or can select a single field/subset of a row (where ROW_SEL is one of the above
+            row selectors):
 
             ROW_SEL.FIELD_NAME to select a field within a row by name.
             ROW_SEL.n-m to select a range of bits within a row.
@@ -1330,21 +1336,21 @@ TARGET SELECTION:
         --ser <ser>
             Filter by serial number
         --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid with
-            an RP2040 on Windows, and is ignored on other operating systems
+            Assume the device is an RP2040 - this is only required when using a custom vid/pid
+            with an RP2040 on Windows, and is ignored on other operating systems
         -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be rebooted back to application mode
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be rebooted back to application mode
         -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be left connected and accessible to picotool, but without the USB drive
-            mounted
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be left connected and accessible to picotool, but
+            without the USB drive mounted
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to BOOTSEL
-            mode
+            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
+            BOOTSEL mode
         --bootsel-led-active-low
             The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
 ```
@@ -1360,7 +1366,8 @@ OTP LOAD:
     bytes/row for raw (MSB is ignored).
 
 SYNOPSIS:
-    picotool otp load [-r] [-e] [-s <row>] [-i <filename>] <filename> [-t <type>] [device-selection]
+    picotool otp load [-r] [-e] [-s <row>] [-i <filename>] <filename> [-t <type>]
+                [device-selection]
 
 OPTIONS:
     Row options
@@ -1389,21 +1396,21 @@ OPTIONS:
         --ser <ser>
             Filter by serial number
         --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid with
-            an RP2040 on Windows, and is ignored on other operating systems
+            Assume the device is an RP2040 - this is only required when using a custom vid/pid
+            with an RP2040 on Windows, and is ignored on other operating systems
         -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be rebooted back to application mode
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be rebooted back to application mode
         -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be left connected and accessible to picotool, but without the USB drive
-            mounted
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be left connected and accessible to picotool, but
+            without the USB drive mounted
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to BOOTSEL
-            mode
+            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
+            BOOTSEL mode
         --bootsel-led-active-low
             The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
 ```
@@ -1444,21 +1451,21 @@ OPTIONS:
         --ser <ser>
             Filter by serial number
         --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid with
-            an RP2040 on Windows, and is ignored on other operating systems
+            Assume the device is an RP2040 - this is only required when using a custom vid/pid
+            with an RP2040 on Windows, and is ignored on other operating systems
         -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be rebooted back to application mode
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be rebooted back to application mode
         -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be left connected and accessible to picotool, but without the USB drive
-            mounted
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be left connected and accessible to picotool, but
+            without the USB drive mounted
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to BOOTSEL
-            mode
+            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
+            BOOTSEL mode
         --bootsel-led-active-low
             The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
 ```
@@ -1514,7 +1521,8 @@ OTP PERMISSIONS:
     Set the OTP access permissions
 
 SYNOPSIS:
-    picotool otp permissions <filename> [--led <pin>] [--hash] [--sign] [<key>] [device-selection]
+    picotool otp permissions <filename> [--led <pin>] [--hash] [--sign] [<key>]
+                [device-selection]
 
 OPTIONS:
         <filename>
@@ -1540,21 +1548,21 @@ OPTIONS:
         --ser <ser>
             Filter by serial number
         --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid with
-            an RP2040 on Windows, and is ignored on other operating systems
+            Assume the device is an RP2040 - this is only required when using a custom vid/pid
+            with an RP2040 on Windows, and is ignored on other operating systems
         -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be rebooted back to application mode
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be rebooted back to application mode
         -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be left connected and accessible to picotool, but without the USB drive
-            mounted
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be left connected and accessible to picotool, but
+            without the USB drive mounted
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to BOOTSEL
-            mode
+            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
+            BOOTSEL mode
         --bootsel-led-active-low
             The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
 ```
@@ -1616,21 +1624,21 @@ TARGET SELECTION:
         --ser <ser>
             Filter by serial number
         --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid with
-            an RP2040 on Windows, and is ignored on other operating systems
+            Assume the device is an RP2040 - this is only required when using a custom vid/pid
+            with an RP2040 on Windows, and is ignored on other operating systems
         -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be rebooted back to application mode
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be rebooted back to application mode
         -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be left connected and accessible to picotool, but without the USB drive
-            mounted
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be left connected and accessible to picotool, but
+            without the USB drive mounted
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to BOOTSEL
-            mode
+            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
+            BOOTSEL mode
         --bootsel-led-active-low
             The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
     To dump the contents of an OTP JSON file
@@ -1669,8 +1677,8 @@ OPTIONS:
             ROW_NUMBER to select a whole row by number.
             PAGE:PAGE_ROW_NUMBER to select a whole row by page and number within page.
 
-            ... or can select a single field/subset of a row (where ROW_SEL is one of the above row
-            selectors):
+            ... or can select a single field/subset of a row (where ROW_SEL is one of the above
+            row selectors):
 
             ROW_SEL.FIELD_NAME to select a field within a row by name.
             ROW_SEL.n-m to select a range of bits within a row.
@@ -1713,8 +1721,8 @@ LINK:
     Link multiple binaries into one block loop.
 
 SYNOPSIS:
-    picotool link [--quiet] [--verbose] <outfile> [-t <type>] <infile1> [-t <type>] <infile2> [-t
-                <type>] [<infile3>] [-t <type>] [-p <pad>]
+    picotool link [--quiet] [--verbose] <outfile> [-t <type>] <infile1> [-t <type>] <infile2>
+                [-t <type>] [<infile3>] [-t <type>] [-p <pad>]
 
 OPTIONS:
         --quiet
@@ -1749,9 +1757,9 @@ BDEV:
     Commands related to embedded block devices
 
 SYNOPSIS:
-    picotool bdev ls [<dirname>] [-r] [-p <partition number>] [--partition-name <partition name>]
-                [--partition-id <partition id>] [--filesystem <fs>] [--force-formattable]
-                [--force-writeable] [--format] [device-selection]
+    picotool bdev ls [<dirname>] [-r] [-p <partition number>] [--partition-name <partition
+                name>] [--partition-id <partition id>] [--filesystem <fs>]
+                [--force-formattable] [--force-writeable] [--format] [device-selection]
     picotool bdev mkdir <dirname> [-p <partition number>] [--partition-name <partition name>]
                 [--partition-id <partition id>] [--filesystem <fs>] [--force-formattable]
                 [--force-writeable] [--format] [device-selection]
@@ -1764,15 +1772,15 @@ SYNOPSIS:
     picotool bdev cat <filename> [-p <partition number>] [--partition-name <partition name>]
                 [--partition-id <partition id>] [--filesystem <fs>] [--force-formattable]
                 [--force-writeable] [--format] [device-selection]
-    picotool bdev format [-p <partition number>] [--partition-name <partition name>] [--partition-id
-                <partition id>] [--filesystem <fs>] [--force-formattable] [--force-writeable]
-                [device-selection]
+    picotool bdev format [-p <partition number>] [--partition-name <partition name>]
+                [--partition-id <partition id>] [--filesystem <fs>] [--force-formattable]
+                [--force-writeable] [device-selection]
 
 SUB COMMANDS:
     ls       List contents of the block device
     mkdir    Create directory on the block device
-    cp       Copy file to/from the block device - use :filename to indicate files on the device (eg
-             `cp main.py :main.py` to upload to the device)
+    cp       Copy file to/from the block device - use :filename to indicate files on the device
+             (eg `cp main.py :main.py` to upload to the device)
     rm       Delete a file or an empty directory on the block device
     cat      Print contents of file on the block device
     format   Format the block device
@@ -1788,9 +1796,9 @@ BDEV LS:
     List contents of the block device
 
 SYNOPSIS:
-    picotool bdev ls [<dirname>] [-r] [-p <partition number>] [--partition-name <partition name>]
-                [--partition-id <partition id>] [--filesystem <fs>] [--force-formattable]
-                [--force-writeable] [--format] [device-selection]
+    picotool bdev ls [<dirname>] [-r] [-p <partition number>] [--partition-name <partition
+                name>] [--partition-id <partition id>] [--filesystem <fs>]
+                [--force-formattable] [--force-writeable] [--format] [device-selection]
 
 OPTIONS:
         <dirname>
@@ -1832,21 +1840,21 @@ OPTIONS:
         --ser <ser>
             Filter by serial number
         --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid with
-            an RP2040 on Windows, and is ignored on other operating systems
+            Assume the device is an RP2040 - this is only required when using a custom vid/pid
+            with an RP2040 on Windows, and is ignored on other operating systems
         -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be rebooted back to application mode
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be rebooted back to application mode
         -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be left connected and accessible to picotool, but without the USB drive
-            mounted
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be left connected and accessible to picotool, but
+            without the USB drive mounted
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to BOOTSEL
-            mode
+            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
+            BOOTSEL mode
         --bootsel-led-active-low
             The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
 ```
@@ -1903,21 +1911,21 @@ OPTIONS:
         --ser <ser>
             Filter by serial number
         --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid with
-            an RP2040 on Windows, and is ignored on other operating systems
+            Assume the device is an RP2040 - this is only required when using a custom vid/pid
+            with an RP2040 on Windows, and is ignored on other operating systems
         -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be rebooted back to application mode
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be rebooted back to application mode
         -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be left connected and accessible to picotool, but without the USB drive
-            mounted
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be left connected and accessible to picotool, but
+            without the USB drive mounted
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to BOOTSEL
-            mode
+            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
+            BOOTSEL mode
         --bootsel-led-active-low
             The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
 ```
@@ -1978,21 +1986,21 @@ OPTIONS:
         --ser <ser>
             Filter by serial number
         --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid with
-            an RP2040 on Windows, and is ignored on other operating systems
+            Assume the device is an RP2040 - this is only required when using a custom vid/pid
+            with an RP2040 on Windows, and is ignored on other operating systems
         -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be rebooted back to application mode
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be rebooted back to application mode
         -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be left connected and accessible to picotool, but without the USB drive
-            mounted
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be left connected and accessible to picotool, but
+            without the USB drive mounted
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to BOOTSEL
-            mode
+            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
+            BOOTSEL mode
         --bootsel-led-active-low
             The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
 ```
@@ -2049,21 +2057,21 @@ OPTIONS:
         --ser <ser>
             Filter by serial number
         --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid with
-            an RP2040 on Windows, and is ignored on other operating systems
+            Assume the device is an RP2040 - this is only required when using a custom vid/pid
+            with an RP2040 on Windows, and is ignored on other operating systems
         -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be rebooted back to application mode
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be rebooted back to application mode
         -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be left connected and accessible to picotool, but without the USB drive
-            mounted
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be left connected and accessible to picotool, but
+            without the USB drive mounted
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to BOOTSEL
-            mode
+            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
+            BOOTSEL mode
         --bootsel-led-active-low
             The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
 ```
@@ -2120,21 +2128,21 @@ OPTIONS:
         --ser <ser>
             Filter by serial number
         --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid with
-            an RP2040 on Windows, and is ignored on other operating systems
+            Assume the device is an RP2040 - this is only required when using a custom vid/pid
+            with an RP2040 on Windows, and is ignored on other operating systems
         -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be rebooted back to application mode
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be rebooted back to application mode
         -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be left connected and accessible to picotool, but without the USB drive
-            mounted
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be left connected and accessible to picotool, but
+            without the USB drive mounted
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to BOOTSEL
-            mode
+            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
+            BOOTSEL mode
         --bootsel-led-active-low
             The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
 ```
@@ -2149,9 +2157,9 @@ BDEV FORMAT:
     Format the block device
 
 SYNOPSIS:
-    picotool bdev format [-p <partition number>] [--partition-name <partition name>] [--partition-id
-                <partition id>] [--filesystem <fs>] [--force-formattable] [--force-writeable]
-                [device-selection]
+    picotool bdev format [-p <partition number>] [--partition-name <partition name>]
+                [--partition-id <partition id>] [--filesystem <fs>] [--force-formattable]
+                [--force-writeable] [device-selection]
 
 OPTIONS:
     Block device options
@@ -2187,21 +2195,21 @@ OPTIONS:
         --ser <ser>
             Filter by serial number
         --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid with
-            an RP2040 on Windows, and is ignored on other operating systems
+            Assume the device is an RP2040 - this is only required when using a custom vid/pid
+            with an RP2040 on Windows, and is ignored on other operating systems
         -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be rebooted back to application mode
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be rebooted back to application mode
         -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the command
-            can be executed. After executing the command (unless the command itself is a 'reboot')
-            the device will be left connected and accessible to picotool, but without the USB drive
-            mounted
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be left connected and accessible to picotool, but
+            without the USB drive mounted
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to BOOTSEL
-            mode
+            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
+            BOOTSEL mode
         --bootsel-led-active-low
             The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
 ```
