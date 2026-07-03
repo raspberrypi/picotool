@@ -588,6 +588,7 @@ void elf_file::store_squashed(model_t model) {
     }
 
     uint32_t last_seg_end = 0;
+    uint32_t last_seg_start = 0;
 
     std::vector<elf32_ph_entry *> xip_sram_segs = {};
 
@@ -595,7 +596,11 @@ void elf_file::store_squashed(model_t model) {
         const uint32_t paddr = seg->physical_address();
         const uint32_t psize = seg->physical_size();
         if (!seg->is_load()) return;
-        if (psize == 0) return;
+
+        const bool is_alias = paddr == last_seg_start;
+        last_seg_start = paddr;
+
+        if (psize == 0 || is_alias) return;
 
         if (last_seg_end) {
             if (paddr != last_seg_end) {
