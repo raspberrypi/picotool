@@ -527,6 +527,18 @@ const elf32_ph_entry* elf_file::segment_from_physical_address(uint32_t paddr) {
     return nullptr;
 }
 
+bool elf_file::physical_address_range_is_occupied(uint32_t paddr, uint32_t psize) {
+    uint32_t pstart = paddr;
+    uint32_t pend = paddr + psize;
+    for (int i = 0; i < eh.ph_num; i++) {
+        if (!ph_entries[i].is_load() || ph_entries[i].filez == 0) continue; // allow overlapping with non-loaded segments
+        if (pstart < ph_entries[i].paddr + ph_entries[i].filez && ph_entries[i].paddr < pend) {
+            return true;
+        }
+    }
+    return false;
+}
+
 const elf32_ph_entry* elf_file::segment_from_virtual_address(uint32_t vaddr) {
     for (int i = 0; i < eh.ph_num; i++) {
         if (vaddr >= ph_entries[i].vaddr && vaddr < ph_entries[i].vaddr + ph_entries[i].memsz) {
@@ -567,7 +579,7 @@ std::vector<const elf32_ph_entry *> elf_file::sorted_segments(void) {
     return const_sorted_segs;
 }
 
-void elf_file::store_squashed(model_t model) {
+void elf_file::store_squashed(model_t model, const std::vector<uint32_t> &pinned_addresses) {
     uint32_t highest_ram_address = 0;
     uint32_t highest_flash_address = 0;
 
@@ -588,28 +600,32 @@ void elf_file::store_squashed(model_t model) {
     }
 
     uint32_t last_seg_end = 0;
-    uint32_t last_seg_start = 0;
 
     std::vector<elf32_ph_entry *> xip_sram_segs = {};
+
+    auto contains_pinned_address = [&](const elf32_ph_entry *seg) {
+        for (uint32_t addr : pinned_addresses) {
+            if (addr >= seg->physical_address() && addr < seg->physical_address() + seg->physical_size()) {
+                return true;
+            }
+        }
+        return false;
+    };
 
     auto squash_seg = [&](elf32_ph_entry *seg) {
         const uint32_t paddr = seg->physical_address();
         const uint32_t psize = seg->physical_size();
         if (!seg->is_load()) return;
-
-        const bool is_alias = paddr == last_seg_start;
-        last_seg_start = paddr;
-
-        if (psize == 0 || is_alias) return;
+        if (psize == 0) return;
 
         if (last_seg_end) {
-            if (paddr != last_seg_end) {
+            if (paddr != last_seg_end && !contains_pinned_address(seg) && !physical_address_range_is_occupied(last_seg_end, psize)) {
                 if (verbose) printf("squashing %08x to %08x\n", paddr, last_seg_end);
                 seg->paddr = last_seg_end;
             }
         }
-        // May have been modified, so read again
-        last_seg_end = seg->physical_address() + seg->physical_size();
+        // May have been modified, so read again. Use max so last_seg_end never moves backwards.
+        last_seg_end = std::max(last_seg_end, seg->physical_address() + seg->physical_size());
     };
 
     for(auto &seg : sorted_segments_modifiable()) {

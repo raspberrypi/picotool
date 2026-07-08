@@ -6177,8 +6177,20 @@ bool seal_command::execute(device_map &devices) {
         elf_file *elf = &source_file;
         elf->read_file(get_file(ios::in|ios::binary));
         if (!settings.seal.no_squash) {
+            // Segments containing a block that is already part of a metadata block loop must not be
+            // moved, as other blocks in the loop link to them by absolute physical address
+            std::vector<uint32_t> pinned_addresses;
+            std::unique_ptr<block> first_block = find_first_block(elf);
+            if (first_block) {
+                pinned_addresses.push_back(first_block->physical_addr);
+                if (first_block->next_block_rel) {
+                    for (auto &blk : get_all_blocks(elf, first_block)) {
+                        pinned_addresses.push_back(blk->physical_addr);
+                    }
+                }
+            }
             // Squash the segments together
-            elf->store_squashed(model);
+            elf->store_squashed(model, pinned_addresses);
         }
         // Remove any holes in the ELF file, as these cause issues when signing/hashing
         elf->remove_sh_holes();
