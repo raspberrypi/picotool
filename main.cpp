@@ -723,7 +723,34 @@ auto device_selection =
     #endif
         ", ignored by RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to BOOTSEL mode"
         + option("--bootsel-led-active-low").set(settings.active_low) % "The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)"
-    ).min(0).doc_non_optional(true).collapse_synopsys("device-selection");
+    ).min(0).doc_non_optional(true).collapse_synopsys("device-selection").help_topic("device-selection");
+
+struct help_topic {
+    string title;
+    string doc;
+    group options; // optional, leave blank for topics without options
+};
+
+string family_id_help_text() {
+    return string("A family ID identifies the target chip and/or image type of a UF2 file, and is "
+           "accepted by the --family option of several commands.\n\n"
+           "Valid family IDs are: ") + cli::join(family_names, ", ") + ".\n\n"
+           "A family ID may also be given directly as a 32 bit hex value, e.g. 0x12345678.";
+}
+
+std::map<string, help_topic> help_topics {
+#if HAS_LIBUSB
+    { "device-selection", {
+        "Options for Target Device Selection",
+        "Options for selecting or filtering the target RP-series device(s). These options are accepted by most commands which target a device.",
+        group(device_selection).force_expand_help(true)
+    } },
+#endif
+    { "family-ids", {
+        "Valid Family IDs",
+        family_id_help_text()
+    } },
+};
 
 #define file_types_x(i)\
 (option ('t', "--type") & value("type").set(settings.file_types[i]))\
@@ -1854,12 +1881,50 @@ int parse(const int argc, char **argv) {
 
     int tab = 4;
     bool first = true;
-    auto section_header=[&](const string &name) {
+    auto section_header=[&](const string &name, bool upper = true) {
         fos.first_column(0);
         fos.hanging_indent(0);
         if (!first) fos.wrap_hard();
         first = false;
-        fos << (uppercase(name) + ":\n");
+        fos << ((upper ? uppercase(name) : name) + ":\n");
+    };
+    auto print_options_for=[&](const group &g) {
+        cli::option_map options;
+        g.get_option_help("", "", options);
+        for (const auto &major : options.contents.ordered_keys()) {
+            section_header(major.empty() ? "OPTIONS" : major);
+            bool first_opt = true;
+            for (const auto &minor : options.contents[major].ordered_keys()) {
+                fos.first_column(tab);
+                fos.hanging_indent(tab*2);
+                if (!minor.empty()) {
+                    fos << minor << "\n";
+                } else if (!first_opt) {
+                    fos << "Other\n";
+                }
+                first_opt = false;
+                for (const auto &opts : options.contents[major][minor]) {
+                    if (!opts.first.empty()) {
+                        fos.first_column(tab*2);
+                        fos.hanging_indent(0);
+                        fos << opts.first << "\n";
+                        fos.first_column(tab*3);
+                    } else {
+                        fos.first_column(tab*2);
+                    }
+                    fos.hanging_indent(0);
+                    fos << opts.second << "\n";
+                }
+            }
+        }
+    };
+    auto print_help_topic=[&](const help_topic &topic) {
+        section_header(topic.title, false);
+        fos.first_column(tab);
+        fos.hanging_indent(0);
+        fos << topic.doc << "\n";
+        print_options_for(topic.options);
+        fos.flush();
     };
     auto usage=[&]() {
         if (help_mode && selected_cmd) {
@@ -1931,6 +1996,12 @@ int parse(const int argc, char **argv) {
             s << "\n";
             fos << s.str();
         };
+        auto write_topic = [&](size_t max, const std::string& name, const help_topic& topic) {
+            fos.first_column(tab);
+            fos << name;
+            fos.first_column((int) (max + tab + 3));
+            fos << topic.title << "\n";
+        };
         if (!selected_cmd) {
             size_t max = 0;
             section_header("COMMANDS");
@@ -1939,6 +2010,16 @@ int parse(const int argc, char **argv) {
             }
             for (auto &cmd: commands) {
                 write_command(max, cmd->name(), cmd);
+            }
+            if (!help_topics.empty()) {
+                size_t topic_max = 0;
+                for (auto &topic: help_topics) {
+                    topic_max = std::max(topic.first.size(), topic_max);
+                }
+                section_header("TOPICS");
+                for (auto &topic: help_topics) {
+                    write_topic(topic_max, topic.first, topic.second);
+                }
             }
         } else if (selected_cmd->is_multi()) {
             section_header("SUB COMMANDS");
@@ -1975,30 +2056,7 @@ int parse(const int argc, char **argv) {
             fos << built_without_libusb_message;
             #endif
         } else {
-            cli::option_map options;
-            selected_cmd->get_cli().get_option_help("", "", options);
-            for (const auto &major : options.contents.ordered_keys()) {
-                section_header(major.empty() ? "OPTIONS" : major);
-                bool first = true;
-                for (const auto &minor : options.contents[major].ordered_keys()) {
-                    fos.first_column(tab);
-                    fos.hanging_indent(tab*2);
-                    if (!minor.empty()) {
-                        fos << minor << "\n";
-                    } else if (!first) {
-                        fos << "Other\n";
-                    }
-                    first = false;
-                    for (const auto &opts : options.contents[major][minor]) {
-                        fos.first_column(tab*2);
-                        fos.hanging_indent(0);
-                        fos << opts.first << "\n";
-                        fos.first_column(tab*3);
-                        fos.hanging_indent(0);
-                        fos << opts.second << "\n";
-                    }
-                }
-            }
+            print_options_for(selected_cmd->get_cli());
         }
         if (!selected_cmd) {
             fos.first_column(0);
@@ -2079,6 +2137,11 @@ int parse(const int argc, char **argv) {
                 usage();
                 return 0;
             } else {
+                auto topic = help_topics.find(args[0]);
+                if (topic != help_topics.end()) {
+                    print_help_topic(topic->second);
+                    return 0;
+                }
                 selected_cmd = find_command(args[0]);
                 if (selected_cmd->is_multi() && args.size() > 1) {
                     help_mode_prefix = selected_cmd->name() + " ";

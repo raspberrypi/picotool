@@ -653,6 +653,13 @@ namespace cli {
             return *this;
         }
 
+        // Instead of expanding this group's options in place, point the reader at
+        // "picotool help <topic>" for the details (see the "help_topic" command dispatch).
+        group &help_topic(string topic) {
+            _help_topic = std::move(topic);
+            return *this;
+        }
+
         static string decorate(const matchable &e, string s) {
             if (e.is_optional() && !e.doc_non_optional()) {
                 return string("[") + s + "]";
@@ -771,6 +778,10 @@ namespace cli {
             }
             if (!_major_group.empty()) {
                 major_group = _major_group;
+            }
+            if (!_help_topic.empty() && !this->_force_expand_help) {
+                options.add(major_group, minor_group, "", "See \"picotool help " + _help_topic + "\" for available options");
+                return true;
             }
             for (const auto &e : elements) {
                 e->get_option_help(major_group, minor_group, options);
@@ -908,6 +919,7 @@ namespace cli {
 
     private:
         string _major_group;
+        string _help_topic;
         group_type type;
         vector<std::shared_ptr<matchable>> elements;
         bool _no_match_beats_error = true;
