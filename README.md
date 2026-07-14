@@ -74,8 +74,8 @@ Use "picotool help <cmd>" for more info
 
 Note commands that aren't acting on files require a device in BOOTSEL mode to be connected.
 
-## Links to documentation for `picotool` commands
-[`info`](#info) [`config`](#config) [`load`](#load) [`save`](#save) [`verify`](#verify) [`erase`](#erase) [`reboot`](#reboot) [`seal`](#seal) [`encrypt`](#encrypt) [`partition`](#partition) [`uf2`](#uf2) [`otp`](#otp) [`coprodis`](#coprodis) [`link`](#link) [`bdev`](#bdev)
+## Links to documentation for `picotool` commands and help topics
+[`info`](#info) [`config`](#config) [`load`](#load) [`save`](#save) [`verify`](#verify) [`erase`](#erase) [`reboot`](#reboot) [`seal`](#seal) [`encrypt`](#encrypt) [`partition`](#partition) [`uf2`](#uf2) [`otp`](#otp) [`coprodis`](#coprodis) [`link`](#link) [`bdev`](#bdev) [`device-selection`](#device-selection) [`family-ids`](#family-ids)
 
 ## Building & Installing
 
@@ -1649,6 +1649,63 @@ OPTIONS:
             Allow writing, even if the block device is not marked as writeable
     Target device selection
         See "picotool help device-selection" for available options
+```
+
+## Help topics
+
+`picotool help <topic>` shows additional documentation that applies across multiple commands, rather than to a single command.
+
+### device-selection
+
+```text
+$ picotool help device-selection
+Options for Target Device Selection:
+    Options for selecting or filtering the target RP-series device(s). These options are
+    accepted by most commands which target a device.
+
+OPTIONS:
+        --bus <bus>
+            Filter devices by USB bus number
+        --address <addr>
+            Filter devices by USB device address
+        --vid <vid>
+            Filter by vendor id
+        --pid <pid>
+            Filter by product id
+        --ser <ser>
+            Filter by serial number
+        --rp2040
+            Assume the device is an RP2040 - this is only required when using a custom vid/pid
+            with an RP2040 on Windows, and is ignored on other operating systems
+        -f, --force
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be rebooted back to application mode
+        -F, --force-no-reboot
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be left connected and accessible to picotool, but
+            without the USB drive mounted
+        --bootsel-led <gpio>
+            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
+            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
+            BOOTSEL mode
+        --bootsel-led-active-low
+            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
+```
+
+### family-ids
+
+```text
+$ picotool help family-ids
+Valid Family IDs:
+    A family ID identifies the target chip and/or image type of a UF2 file, and is accepted by
+    the --family option of several commands.
+
+    Valid family IDs are: data, absolute, rp2040, rp2350-arm-s, rp2350-arm-ns, rp2350-riscv,
+    cyw43-firmware.
+
+    A family ID may also be given directly as a 32 bit hex value, e.g. 0x12345678.
 ```
 
 ## Binary Information

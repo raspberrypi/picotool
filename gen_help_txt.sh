@@ -97,17 +97,57 @@ if [ ${#missing_commands[@]} -ne 0 ]; then
     done
 fi
 
-# Regenerate the links to documentation for picotool commands section
-echo "Regenerating links to documentation for picotool commands..."
+# Extract help topics to check for missing help text
+echo "Extracting help topics from main.cpp..."
+topics=$(sed -n '/std::map<string, help_topic> help_topics {/,/^};/p' main.cpp | \
+    grep -oE '"[a-zA-Z0-9_-]+"[[:space:]]*,[[:space:]]*\{' | \
+    sed -E 's/^"([a-zA-Z0-9_-]+)".*/\1/')
+
+echo "Checking for missing help topic sections..."
+missing_topics=()
+while IFS= read -r topic; do
+    if [ ! -z "$topic" ]; then
+        if ! grep -q "\$ picotool help $topic" tmp/README.md; then
+            missing_topics+=("$topic")
+            echo "Missing help text section for topic: $topic"
+        fi
+    fi
+done <<< "$topics"
+
+# Same as for missing commands above - still fails the job later, this is just to
+# provide the output to copy into the right place
+if [ ${#missing_topics[@]} -ne 0 ]; then
+    echo "Adding missing help topic sections to end of file..."
+    for topic in "${missing_topics[@]}"; do
+        echo "Running: picotool help $topic"
+        picotool help "$topic" > "tmp/picotool_help_${topic// /_}.txt"
+
+        {
+            printf '\n```text\n$ picotool help %s\n' "$topic"
+            cat "tmp/picotool_help_${topic// /_}.txt"
+            printf '```\n'
+        } >> tmp/README.md
+    done
+fi
+
+# Regenerate the links to documentation for picotool commands and help topics section
+echo "Regenerating links to documentation for picotool commands and help topics..."
 links_line=$(picotool help 2>/dev/null | \
     awk '/^COMMANDS:/{f=1;next} f && /^[A-Z]/{exit} f && /^    [a-z]/{print $1}' | \
     grep -vE "^(help|$(echo "$ALLOWED_MISSING_COMMANDS" | tr ' ' '|'))$" | \
     while IFS= read -r cmd; do
         printf '[`%s`](#%s) ' "$cmd" "$cmd"
     done | sed 's/ $//')
+topic_links_line=$(echo "$topics" | while IFS= read -r topic; do
+        [ -z "$topic" ] && continue
+        printf '[`%s`](#%s) ' "$topic" "$topic"
+    done | sed 's/ $//')
+if [ -n "$topic_links_line" ]; then
+    links_line="$links_line $topic_links_line"
+fi
 export LINKS_LINE="$links_line"
 perl -i -0777 -pe '
-    s{(## Links to documentation for `picotool` commands\n)[^\n]+}{$1$ENV{LINKS_LINE}};
+    s{(## Links to documentation for `picotool` commands and help topics\n)[^\n]+}{$1$ENV{LINKS_LINE}};
 ' tmp/README.md
 
 mv tmp/README.md README.md
@@ -158,8 +198,8 @@ done
 
 echo "Help text sections have been updated in README.md"
 
-# Still fail if there are missing commands
-if [ ${#missing_commands[@]} -ne 0 ]; then
+# Still fail if there are missing commands or topics
+if [ ${#missing_commands[@]} -ne 0 ] || [ ${#missing_topics[@]} -ne 0 ]; then
     echo "Failing job due to missing help text sections"
     exit 1
 fi
