@@ -4670,7 +4670,8 @@ std::shared_ptr<tuple<resident_partition_t, std::shared_ptr<vector<partition_det
 }
 
 std::shared_ptr<vector<partition_details>> get_partitions(picoboot::connection &con) {
-    return std::get<1>(*get_partition_info(con));
+    auto pi = get_partition_info(con);
+    return pi ? std::get<1>(*pi) : nullptr;
 }
 #endif
 
