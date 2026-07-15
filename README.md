@@ -1900,27 +1900,13 @@ quotes, newlines etc you may have better luck defining via bi_decl in the code.
 ### Block devices
 
 MicroPython and CircuitPython, eventually the SDK and others may support one or more storage devices in flash. We already
-have macros to define these although picotool doesn't do anything with them yet... but backup/restore/file copy and even fuse mount
-in the future might be interesting.
+have macros to define these, and they can be accessed with the [`bdev`](#bdev) commands. In the future backup/restore and even fuse mount might be interesting additions.
 
-I suggest we tag these now... 
-
-This is what I have right now off the top of my head (at the time)
+These can be tagged using the `bi_block_device` macro:
 ```c
 #define bi_block_device(_tag, _name, _offset, _size, _extra, _flags)
 ```
-with the data going into
-```c
-typedef struct __packed _binary_info_block_device {
-        struct _binary_info_core core;
-        bi_ptr_of(const char) name; // optional static name (independent of what is formatted)
-        uint32_t offset;
-        uint32_t size;
-        bi_ptr_of(binary_info_t) extra; // additional info
-        uint16_t flags;
-} binary_info_block_device_t;
-```
-and
+using the following flags
 ```c
 enum {
     BINARY_INFO_BLOCK_DEV_FLAG_READ = 1 << 0, // if not readable, then it is basically hidden, but tools may choose to avoid overwriting it
@@ -1933,6 +1919,7 @@ enum {
     BINARY_INFO_BLOCK_DEV_FLAG_PT_NONE = 3 << 4, // no partition table
 };
 ```
+For more information see the Pico SDK, where this macro and flags are defined.
 
 ### Forced Reboots
 
