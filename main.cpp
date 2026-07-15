@@ -2065,7 +2065,7 @@ int parse(const int argc, char **argv) {
             fos.first_column(0);
             fos.hanging_indent(0);
             fos.wrap_hard();
-            fos << "Use \"picotool help <cmd>\" for more info\n";
+            fos << "Use \"picotool help <cmd>\" or \"picotool help <topic>\" for more info\n";
             #if !HAS_LIBUSB
             if (!help_mode) {
                 fos << built_without_libusb_message;
