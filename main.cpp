@@ -741,8 +741,11 @@ string family_id_help_text() {
 std::map<string, help_topic> help_topics {
 #if HAS_LIBUSB
     { "device-selection", {
-        "Options for Target Device Selection",
-        "Options for selecting or filtering the target RP-series device(s). These options are accepted by most commands which target a device.",
+        "Options for Target Device Selection and Rebooting",
+        "Options for selecting or filtering the target RP-series device(s), including rebooting devices to BOOTSEL mode first. "
+        "These options are accepted by most commands which target a device.\n\n"
+        "For the `-f/F` options, compatible code is defined as code which uses stdio_usb or the pico_usb_reset library, and which is still running. "
+        "See Forced Reboots in the README (https://github.com/raspberrypi/picotool#forced-reboots) for more information.",
         group(device_selection).force_expand_help(true)
     } },
 #endif
@@ -876,7 +879,7 @@ struct info_command : public cmd {
             ).min(0).doc_non_optional(true) % "Information to display" +
             (
             #if HAS_LIBUSB
-                device_selection % "To target one or more connected RP-series device(s) in BOOTSEL mode (the default)" |
+                device_selection % "To target one or more connected RP-series device(s) (the default)" |
             #endif
                 file_selection % "To target a file"
             ).major_group("TARGET SELECTION").min(0).doc_non_optional(true)
@@ -911,7 +914,7 @@ struct config_command : public cmd {
             (option('g', "--group") & value("group").set(settings.config.group)) % "Filter by feature group" + 
             (
             #if HAS_LIBUSB
-                device_selection % "To target one or more connected RP-series device(s) in BOOTSEL mode (the default)" |
+                device_selection % "To target one or more connected RP-series device(s) (the default)" |
             #endif
                 file_selection % "To target a file"
             ).major_group("TARGET SELECTION").min(0).doc_non_optional(true)
@@ -1165,7 +1168,7 @@ struct erase_command : public cmd {
                 ).min(0).doc_non_optional(true)
             ).min(0).doc_non_optional(true).no_match_beats_error(false) % "Selection of data to erase" +
             ( // note this parenthesis seems to help with error messages for say erase --foo
-                device_selection % "Source device selection"
+                device_selection % "Target device selection"
             )
         );
     }

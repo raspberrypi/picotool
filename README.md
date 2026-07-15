@@ -1937,9 +1937,9 @@ purposes of binaries compiled using the [pico-sdk](https://github.com/raspberryp
 If your code has returned then rebooting with `-f/F` will not work - instead you can set the compile definition `PICO_ENTER_USB_BOOT_ON_EXIT`
 to reboot and be accessible to picotool once your code has finished execution, for example with
 `target_compile_definitions(<yourTargetName> PRIVATE PICO_ENTER_USB_BOOT_ON_EXIT=1)`
-- Uses stdio_usb -
-If your binary calls `stdio_init_all()` and you have `pico_enable_stdio_usb(<yourTargetName> 1)` in your CMakeLists.txt file then you meet
-this requirement (see the [hello_usb](https://github.com/raspberrypi/pico-examples/tree/master/hello_world/usb) example)
+- Uses stdio_usb or the pico_usb_reset library -
+If your binary calls `stdio_init_all()`, does not use TinyUSB directly (i.e. does not link `tinyusb_device`), and you have `pico_enable_stdio_usb(<yourTargetName> 1)` in your CMakeLists.txt file, then you meet
+this requirement (see the [hello_usb](https://github.com/raspberrypi/pico-examples/tree/master/hello_world/usb) example). If you are using TinyUSB directly, see the [library documentation](https://www.raspberrypi.com/documentation/pico-sdk/high_level.html#group_pico_usb_reset) or the [dev_multi_cdc](https://github.com/raspberrypi/pico-examples/tree/master/usb/device/dev_multi_cdc) example for more details on how to enable the `pico_usb_reset` library.
 
 ### Issues
 
