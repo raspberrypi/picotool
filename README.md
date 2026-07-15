@@ -66,10 +66,10 @@ COMMANDS:
     bdev        Commands related to embedded block devices
 
 TOPICS:
-    device-selection   Options for Target Device Selection
+    device-selection   Options for Target Device Selection and Rebooting
     family-ids         Valid Family IDs
 
-Use "picotool help <cmd>" for more info
+Use "picotool help <cmd>" or "picotool help <topic>" for more info
 ```
 
 Note commands that aren't acting on files require a device in BOOTSEL mode to be connected.
@@ -120,7 +120,7 @@ OPTIONS:
             Include all information
 
 TARGET SELECTION:
-    To target one or more connected RP-series device(s) in BOOTSEL mode (the default)
+    To target one or more connected RP-series device(s) (the default)
         See "picotool help device-selection" for available options
     To target a file
         <filename>
@@ -210,7 +210,7 @@ OPTIONS:
             Filter by feature group
 
 TARGET SELECTION:
-    To target one or more connected RP-series device(s) in BOOTSEL mode (the default)
+    To target one or more connected RP-series device(s) (the default)
         See "picotool help device-selection" for available options
     To target a file
         <filename>
@@ -441,7 +441,7 @@ OPTIONS:
             The lower address bound in hex
         <to>
             The upper address bound in hex
-    Source device selection
+    Target device selection
         See "picotool help device-selection" for available options
 ```
 
@@ -1659,9 +1659,14 @@ OPTIONS:
 
 ```text
 $ picotool help device-selection
-Options for Target Device Selection:
-    Options for selecting or filtering the target RP-series device(s). These options are
-    accepted by most commands which target a device.
+Options for Target Device Selection and Rebooting:
+    Options for selecting or filtering the target RP-series device(s), including rebooting
+    devices to BOOTSEL mode first. These options are accepted by most commands which target a
+    device.
+
+    For the `-f/F` options, compatible code is defined as code which uses stdio_usb or the
+    pico_usb_reset library, and which is still running. See Forced Reboots in the README
+    (https://github.com/raspberrypi/picotool#forced-reboots) for more information.
 
 OPTIONS:
         --bus <bus>
