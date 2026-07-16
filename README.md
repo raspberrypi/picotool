@@ -178,7 +178,7 @@ TARGET SELECTION:
     To target a file
         <filename>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
 ```
 
@@ -255,11 +255,9 @@ SYNOPSIS:
     picotool config [-s <key> <value>] [-g <group>] <filename> [-t <type>]
 
 OPTIONS:
-        <key>
-            Variable name
-        <value>
-            New value
-        -g <group>
+        -s, --set <key> <value>
+            Set config variable name to new value
+        -g, --group <group>
             Filter by feature group
 
 TARGET SELECTION:
@@ -268,7 +266,7 @@ TARGET SELECTION:
     To target a file
         <filename>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
 ```
 
@@ -318,14 +316,10 @@ OPTIONS:
     Load options
         --ignore-partitions
             When writing flash data, ignore the partition table and write to absolute space
-        --family
+        --family <family_id>
             Specify the family ID of the file to load
-        <family_id>
-            family ID to use for load
-        -p, --partition
+        -p, --partition <partition>
             Specify the partition to load into
-        <partition>
-            partition to load into
         -n, --no-overwrite
             When writing flash data, do not overwrite an existing program in flash. If picotool
             cannot determine the size/presence of the program in flash, the command fails
@@ -344,13 +338,11 @@ OPTIONS:
     File to load from
         <filename>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
     BIN file options
-        -o, --offset
-            Specify the load address for a BIN file
-        <offset>
-            Load offset (memory address; default 0x10000000)
+        -o, --offset <offset>
+            Specify the load address for a BIN file (memory address; default 0x10000000)
     Target device selection
         See "picotool help device-selection" for available options
 ```
@@ -393,14 +385,12 @@ OPTIONS:
     Other
         -v, --verify
             Verify the data was saved correctly
-        --family
+        --family <family_id>
             Specify the family ID to save the file as
-        <family_id>
-            family ID to save file as
     File to save to
         <filename>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
     Source device selection
         See "picotool help device-selection" for available options
@@ -447,19 +437,14 @@ OPTIONS:
     The file to compare against
         <filename>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
     Address options
-        -r, --range
-            Compare a sub range of memory only
-        <from>
-            The lower address bound in hex
-        <to>
-            The upper address bound in hex
-        -o, --offset
-            Specify the load address when comparing with a BIN file
-        <offset>
-            Load offset (memory address; default 0x10000000)
+        -r, --range <from> <to>
+            Compare a sub range of memory only (address bounds in hex)
+        -o, --offset <offset>
+            Specify the load address (memory address; default 0x10000000) when comparing with a
+            BIN file
     Target device selection
         See "picotool help device-selection" for available options
 ```
@@ -556,9 +541,9 @@ OPTIONS:
             Reboot back into the application (this is the default)
         -u, --usb
             Reboot back into BOOTSEL mode
-        -g <partition>
+        -g, --diagnostic <partition>
             Select diagnostic partition
-        -c <cpu>
+        -c, --cpu <cpu>
             Select arm | riscv CPU (if possible)
     Selecting the device to reboot
         See "picotool help device-selection" for available options
@@ -615,17 +600,15 @@ OPTIONS:
     File to load from
         <infile>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
     BIN file options
-        -o, --offset
-            Specify the load address for a BIN file
-        <offset>
-            Load offset (memory address; default 0x10000000)
+        -o, --offset <offset>
+            Specify the load address for a BIN file (memory address; default 0x10000000)
     File to save to
         <outfile>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
 ```
 
@@ -673,10 +656,9 @@ OPTIONS:
             Use ~180MHz ROSC configuration for embedded bootloader
         --use-mbedtls
             Use MbedTLS implementation of embedded bootloader (faster but less secure)
-        --otp-key-page
-            Specify the OTP page storing the AES key (IV salt is stored on the next page)
-        <page>
-            OTP page (default 29)
+        --otp-key-page <page>
+            Specify the OTP page storing the AES key (default 29; IV salt is stored on the next
+            page)
         <aes_key>
             AES Key Share or AES Key
         <iv_salt>
@@ -697,17 +679,15 @@ OPTIONS:
     File to load from
         <infile>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
     BIN file options
-        -o, --offset
-            Specify the load address for a BIN file
-        <offset>
-            Load offset (memory address; default 0x10000000)
+        -o, --offset <offset>
+            Specify the load address for a BIN file (memory address; default 0x10000000)
     File to save to
         <outfile>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
 ```
 
@@ -726,7 +706,7 @@ SYNOPSIS:
     picotool partition info [-m <family_id>] [device-selection]
 
 OPTIONS:
-        -m <family_id>
+        -m, --family <family_id>
             family ID (will show target partition for said family)
     Target device selection
         See "picotool help device-selection" for available options
@@ -776,26 +756,22 @@ OPTIONS:
     output file
         <outfile>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
     UF2 output options
-        -o, --offset
-            Specify the load address for UF2 file output
-        <offset>
-            Load offset (memory address; default 0x10000000)
-        --family
-            Specify the family if for UF2 file output
-        <family_id>
-            family ID for UF2 (default absolute)
+        -o, --offset <offset>
+            Specify the load address for UF2 file output (memory address; default 0x10000000)
+        --family <family_id>
+            Specify the family id for UF2 file output (default absolute)
     embed partition table into bootloader ELF
         <bootloader>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (elf) explicitly, ignoring file extension
     Partition Table Options
         --sign <keyfile>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (pem) explicitly, ignoring file extension
         --no-hash
             Don't hash the partition table
@@ -836,28 +812,22 @@ OPTIONS:
     File to load from
         <infile>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
     File to save UF2 to
         <outfile>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2) explicitly, ignoring file extension
     Packaging Options
-        -o, --offset
-            Specify the load address
-        <offset>
-            Load offset (memory address; default 0x10000000 for BIN file)
+        -o, --offset <offset>
+            Specify the load address (memory address; default 0x10000000 for BIN file)
     UF2 Family options
-        --family
-            Specify the family ID
-        <family_id>
-            family ID for UF2
+        --family <family_id>
+            Specify the family ID for UF2
     Platform options
-        --platform
-            Optional platform for memory-address validation
-        <platform>
-            platform to use (eg rp2040, rp2350)
+        --platform <platform>
+            Optional platform for memory-address validation (eg rp2040, rp2350)
     Errata RP2350-E10 Fix
         --abs-block
             Add an absolute block
@@ -887,33 +857,27 @@ OPTIONS:
     First file to combine
         <infile1>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2) explicitly, ignoring file extension
     Second file to combine
         <infile2>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2) explicitly, ignoring file extension
     File to save output to
         <outfile>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2) explicitly, ignoring file extension
     UF2 Family options
-        --family
-            Specify the family ID
-        <family_id>
-            family ID for combined UF2 (defaults to first one)
+        --family <family_id>
+            Specify the family ID for combined UF2 (defaults to first one)
     Offset options
-        --offset
+        --offset <offset>
             Offset second UF2 by amount
-        <offset>
-            offset amount (default to 0)
     Partition options
-        --partition
+        --partition <partition>
             Place second UF2 in partition (first UF2 must contain a partition table)
-        <partition>
-            partition number (default to 0)
     Errata RP2350-E10 Fix
         --abs-block
             Add an absolute block
@@ -1034,7 +998,7 @@ SYNOPSIS:
 
 OPTIONS:
     Row/field options
-        -c <copies>
+        -c, --copies <copies>
             Read multiple redundant values
         -r, --raw
             Get raw 24-bit values
@@ -1042,7 +1006,7 @@ OPTIONS:
             Use error correction
         -n, --no-descriptions
             Don't show descriptions
-        -i <filename>
+        -i, --include <filename>
             Include extra otp definition
     Row/Field Selection
         -z, --fuzzy
@@ -1080,7 +1044,7 @@ SYNOPSIS:
 
 OPTIONS:
     Redundancy/Error Correction Overrides
-        -c <copies>
+        -c, --copies <copies>
             Write multiple redundant values
         -r, --raw
             Set raw 24-bit values
@@ -1088,7 +1052,7 @@ OPTIONS:
             Use error correction
         -s, --set-bits
             Set bits only
-        -i <filename>
+        -i, --include <filename>
             Include extra otp definition
         <value>
             The value to set
@@ -1135,14 +1099,14 @@ OPTIONS:
             Set raw 24-bit values. This is the default for BIN files
         -e, --ecc
             Use error correction
-        -s <row>
+        -s, --start_row <row>
             Start row to load at (note use 0x for hex)
-        -i <filename>
+        -i, --include <filename>
             Include extra otp definition
     File to load row(s) from
         <filename>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (json | bin) explicitly, ignoring file extension
     Target device selection
         See "picotool help device-selection" for available options
@@ -1170,7 +1134,8 @@ SYNOPSIS:
     picotool otp white-label [-s <row>] <filename> [device-selection]
 
 OPTIONS:
-        -s <row>
+    Row options
+        -s, --start_row <row>
             Start row for white label struct (default 0x100) (note use 0x for hex)
         <filename>
             JSON file with white labelling values
@@ -1298,7 +1263,7 @@ TARGET SELECTION:
     To dump the contents of an OTP JSON file
         <input>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (json) explicitly, ignoring file extension
 ```
 
@@ -1322,7 +1287,7 @@ OPTIONS:
             Don't show descriptions
         -f, --field-descriptions
             Show all field descriptions
-        -i <filename>
+        -i, --include <filename>
             Include extra otp definition
         <selector>
             The row/field selector, each of which can select a whole row:
@@ -1383,17 +1348,17 @@ OPTIONS:
             Don't print any output
         --verbose
             Print verbose output
-        -p <pad>
+        -p, --pad <pad>
             Specify alignment to pad to, defaults to 0x1000
     File to write to
         <outfile>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2 | bin) explicitly, ignoring file extension
     Files to link
         <infile1>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
         <infile2>
             The file name
@@ -1460,22 +1425,14 @@ OPTIONS:
         -r, --recursive
             List files in directories recursively
     Block device options
-        -p, --partition-number
+        -p, --partition-number <partition number>
             Partition number to use as block device
-        <partition number>
-            partition number
-        --partition-name
+        --partition-name <partition name>
             Partition name to use as block device
-        <partition name>
-            partition name
-        --partition-id
+        --partition-id <partition id>
             Partition ID to use as block device
-        <partition id>
-            partition id
-        --filesystem
-            Specify filesystem to use
-        <fs>
-            littlefs|fatfs
+        --filesystem <fs>
+            Specify filesystem to use (littlefs|fatfs)
         --force-formattable
             Allow formatting, even if the block device is not marked as fomattable
         --force-writeable
@@ -1504,22 +1461,14 @@ OPTIONS:
         <dirname>
             The directory name
     Block device options
-        -p, --partition-number
+        -p, --partition-number <partition number>
             Partition number to use as block device
-        <partition number>
-            partition number
-        --partition-name
+        --partition-name <partition name>
             Partition name to use as block device
-        <partition name>
-            partition name
-        --partition-id
+        --partition-id <partition id>
             Partition ID to use as block device
-        <partition id>
-            partition id
-        --filesystem
-            Specify filesystem to use
-        <fs>
-            littlefs|fatfs
+        --filesystem <fs>
+            Specify filesystem to use (littlefs|fatfs)
         --force-formattable
             Allow formatting, even if the block device is not marked as fomattable
         --force-writeable
@@ -1552,22 +1501,14 @@ OPTIONS:
         <dest>
             The file name
     Block device options
-        -p, --partition-number
+        -p, --partition-number <partition number>
             Partition number to use as block device
-        <partition number>
-            partition number
-        --partition-name
+        --partition-name <partition name>
             Partition name to use as block device
-        <partition name>
-            partition name
-        --partition-id
+        --partition-id <partition id>
             Partition ID to use as block device
-        <partition id>
-            partition id
-        --filesystem
-            Specify filesystem to use
-        <fs>
-            littlefs|fatfs
+        --filesystem <fs>
+            Specify filesystem to use (littlefs|fatfs)
         --force-formattable
             Allow formatting, even if the block device is not marked as fomattable
         --force-writeable
@@ -1596,22 +1537,14 @@ OPTIONS:
         <filename>
             The file name
     Block device options
-        -p, --partition-number
+        -p, --partition-number <partition number>
             Partition number to use as block device
-        <partition number>
-            partition number
-        --partition-name
+        --partition-name <partition name>
             Partition name to use as block device
-        <partition name>
-            partition name
-        --partition-id
+        --partition-id <partition id>
             Partition ID to use as block device
-        <partition id>
-            partition id
-        --filesystem
-            Specify filesystem to use
-        <fs>
-            littlefs|fatfs
+        --filesystem <fs>
+            Specify filesystem to use (littlefs|fatfs)
         --force-formattable
             Allow formatting, even if the block device is not marked as fomattable
         --force-writeable
@@ -1640,22 +1573,14 @@ OPTIONS:
         <filename>
             The file name
     Block device options
-        -p, --partition-number
+        -p, --partition-number <partition number>
             Partition number to use as block device
-        <partition number>
-            partition number
-        --partition-name
+        --partition-name <partition name>
             Partition name to use as block device
-        <partition name>
-            partition name
-        --partition-id
+        --partition-id <partition id>
             Partition ID to use as block device
-        <partition id>
-            partition id
-        --filesystem
-            Specify filesystem to use
-        <fs>
-            littlefs|fatfs
+        --filesystem <fs>
+            Specify filesystem to use (littlefs|fatfs)
         --force-formattable
             Allow formatting, even if the block device is not marked as fomattable
         --force-writeable
@@ -1682,22 +1607,14 @@ SYNOPSIS:
 
 OPTIONS:
     Block device options
-        -p, --partition-number
+        -p, --partition-number <partition number>
             Partition number to use as block device
-        <partition number>
-            partition number
-        --partition-name
+        --partition-name <partition name>
             Partition name to use as block device
-        <partition name>
-            partition name
-        --partition-id
+        --partition-id <partition id>
             Partition ID to use as block device
-        <partition id>
-            partition id
-        --filesystem
-            Specify filesystem to use
-        <fs>
-            littlefs|fatfs
+        --filesystem <fs>
+            Specify filesystem to use (littlefs|fatfs)
         --force-formattable
             Allow formatting, even if the block device is not marked as fomattable
         --force-writeable
