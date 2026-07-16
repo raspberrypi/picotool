@@ -44,26 +44,26 @@ SYNOPSIS:
     picotool bdev ls|mkdir|cp|rm|cat|format
 
 COMMANDS:
-    help        Show general help, or help for a specific command or topic
-    version     Display picotool version
+    help        Show general help, or help for a specific command or topic.
+    version     Display picotool version.
     info        Display information from the target device(s) or file.
                 Without any arguments, this will display basic information for all connected
-                RP-series devices in BOOTSEL mode
+                RP-series devices in BOOTSEL mode.
     config      Display or change program configuration settings from the target device(s) or
                 file.
     load        Load the program / memory range stored in a file onto the device.
     save        Save the program / memory stored in flash on the device to a file.
     verify      Check that the device contents match those in the file.
     erase       Erase the program / memory stored in flash on the device.
-    reboot      Reboot the device
+    reboot      Reboot the device.
     seal        Add final metadata to a binary, optionally including a hash and/or signature.
     encrypt     Encrypt the program.
-    partition   Commands related to RP2350 Partition Tables
-    uf2         Commands related to UF2 creation and status
-    otp         Commands related to the RP2350 OTP (One-Time-Programmable) Memory
+    partition   Commands related to RP2350 Partition Tables.
+    uf2         Commands related to UF2 creation and status.
+    otp         Commands related to the RP2350 OTP (One-Time-Programmable) Memory.
     coprodis    Post-process coprocessor instructions in disassembly files.
     link        Link multiple binaries into one block loop.
-    bdev        Commands related to embedded block devices
+    bdev        Commands related to embedded block devices.
 
 TOPICS:
     device-selection   Options for Target Device Selection and Rebooting
@@ -90,7 +90,7 @@ Displays the picotool version, and also allows checking compatibility with an ex
 ```text
 $ picotool help version
 VERSION:
-    Display picotool version
+    Display picotool version.
 
 SYNOPSIS:
     picotool version [-s] [<version>]
@@ -149,7 +149,7 @@ $ picotool help info
 INFO:
     Display information from the target device(s) or file.
     Without any arguments, this will display basic information for all connected RP-series
-    devices in BOOTSEL mode
+    devices in BOOTSEL mode.
 
 SYNOPSIS:
     picotool info [-b] [-m] [-p] [-d] [--debug] [-l] [-a] [device-selection]
@@ -530,7 +530,7 @@ Partition 1
 ```text
 $ picotool help reboot
 REBOOT:
-    Reboot the device
+    Reboot the device.
 
 SYNOPSIS:
     picotool reboot [-a] [-u] [-g <partition>] [-c <cpu>] [device-selection]
@@ -738,7 +738,7 @@ By default, all partition tables are hashed, and you can also sign them. The sch
 ```text
 $ picotool help partition create
 PARTITION CREATE:
-    Create a partition table from json
+    Create a partition table from json.
 
 SYNOPSIS:
     picotool partition create [--quiet] [--verbose] <infile> <outfile> [-t <type>] [[-o
@@ -929,12 +929,12 @@ $ picotool load -x combined.uf2
 
 ### info
 
-This command reads the information on a device about why a UF2 download has failed. It will only give information if the most recent download has failed.
+This command reads the information on an RP2350 device about why a UF2 download has failed. It will only give information if the most recent download has failed.
 
 ```text
 $ picotool help uf2 info
 UF2 INFO:
-    Print info about UF2 download.
+    Print info about UF2 download. (RP2350 only)
 
 SYNOPSIS:
     picotool uf2 info [device-selection]
@@ -956,7 +956,7 @@ For the `list`, `set`, `get` and `load` commands, you can define your own OTP la
 ```text
 $ picotool help otp
 OTP:
-    Commands related to the RP2350 OTP (One-Time-Programmable) Memory
+    Commands related to the RP2350 OTP (One-Time-Programmable) Memory.
 
 SYNOPSIS:
     picotool otp get [-c <copies>] [-r] [-e] [-n] [-i <filename>] [device-selection] [-z]
@@ -973,14 +973,14 @@ SYNOPSIS:
     picotool otp list [-p] [-n] [-f] [-i <filename>] [<selector>..]
 
 SUB COMMANDS:
-    get           Get the value of one or more OTP registers/fields (RP2350 only)
-    set           Set the value of an OTP row/field (RP2350 only)
+    get           Get the value of one or more OTP registers/fields. (RP2350 only)
+    set           Set the value of an OTP row/field. (RP2350 only)
     load          Load the row range stored in a file into OTP and verify. Data is 2 bytes/row
                   for ECC, 4 bytes/row for raw (MSB is ignored). (RP2350 only)
-    white-label   Set the white labelling values in OTP (RP2350 only)
-    permissions   Set the OTP access permissions (RP2350 only)
-    dump          Dump entire OTP (RP2350 only)
-    list          List matching known registers/fields
+    white-label   Set the white labelling values in OTP. (RP2350 only)
+    permissions   Set the OTP access permissions. (RP2350 only)
+    dump          Dump entire OTP. (RP2350 only)
+    list          List matching known registers/fields.
 ```
 
 ### get/set
@@ -990,7 +990,7 @@ These commands will get/set specific rows of OTP. By default, they will read/wri
 ```text
 $ picotool help otp get
 OTP GET:
-    Get the value of one or more OTP registers/fields
+    Get the value of one or more OTP registers/fields. (RP2350 only)
 
 SYNOPSIS:
     picotool otp get [-c <copies>] [-r] [-e] [-n] [-i <filename>] [device-selection] [-z]
@@ -1036,7 +1036,7 @@ TARGET SELECTION:
 ```text
 $ picotool help otp set
 OTP SET:
-    Set the value of an OTP row/field
+    Set the value of an OTP row/field. (RP2350 only)
 
 SYNOPSIS:
     picotool otp set [-c <copies>] [-r] [-e] [-s] [-i <filename>] [-z] <selector> <value>
@@ -1087,7 +1087,7 @@ This command allows loading of a range of OTP rows onto the device. The source c
 $ picotool help otp load
 OTP LOAD:
     Load the row range stored in a file into OTP and verify. Data is 2 bytes/row for ECC, 4
-    bytes/row for raw (MSB is ignored).
+    bytes/row for raw (MSB is ignored). (RP2350 only)
 
 SYNOPSIS:
     picotool otp load [-r] [-e] [-s <row>] [-i <filename>] <filename> [-t <type>]
@@ -1128,7 +1128,7 @@ This can be configured from a JSON file, an example of which is in [sample-wl.js
 ```text
 $ picotool help otp white-label
 OTP WHITE-LABEL:
-    Set the white labelling values in OTP
+    Set the white labelling values in OTP. (RP2350 only)
 
 SYNOPSIS:
     picotool otp white-label [-s <row>] <filename> [device-selection]
@@ -1191,7 +1191,7 @@ is in [sample-permissions.json](json/sample-permissions.json). The schema for th
 ```text
 $ picotool help otp permissions
 OTP PERMISSIONS:
-    Set the OTP access permissions
+    Set the OTP access permissions. (RP2350 only)
 
 SYNOPSIS:
     picotool otp permissions <filename> [--led <pin>] [--hash] [--sign] [<key>]
@@ -1240,7 +1240,7 @@ This command will read the entire OTP contents and print it out as hex.
 ```text
 $ picotool help otp dump
 OTP DUMP:
-    Dump entire OTP
+    Dump entire OTP. (RP2350 only)
 
 SYNOPSIS:
     picotool otp dump [-r] [-e] [-p] [--output <filename>] [device-selection]
@@ -1274,7 +1274,7 @@ This command will list all the defined OTP rows & fields. You can list specific 
 ```text
 $ picotool help otp list
 OTP LIST:
-    List matching known registers/fields
+    List matching known registers/fields.
 
 SYNOPSIS:
     picotool otp list [-p] [-n] [-f] [-i <filename>] [<selector>..]
@@ -1373,7 +1373,7 @@ The `bdev` commands are for interacting with block devices in Flash. The block d
 ```text
 $ picotool help bdev
 BDEV:
-    Commands related to embedded block devices
+    Commands related to embedded block devices.
 
 SYNOPSIS:
     picotool bdev ls [<dirname>] [-r] [-p <partition number>] [--partition-name <partition
@@ -1396,13 +1396,13 @@ SYNOPSIS:
                 [--force-writeable] [device-selection]
 
 SUB COMMANDS:
-    ls       List contents of the block device
-    mkdir    Create directory on the block device
+    ls       List contents of the block device.
+    mkdir    Create directory on the block device.
     cp       Copy file to/from the block device - use :filename to indicate files on the device
-             (eg `cp main.py :main.py` to upload to the device)
-    rm       Delete a file or an empty directory on the block device
-    cat      Print contents of file on the block device
-    format   Format the block device
+             (eg `cp main.py :main.py` to upload to the device).
+    rm       Delete a file or an empty directory on the block device.
+    cat      Print contents of file on the block device.
+    format   Format the block device.
 ```
 
 ### ls
@@ -1412,7 +1412,7 @@ List contents of the block device
 ```text
 $ picotool help bdev ls
 BDEV LS:
-    List contents of the block device
+    List contents of the block device.
 
 SYNOPSIS:
     picotool bdev ls [<dirname>] [-r] [-p <partition number>] [--partition-name <partition
@@ -1450,7 +1450,7 @@ Create directory on the block device
 ```text
 $ picotool help bdev mkdir
 BDEV MKDIR:
-    Create directory on the block device
+    Create directory on the block device.
 
 SYNOPSIS:
     picotool bdev mkdir <dirname> [-p <partition number>] [--partition-name <partition name>]
@@ -1488,7 +1488,7 @@ Copy file to/from the block device - use :filename to indicate files on the devi
 $ picotool help bdev cp
 BDEV CP:
     Copy file to/from the block device - use :filename to indicate files on the device (eg `cp
-    main.py :main.py` to upload to the device)
+    main.py :main.py` to upload to the device).
 
 SYNOPSIS:
     picotool bdev cp <src> <dest> [-p <partition number>] [--partition-name <partition name>]
@@ -1526,7 +1526,7 @@ Delete a file or an empty directory on the block device
 ```text
 $ picotool help bdev rm
 BDEV RM:
-    Delete a file or an empty directory on the block device
+    Delete a file or an empty directory on the block device.
 
 SYNOPSIS:
     picotool bdev rm <filename> [-p <partition number>] [--partition-name <partition name>]
@@ -1562,7 +1562,7 @@ Print contents of file on the block device
 ```text
 $ picotool help bdev cat
 BDEV CAT:
-    Print contents of file on the block device
+    Print contents of file on the block device.
 
 SYNOPSIS:
     picotool bdev cat <filename> [-p <partition number>] [--partition-name <partition name>]
@@ -1598,7 +1598,7 @@ Format the block device - may result in data loss
 ```text
 $ picotool help bdev format
 BDEV FORMAT:
-    Format the block device
+    Format the block device.
 
 SYNOPSIS:
     picotool bdev format [-p <partition number>] [--partition-name <partition name>]
