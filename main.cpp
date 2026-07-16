@@ -4562,10 +4562,9 @@ model_t get_model(uint8_t file_idx) {
     if (settings.model) {
         model = settings.model;
     } else if (settings.family_id) {
-        auto model_f = model_from_family(settings.family_id);
-        if (model_f->chip() != unknown) {
-            settings.model = model_f;
-            model = settings.model;
+        auto model_guess = model_from_family(settings.family_id);
+        if (model_guess->chip() != unknown) {
+            model = model_guess;
         }
     }
     if (model == nullptr) {
