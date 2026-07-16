@@ -1,7 +1,5 @@
 #!/bin/bash
 
-ALLOWED_MISSING_COMMANDS="version"
-
 if ! command -v picotool; then
     echo "Failing job due to picotool command not being in the PATH"
     exit 1
@@ -78,10 +76,8 @@ missing_commands=()
 while IFS= read -r cmd; do
     if [ ! -z "$cmd" ]; then
         if ! grep -q "\$ picotool help $cmd" tmp/README.md; then
-            if [[ ! "$ALLOWED_MISSING_COMMANDS" =~ "$cmd" ]]; then
-                missing_commands+=("$cmd")
-                echo "Missing help text section for command: $cmd"
-            fi
+            missing_commands+=("$cmd")
+            echo "Missing help text section for command: $cmd"
         fi
     fi
 done <<< "$commands"
@@ -139,7 +135,7 @@ fi
 echo "Regenerating links to documentation for picotool commands and help topics..."
 links_line=$(picotool help 2>/dev/null | \
     awk '/^COMMANDS:/{f=1;next} f && /^[A-Z]/{exit} f && /^    [a-z]/{print $1}' | \
-    grep -vE "^(help|$(echo "$ALLOWED_MISSING_COMMANDS" | tr ' ' '|'))$" | \
+    grep -vE "^(help)$" | \
     while IFS= read -r cmd; do
         printf '[`%s`](#%s) ' "$cmd" "$cmd"
     done | sed 's/ $//')
