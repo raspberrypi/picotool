@@ -981,6 +981,8 @@ SUB COMMANDS:
     permissions   Set the OTP access permissions. (RP2350 only)
     dump          Dump entire OTP. (RP2350 only)
     list          List matching known registers/fields.
+
+Use "picotool help otp <subcmd>" for more info
 ```
 
 ### get/set
@@ -1403,6 +1405,8 @@ SUB COMMANDS:
     rm       Delete a file or an empty directory on the block device.
     cat      Print contents of file on the block device.
     format   Format the block device.
+
+Use "picotool help bdev <subcmd>" for more info
 ```
 
 ### ls
