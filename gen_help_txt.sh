@@ -21,8 +21,8 @@ while IFS= read -r line; do
 
             # Replace the old section with the new one
             escaped_line=$(echo "$line" | sed 's/[.*+?^${}()|[]/\\&/g')
-            perl -i -pe '
-                BEGIN { $/ = undef; $new = `cat tmp/new_section.txt`; }
+            perl -i -0777 -pe '
+                BEGIN { $new = `cat tmp/new_section.txt`; }
                 s/```text\n'"$escaped_line"'\n.*?\n```/$new/s;
             ' tmp/README.md
         fi
@@ -154,7 +154,7 @@ echo "Checking command order..."
 
 order_mismatch=false
 
-check_cmd_order() {
+check_cmd_topic_order() {
     local label="$1" tool_order="$2" readme_order="$3"
     local fp="" fr=""
     while IFS= read -r cmd; do
@@ -179,7 +179,13 @@ tool_top_order=$(picotool help 2>/dev/null | \
 readme_top_order=$(grep -n '^\$ picotool help [a-z][a-z-]*$' README.md | \
     sed 's/^\([0-9]*\):.*\$ picotool help \([a-z][a-z-]*\)$/\1 \2/' | \
     sort -n | awk '{print $2}' | awk '!seen[$0]++')
-check_cmd_order "top-level commands" "$tool_top_order" "$readme_top_order"
+check_cmd_topic_order "top-level commands" "$tool_top_order" "$readme_top_order"
+
+# Check help topic order (help_topics is a std::map, so picotool prints topics
+# alphabetically by key rather than in main.cpp source order)
+tool_topic_order=$(picotool help 2>/dev/null | \
+    awk '/^TOPICS:/{f=1;next} f && /^[A-Z]/{exit} f && /^    [a-z]/{print $1}')
+check_cmd_topic_order "help topics" "$tool_topic_order" "$readme_top_order"
 
 # Check sub-command order for each parent command
 for array in $sub_command_arrays; do
@@ -189,7 +195,7 @@ for array in $sub_command_arrays; do
     readme_sub_order=$(grep -n "^\$ picotool help ${prefix} [a-z][a-z-]*$" README.md | \
         sed "s/^\([0-9]*\):.*\$ picotool help ${prefix} \([a-z][a-z-]*\)$/\1 \2/" | \
         sort -n | awk '{print $2}' | awk '!seen[$0]++')
-    check_cmd_order "${prefix} sub-commands" "$tool_sub_order" "$readme_sub_order"
+    check_cmd_topic_order "${prefix} sub-commands" "$tool_sub_order" "$readme_sub_order"
 done
 
 echo "Help text sections have been updated in README.md"

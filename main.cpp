@@ -1738,7 +1738,7 @@ struct help_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Show general help or help for a specific command";
+        return "Show general help, or help for a specific command or topic";
     }
 };
 

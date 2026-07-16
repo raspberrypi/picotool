@@ -44,7 +44,7 @@ SYNOPSIS:
     picotool bdev ls|mkdir|cp|rm|cat|format
 
 COMMANDS:
-    help        Show general help or help for a specific command
+    help        Show general help, or help for a specific command or topic
     version     Display picotool version
     info        Display information from the target device(s) or file.
                 Without any arguments, this will display basic information for all connected
@@ -1955,7 +1955,7 @@ quotes, newlines etc you may have better luck defining via bi_decl in the code.
 ### Block devices
 
 MicroPython and CircuitPython, eventually the SDK and others may support one or more storage devices in flash. We already
-have macros to define these, and they can be accessed with the [`bdev`](#bdev) commands. In the future backup/restore and even fuse mount might be interesting additions.
+have macros to define these, and they can be accessed with the [`bdev`](#bdev) commands. In the future, backup/restore and even fuse mount might be interesting additions.
 
 These can be tagged using the `bi_block_device` macro:
 ```c
