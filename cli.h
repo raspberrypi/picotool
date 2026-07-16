@@ -195,6 +195,10 @@ namespace cli {
             return {_name};
         }
 
+        virtual string option_label() const {
+            return synopsys()[0];
+        }
+
         virtual bool is_optional() const {
             return !_min;
         }
@@ -353,14 +357,18 @@ namespace cli {
             _name = short_opt.empty() ? long_opt : short_opt;
         }
 
-        bool get_option_help(string major_group, string minor_group, option_map &options) const override {
-            if (doc().empty()) return false;
+        string option_label() const override {
             string label = short_opt.empty() ? "" : _name;
             if (!long_opt.empty()) {
                 if (!label.empty()) label += ", ";
                 label += long_opt;
             }
-            options.add(major_group, minor_group, label, doc());
+            return label;
+        }
+
+        bool get_option_help(string major_group, string minor_group, option_map &options) const override {
+            if (doc().empty()) return false;
+            options.add(major_group, minor_group, option_label(), doc());
             return true;
         }
 
@@ -668,6 +676,17 @@ namespace cli {
             }
         }
 
+        string option_label() const override {
+            if (type != set && type != sequence) {
+                return matchable::option_label();
+            }
+            vector<string> parts;
+            for (auto &x : elements) {
+                parts.push_back(decorate(*x, x->option_label()));
+            }
+            return join(parts, " ");
+        }
+
         vector<string> synopsys() const override {
             vector<string> rc;
             switch (type) {
@@ -770,7 +789,7 @@ namespace cli {
         bool get_option_help(string major_group, string minor_group, option_map &options) const override {
             // todo beware.. this check is necessary as is, but I'm not sure what removing it breaks in terms of formatting  :-(
             if (is_optional() && !this->_doc_non_optional && !this->_force_expand_help) {
-                options.add(major_group, minor_group, synopsys()[0], doc());
+                options.add(major_group, minor_group, option_label(), doc());
                 return true;
             }
             if (!doc().empty()) {
