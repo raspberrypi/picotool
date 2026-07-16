@@ -892,7 +892,7 @@ struct info_command : public cmd {
 
     string get_doc() const override {
         #if HAS_LIBUSB
-        return "Display information from the target device(s) or file.\nWithout any arguments, this will display basic information for all connected RP-series devices in BOOTSEL mode";
+        return "Display information from the target device(s) or file.\nWithout any arguments, this will display basic information for all connected RP-series devices in BOOTSEL mode.";
         #else
         return "Display information from the target file.";
         #endif
@@ -965,7 +965,7 @@ struct bdev_ls_command : public cmd {
     }
 
     string get_doc() const override {
-        return "List contents of the block device";
+        return "List contents of the block device.";
     }
 };
 
@@ -982,7 +982,7 @@ struct bdev_mkdir_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Create directory on the block device";
+        return "Create directory on the block device.";
     }
 };
 
@@ -1000,7 +1000,7 @@ struct bdev_cp_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Copy file to/from the block device - use :filename to indicate files on the device (eg `cp main.py :main.py` to upload to the device)";
+        return "Copy file to/from the block device - use :filename to indicate files on the device (eg `cp main.py :main.py` to upload to the device).";
     }
 };
 
@@ -1017,7 +1017,7 @@ struct bdev_rm_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Delete a file or an empty directory on the block device";
+        return "Delete a file or an empty directory on the block device.";
     }
 };
 
@@ -1034,7 +1034,7 @@ struct bdev_cat_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Print contents of file on the block device";
+        return "Print contents of file on the block device.";
     }
 };
 
@@ -1050,7 +1050,7 @@ struct bdev_format_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Format the block device";
+        return "Format the block device.";
     }
 };
 
@@ -1065,7 +1065,7 @@ vector<std::shared_ptr<cmd>> bdev_sub_commands {
 struct bdev_command : public multi_cmd {
     bdev_command() : multi_cmd("bdev", bdev_sub_commands) {}
     string get_doc() const override {
-        return "Commands related to embedded block devices";
+        return "Commands related to embedded block devices.";
     }
 };
 
@@ -1349,7 +1349,7 @@ struct partition_create_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Create a partition table from json";
+        return "Create a partition table from json.";
     }
 };
 
@@ -1364,7 +1364,7 @@ vector<std::shared_ptr<cmd>> partition_sub_commands {
 struct partition_command : public multi_cmd {
     partition_command() : multi_cmd("partition", partition_sub_commands) {}
     string get_doc() const override {
-        return "Commands related to RP2350 Partition Tables";
+        return "Commands related to RP2350 Partition Tables.";
     }
 };
 
@@ -1397,7 +1397,7 @@ struct otp_list_command : public cmd {
     }
 
     string get_doc() const override {
-        return "List matching known registers/fields";
+        return "List matching known registers/fields.";
     }
 };
 #if HAS_LIBUSB
@@ -1436,7 +1436,7 @@ struct otp_get_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Get the value of one or more OTP registers/fields";
+        return "Get the value of one or more OTP registers/fields.";
     }
 };
 
@@ -1468,7 +1468,7 @@ struct otp_dump_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Dump entire OTP";
+        return "Dump entire OTP.";
     }
 };
 
@@ -1531,7 +1531,7 @@ struct otp_set_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Set the value of an OTP row/field";
+        return "Set the value of an OTP row/field.";
     }
 };
 
@@ -1555,7 +1555,7 @@ struct otp_permissions_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Set the OTP access permissions";
+        return "Set the OTP access permissions.";
     }
 };
 
@@ -1576,7 +1576,7 @@ struct otp_white_label_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Set the white labelling values in OTP";
+        return "Set the white labelling values in OTP.";
     }
 };
 #endif
@@ -1597,13 +1597,14 @@ vector<std::shared_ptr<cmd>> otp_sub_commands {
 struct otp_command : public multi_cmd {
     otp_command() : multi_cmd("otp", otp_sub_commands) {}
     string get_doc() const override {
-        return "Commands related to the RP2350 OTP (One-Time-Programmable) Memory";
+        return "Commands related to the RP2350 OTP (One-Time-Programmable) Memory.";
     }
 };
 
 #if HAS_LIBUSB
 struct uf2_info_command : public cmd {
     uf2_info_command() : cmd("info") {}
+    virtual bool requires_rp2350() const override { return true; }
     bool execute(device_map &devices) override;
 
     group get_cli() override {
@@ -1704,7 +1705,7 @@ vector<std::shared_ptr<cmd>> uf2_sub_commands {
 struct uf2_command : public multi_cmd {
     uf2_command() : multi_cmd("uf2", uf2_sub_commands) {}
     string get_doc() const override {
-        return "Commands related to UF2 creation and status";
+        return "Commands related to UF2 creation and status.";
     }
 };
 
@@ -1744,7 +1745,7 @@ struct help_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Show general help, or help for a specific command or topic";
+        return "Show general help, or help for a specific command or topic.";
     }
 };
 
@@ -1791,7 +1792,7 @@ struct version_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Display picotool version";
+        return "Display picotool version.";
     }
 };
 
@@ -1818,7 +1819,7 @@ struct reboot_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Reboot the device";
+        return "Reboot the device.";
     }
 };
 auto reboot_cmd = std::shared_ptr<reboot_command>(new reboot_command());
@@ -1937,7 +1938,11 @@ int parse(const int argc, char **argv) {
         if (help_mode && selected_cmd) {
             section_header(help_mode_prefix + selected_cmd->name());
             fos.first_column(tab);
-            fos << selected_cmd->get_doc() << "\n";
+            fos << selected_cmd->get_doc();
+            if (selected_cmd->requires_rp2350()) {
+                fos << " (RP2350 only)";
+            }
+            fos << "\n";
         } else if (!selected_cmd && !no_global_header) {
             section_header(tool_name);
             fos.first_column(tab);
