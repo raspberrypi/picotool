@@ -1134,7 +1134,7 @@ struct load_command : public cmd {
                 option('u', "--update").set(settings.load.update) % "Skip writing flash sectors that already contain identical data" +
                 option('v', "--verify").set(settings.load.verify) % "Verify the data was written correctly" +
                 option('x', "--execute").set(settings.load.execute) % "Perform a bootrom reboot to execute the downloaded file as a program after the load - either a flash update boot for binaries in flash, or a RAM image boot for other binaries "
-            ).min(0).doc_non_optional(true) % "Post load actions" +
+            ).min(0).doc_non_optional(true) % "Load options" +
             file_selection % "File to load from" +
             (
                 option('o', "--offset").set(settings.offset_set) % "Specify the load address for a BIN file" &
@@ -1563,9 +1563,7 @@ struct otp_white_label_command : public cmd {
 
     group get_cli() override {
         return (
-                (
-                        (option('s', "--start_row") & integer("row").set(settings.otp.row)) % "Start row for white label struct (default 0x100) (note use 0x for hex)"
-                ).min(0).doc_non_optional(true) % "Row options" +
+                (option('s', "--start_row") & integer("row").set(settings.otp.row)) % "Start row for white label struct (default 0x100) (note use 0x for hex)" +
                 named_untyped_file_selection_x("filename", 0) % "JSON file with white labelling values" +
                 device_selection % "Target device selection"
         );
@@ -2142,6 +2140,7 @@ int parse(const int argc, char **argv) {
             } else {
                 auto topic = help_topics.find(args[0]);
                 if (topic != help_topics.end()) {
+                    selected_cmd = nullptr;
                     print_help_topic(topic->second);
                     return 0;
                 }

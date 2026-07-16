@@ -75,13 +75,66 @@ Use "picotool help <cmd>" or "picotool help <topic>" for more info
 Note commands that aren't acting on files require a device in BOOTSEL mode to be connected.
 
 ## Links to documentation for `picotool` commands and help topics
-[`info`](#info) [`config`](#config) [`load`](#load) [`save`](#save) [`verify`](#verify) [`erase`](#erase) [`reboot`](#reboot) [`seal`](#seal) [`encrypt`](#encrypt) [`partition`](#partition) [`uf2`](#uf2) [`otp`](#otp) [`coprodis`](#coprodis) [`link`](#link) [`bdev`](#bdev) [`device-selection`](#device-selection) [`family-ids`](#family-ids)
+[`version`](#version) [`info`](#info) [`config`](#config) [`load`](#load) [`save`](#save) [`verify`](#verify) [`erase`](#erase) [`reboot`](#reboot) [`seal`](#seal) [`encrypt`](#encrypt) [`partition`](#partition) [`uf2`](#uf2) [`otp`](#otp) [`coprodis`](#coprodis) [`link`](#link) [`bdev`](#bdev) [`device-selection`](#device-selection) [`family-ids`](#family-ids)
 
 ## Building & Installing
 
 If you don't want to build picotool yourself, you can find pre-built executables for Windows, macOS, and Linux in the [pico-sdk-tools](https://github.com/raspberrypi/pico-sdk-tools/releases) repository. Assuming you've extracted that archive to `<extract_location>` (with the actual picotool executable at `<extract_location>/picotool/picotool`), you can point the Pico SDK at this binary by setting the `picotool_DIR` environment variable to `<extract_location>/picotool`, or by passing `-Dpicotool_DIR=<extract_location>/picotool` to your `cmake` command or setting it in your `CMakeLists.txt` file.
 
 If you do wish to build picotool yourself, then see [Building](BUILDING.md#building) for build instructions. For the Pico SDK to find your picotool you will need to install it, the simplest way being to run `cmake --install .` - see [Installing](BUILDING.md#installing-so-the-pico-sdk-can-find-it) for more details and alternatives. **You cannot just copy the binary into your `PATH`, else the Pico SDK will not be able to locate it.**
+
+## version
+
+Displays the picotool version, and also allows checking compatibility with an expected `picotool` version, for example to check a newer `picotool` is backwards compatible with an older version.
+
+```text
+$ picotool help version
+VERSION:
+    Display picotool version
+
+SYNOPSIS:
+    picotool version [-s] [<version>]
+
+OPTIONS:
+        -s, --semantic
+            Output semantic version number only
+        <version>
+            Check compatibility with version
+```
+
+The normal output is this format:
+```text
+$ picotool version
+picotool v2.3.0 (Linux, GNU-12.2.0, Release)
+```
+
+When built without libusb you get an additional message:
+```text
+$ picotool version
+picotool v2.3.0 (Linux, GNU-12.2.0, Release)
+
+This version of picotool was compiled without USB support. Some commands are not available.
+```
+
+The semantic output is:
+```text
+$ picotool version -s
+2.3.0
+```
+
+When checking compatibility with a compatible version (e.g. 2.2.0 with version 2.3.0):
+```text
+$ picotool version -s 2.2.0
+2.3.0
+```
+
+Or with an incompatible version (e.g. 2.4.0 with version 2.3.0), it will exit with error code `ERROR_INCOMPATIBLE` (-3):
+```text
+$ picotool version -s 2.4.0
+2.3.0
+ERROR: Version 2.4.0 not compatible with this software
+
+```
 
 ## info
 
@@ -262,7 +315,7 @@ SYNOPSIS:
                 [-v] [-x] <filename> [-t <type>] [-o <offset>] [device-selection]
 
 OPTIONS:
-    Post load actions
+    Load options
         --ignore-partitions
             When writing flash data, ignore the partition table and write to absolute space
         --family
@@ -948,7 +1001,7 @@ SYNOPSIS:
                 [device-selection]
     picotool otp load [-r] [-e] [-s <row>] [-i <filename>] <filename> [-t <type>]
                 [device-selection]
-    picotool otp white-label -s <row> <filename> [device-selection]
+    picotool otp white-label [-s <row>] <filename> [device-selection]
     picotool otp permissions <filename> [--led <pin>] [--hash] [--sign] [<key>]
                 [device-selection]
     picotool otp dump [-r] [-e] [-p] [--output <filename>] [device-selection]
@@ -966,9 +1019,9 @@ SUB COMMANDS:
     list          List matching known registers/fields
 ```
 
-### set/get
+### get/set
 
-These commands will set/get specific rows of OTP. By default, they will write/read all redundant rows, but this can be overridden with the `-c` argument
+These commands will get/set specific rows of OTP. By default, they will read/write all redundant rows, but this can be overridden with the `-c` argument
 
 ```text
 $ picotool help otp get
@@ -1114,9 +1167,11 @@ OTP WHITE-LABEL:
     Set the white labelling values in OTP
 
 SYNOPSIS:
-    picotool otp white-label -s <row> <filename> [device-selection]
+    picotool otp white-label [-s <row>] <filename> [device-selection]
 
 OPTIONS:
+        -s <row>
+            Start row for white label struct (default 0x100) (note use 0x for hex)
         <filename>
             JSON file with white labelling values
     Target device selection
@@ -1163,7 +1218,7 @@ Device Descriptor:
 
 ### permissions
 
-This command will run a binary on your device in order to set the OTP permissions, as these are not directly accessible from `picotool` due to errata RP2350-E15 on RP2350 A2. 
+This command will run a binary on your device in order to set the OTP permissions, which may not be accessible in BOOTSEL mode. For example on RP2350 A2, the permissions for pages 32-63 are not writeable from BOOTSEL mode due to errata RP2350-E15. You may also have previously configured the permissions to block writes in BOOTSEL mode using `LOCK_BL`, but now wish to lock them down further.
 Because it runs a binary, the binary needs to be signed if secure boot is enabled. The binary will light an LED when running, which
 can be configured using the `--led` argument. You can define your OTP permissions in a json file, an example of which
 is in [sample-permissions.json](json/sample-permissions.json). The schema for this JSON file is [here](json/schemas/permissions-schema.json)
