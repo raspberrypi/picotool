@@ -2070,11 +2070,15 @@ int parse(const int argc, char **argv) {
         } else {
             print_options_for(selected_cmd->get_cli());
         }
-        if (!selected_cmd) {
+        if (!selected_cmd || selected_cmd->is_multi()) {
             fos.first_column(0);
             fos.hanging_indent(0);
             fos.wrap_hard();
-            fos << "Use \"picotool help <cmd>\" or \"picotool help <topic>\" for more info\n";
+            if (selected_cmd) {
+                fos << "Use \"picotool help " << selected_cmd->name() << " <subcmd>\" for more info\n";
+            } else {
+                fos << "Use \"picotool help <cmd>\" or \"picotool help <topic>\" for more info\n";
+            }
             #if !HAS_LIBUSB
             if (!help_mode) {
                 fos << built_without_libusb_message;
