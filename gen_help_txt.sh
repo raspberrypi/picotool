@@ -75,7 +75,7 @@ echo "Checking for missing help text sections..."
 missing_commands=()
 while IFS= read -r cmd; do
     if [ ! -z "$cmd" ]; then
-        if ! grep -q "\$ picotool help $cmd" tmp/README.md; then
+        if ! grep -qxF "\$ picotool help $cmd" tmp/README.md; then
             missing_commands+=("$cmd")
             echo "Missing help text section for command: $cmd"
         fi
@@ -108,7 +108,7 @@ echo "Checking for missing help topic sections..."
 missing_topics=()
 while IFS= read -r topic; do
     if [ ! -z "$topic" ]; then
-        if ! grep -q "\$ picotool help $topic" tmp/README.md; then
+        if ! grep -qxF "\$ picotool help $topic" tmp/README.md; then
             missing_topics+=("$topic")
             echo "Missing help text section for topic: $topic"
         fi

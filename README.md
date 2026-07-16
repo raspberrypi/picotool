@@ -695,6 +695,25 @@ OPTIONS:
 
 The `partition` commands allow you to interact with the partition tables on RP2350 devices, and also create them.
 
+```text
+$ picotool help partition
+PARTITION:
+    Commands related to RP2350 Partition Tables.
+
+SYNOPSIS:
+    picotool partition info [-m <family_id>] [device-selection]
+    picotool partition create [--quiet] [--verbose] <infile> <outfile> [-t <type>] [[-o
+                <offset>] [--family <family_id>]] [<bootloader>] [-t <type>] [[--sign
+                <keyfile>] [-t <type>] [--no-hash] [--singleton] [--no-btstack-flash-bank]]
+                [[--abs-block] [<abs_block_loc>]]
+
+SUB COMMANDS:
+    info     Print the device's partition table.
+    create   Create a partition table from json.
+
+Use "picotool help partition <subcmd>" for more info
+```
+
 ### info
 
 ```text
@@ -789,6 +808,28 @@ OPTIONS:
 ## uf2
 
 The `uf2` commands allow for creation of UF2s, and can provide information if a UF2 download has failed.
+
+```text
+$ picotool help uf2
+UF2:
+    Commands related to UF2 creation and status.
+
+SYNOPSIS:
+    picotool uf2 convert [--quiet] [--verbose] <infile> [-t <type>] <outfile> [-t <type>] [-o
+                <offset>] [--family <family_id>] [--platform <platform>] [[--abs-block]
+                [<abs_block_loc>]]
+    picotool uf2 combine [--quiet] [--verbose] <infile1> [-t <type>] <infile2> [-t <type>]
+                <outfile> [-t <type>] [--family <family_id>] [--offset <offset>] [--partition
+                <partition>] [[--abs-block] [<abs_block_loc>]]
+    picotool uf2 info [device-selection]
+
+SUB COMMANDS:
+    convert   Convert ELF/BIN to UF2.
+    combine   Combine multiple UF2 files.
+    info      Print info about UF2 download. (RP2350 only)
+
+Use "picotool help uf2 <subcmd>" for more info
+```
 
 ### convert
 
