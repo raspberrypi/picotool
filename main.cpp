@@ -1094,7 +1094,7 @@ struct load_command : public cmd {
     group get_cli() override {
         return (
             (
-                option("--ignore-partitions").set(settings.load.ignore_pt) % "When writing flash data, ignore the partition table and write to absolute space" +
+                option("--ignore-partitions").set(settings.load.ignore_pt) % "Ignore the partition table, or whether the family ID is compatible with the device" +
                 (option("--family") % "Specify the family ID of the file to load" &
                         family_id("family_id").set(settings.family_id) % "family ID to use for load").force_expand_help(true) +
                 (option('p', "--partition") % "Specify the partition to load into" &

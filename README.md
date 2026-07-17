@@ -314,7 +314,7 @@ SYNOPSIS:
 OPTIONS:
     Post load actions
         --ignore-partitions
-            When writing flash data, ignore the partition table and write to absolute space
+            Ignore the partition table, or whether the family ID is compatible with the device
         --family
             Specify the family ID of the file to load
         <family_id>
