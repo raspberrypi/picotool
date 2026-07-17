@@ -3306,11 +3306,31 @@ uint32_t build_rmap_uf2(std::shared_ptr<std::iostream>file, range_map<size_t>& r
     uf2_block block;
     unsigned int pos = 0;
     uint32_t next_family_id = 0;
+    vector<uint32_t> family_ids = {};
     do {
         file->read((char*)&block, sizeof(uf2_block));
         if (file->fail()) {
             if (file->eof()) { file->clear(); break; }
             fail(ERROR_READ_FAILED, "unexpected end of input file");
+        }
+        if(
+            std::find(family_ids.begin(), family_ids.end(), block.file_size) == family_ids.end()
+    #if SUPPORT_RP2350_A2
+            && !check_abs_block(block)
+    #endif
+        ) {
+            // new family ID found
+            family_ids.push_back(block.file_size);
+            DEBUG_LOG("New family ID %s\n", family_name(block.file_size).c_str());
+            if (
+                std::find(family_ids.begin(), family_ids.end(), family_id) != family_ids.end()
+                && std::find(family_ids.begin(), family_ids.end(), family_id) + 1 == std::find(family_ids.begin(), family_ids.end(), block.file_size)
+            ) {
+                DEBUG_LOG("This is next family ID %s\n", family_name(block.file_size).c_str());
+                next_family_id = block.file_size;
+            } else if (block.file_size == family_id) {
+                DEBUG_LOG("This is selected family ID %s\n", family_name(block.file_size).c_str());
+            }
         }
         if (block.magic_start0 == UF2_MAGIC_START0 && block.magic_start1 == UF2_MAGIC_START1 &&
             block.magic_end == UF2_MAGIC_END) {
@@ -3325,20 +3345,10 @@ uint32_t build_rmap_uf2(std::shared_ptr<std::iostream>file, range_map<size_t>& r
                 } else {
                     rmap.insert(range(block.target_addr, block.target_addr + PAGE_SIZE), pos + offsetof(uf2_block, data[0]));
                     family_id = block.file_size;
-                    next_family_id = 0;
                 }
                 #else
                 rmap.insert(range(block.target_addr, block.target_addr + PAGE_SIZE), pos + offsetof(uf2_block, data[0]));
                 family_id = block.file_size;
-                next_family_id = 0;
-                #endif
-            } else if (block.file_size != family_id && family_id && !next_family_id) {
-                #if SUPPORT_RP2350_A2
-                if (!check_abs_block(block)) {
-                #endif
-                    next_family_id = block.file_size;
-                #if SUPPORT_RP2350_A2
-                }
                 #endif
             }
         }
