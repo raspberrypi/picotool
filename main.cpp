@@ -4558,10 +4558,16 @@ uint32_t get_family_id(uint8_t file_idx) {
 }
 
 model_t get_model(uint8_t file_idx) {
-    model_t model;
+    model_t model = nullptr;
     if (settings.model) {
         model = settings.model;
-    } else {
+    } else if (settings.family_id) {
+        auto model_guess = model_from_family(settings.family_id);
+        if (model_guess->chip() != unknown) {
+            model = model_guess;
+        }
+    }
+    if (model == nullptr) {
         auto file_access = get_file_memory_access(file_idx);
         model = get_access_model(file_access);
     }
