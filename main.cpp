@@ -3313,43 +3313,44 @@ uint32_t build_rmap_uf2(std::shared_ptr<std::iostream>file, range_map<size_t>& r
             if (file->eof()) { file->clear(); break; }
             fail(ERROR_READ_FAILED, "unexpected end of input file");
         }
-        if(
-            std::find(family_ids.begin(), family_ids.end(), block.file_size) == family_ids.end()
-    #if SUPPORT_RP2350_A2
-            && !check_abs_block(block)
-    #endif
-        ) {
-            // new family ID found
-            family_ids.push_back(block.file_size);
-            DEBUG_LOG("New family ID %s\n", family_name(block.file_size).c_str());
-            if (
-                std::find(family_ids.begin(), family_ids.end(), family_id) != family_ids.end()
-                && std::find(family_ids.begin(), family_ids.end(), family_id) + 1 == std::find(family_ids.begin(), family_ids.end(), block.file_size)
-            ) {
-                DEBUG_LOG("This is next family ID %s\n", family_name(block.file_size).c_str());
-                next_family_id = block.file_size;
-            } else if (block.file_size == family_id) {
-                DEBUG_LOG("This is selected family ID %s\n", family_name(block.file_size).c_str());
-            }
-        }
         if (block.magic_start0 == UF2_MAGIC_START0 && block.magic_start1 == UF2_MAGIC_START1 &&
             block.magic_end == UF2_MAGIC_END) {
             if (block.flags & UF2_FLAG_FAMILY_ID_PRESENT &&
-                !(block.flags & UF2_FLAG_NOT_MAIN_FLASH) && block.payload_size == PAGE_SIZE &&
-                (!family_id || block.file_size == family_id)) {
+                !(block.flags & UF2_FLAG_NOT_MAIN_FLASH) && block.payload_size == PAGE_SIZE) {
+                if(
+                    std::find(family_ids.begin(), family_ids.end(), block.file_size) == family_ids.end()
+            #if SUPPORT_RP2350_A2
+                    && !check_abs_block(block)
+            #endif
+                ) {
+                    // new family ID found
+                    family_ids.push_back(block.file_size);
+                    DEBUG_LOG("New family ID %s\n", family_name(block.file_size).c_str());
+                    if (
+                        std::find(family_ids.begin(), family_ids.end(), family_id) != family_ids.end()
+                        && std::find(family_ids.begin(), family_ids.end(), family_id) + 1 == std::find(family_ids.begin(), family_ids.end(), block.file_size)
+                    ) {
+                        DEBUG_LOG("This is next family ID %s\n", family_name(block.file_size).c_str());
+                        next_family_id = block.file_size;
+                    } else if (block.file_size == family_id) {
+                        DEBUG_LOG("This is selected family ID %s\n", family_name(block.file_size).c_str());
+                    }
+                }
+                if (!family_id || block.file_size == family_id) {
                 #if SUPPORT_RP2350_A2
-                // ignore the absolute block, but save the address
-                if (check_abs_block(block)) {
-                    DEBUG_LOG("Ignoring RP2350-E10 absolute block\n");
-                    settings.uf2.abs_block_loc = block.target_addr;
-                } else {
+                    // ignore the absolute block, but save the address
+                    if (check_abs_block(block)) {
+                        DEBUG_LOG("Ignoring RP2350-E10 absolute block\n");
+                        settings.uf2.abs_block_loc = block.target_addr;
+                    } else {
+                        rmap.insert(range(block.target_addr, block.target_addr + PAGE_SIZE), pos + offsetof(uf2_block, data[0]));
+                        family_id = block.file_size;
+                    }
+                #else
                     rmap.insert(range(block.target_addr, block.target_addr + PAGE_SIZE), pos + offsetof(uf2_block, data[0]));
                     family_id = block.file_size;
-                }
-                #else
-                rmap.insert(range(block.target_addr, block.target_addr + PAGE_SIZE), pos + offsetof(uf2_block, data[0]));
-                family_id = block.file_size;
                 #endif
+                }
             }
         }
         pos += sizeof(uf2_block);
@@ -5441,7 +5442,8 @@ bool load_command::execute(device_map &devices) {
         if (override_family_id) {
             if (std::find(available_family_ids.begin(), available_family_ids.end(), override_family_id) == available_family_ids.end()) {
                 fos << "WARNING: Requested family ID " << family_name(override_family_id) << " not found in UF2 file, ";
-                fos << "so treating first family ID found in the UF2 file (" << family_name(available_family_ids[0]) << ") as the requested one\n";
+                fos << "so loading the first family ID found in the UF2 file (" << family_name(available_family_ids[0]) << "), ";
+                fos << "into where family ID " << family_name(override_family_id) << " would go\n";
                 available_family_ids.resize(1);
             } else {
                 available_family_ids.resize(1);
@@ -5454,10 +5456,15 @@ bool load_command::execute(device_map &devices) {
         available_family_ids.push_back(family_id);
     }
 
-    if (available_family_ids.size() > 1) {
-        vector<string> family_names = {};
-        for (auto family_id : available_family_ids) family_names.push_back(family_name(family_id));
-        fos << "UF2 file contains multiple family IDs: " << cli::join(family_names, ", ") << "\n";
+    if (multi_family_uf2){
+        // Default to the first available family
+        file_family_id = available_family_ids[0];
+
+        if (available_family_ids.size() > 1) {
+            vector<string> family_names = {};
+            for (auto family_id : available_family_ids) family_names.push_back(family_name(family_id));
+            fos << "UF2 file contains multiple family IDs: " << cli::join(family_names, ", ") << "\n";
+        }
     }
 
     if (settings.load.partition >= 0) {
@@ -5491,11 +5498,10 @@ bool load_command::execute(device_map &devices) {
                     break;
                 }
             } else {
-                // Check the family ID is supported by the model (either SRAM, or RP2040)
-                if (raw_access.get_model()->supports_family_id(settings.family_id)) {
-                    if (available_family_ids.size() > 1) {
-                        fos << "Loading family ID " << family_name(settings.family_id) << "\n";
-                    }
+                // For UF2 files, check the family ID is supported by the model (either SRAM, or RP2040)
+                // Other files are automatically accepted unless the family ID has been overridden, 
+                // because the family ID is only a guess from get_access_model
+                if ((get_file_type() != filetype::uf2 && !override_family_id) || raw_access.get_model()->supports_family_id(settings.family_id)) {
                     accepted = true;
                     file_family_id = family_id;
                     break;
@@ -5516,6 +5522,11 @@ bool load_command::execute(device_map &devices) {
             }
         }
     }
+
+    if (multi_family_uf2 && available_family_ids.size() > 1){
+        fos << "Loading family ID " << family_name(file_family_id) << "\n";
+    }
+
     auto file_access = multi_family_uf2 ? get_file_memory_access(0, false, &file_family_id) : get_file_memory_access(0);
     if (settings.offset_set && get_file_type() != filetype::bin && raw_access.get_model()->chip() == rp2040) {
         fail(ERROR_ARGS, "On RP2040, offset is only valid for BIN files");
