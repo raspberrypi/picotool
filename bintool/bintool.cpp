@@ -6,6 +6,7 @@
 #include <random>
 #include <cinttypes>
 #include <tuple>
+#include <set>
 
 #include "boot/picobin.h"
 #include <map>
@@ -364,6 +365,7 @@ block place_new_block(elf_file *elf, std::unique_ptr<block> &first_block, model_
 
 std::vector<std::unique_ptr<block>> get_all_blocks(elf_file *elf, std::unique_ptr<block> &first_block) {
     uint32_t next_block_addr = first_block->physical_addr + first_block->next_block_rel;
+    std::set<uint32_t> next_block_addrs = {next_block_addr};
     std::vector<std::unique_ptr<block>> all_blocks;
     while (true) {
         auto segment = elf->segment_from_physical_address(next_block_addr);
@@ -403,6 +405,13 @@ std::vector<std::unique_ptr<block>> get_all_blocks(elf_file *elf, std::unique_pt
         } else {
             DEBUG_LOG("Continue looping\n");
             next_block_addr = new_first_block->physical_addr + new_first_block->next_block_rel;
+            if (next_block_addrs.find(next_block_addr) != next_block_addrs.end()) {
+                fail(ERROR_UNKNOWN,
+                    "Block loop is not valid - contains a loop from %08x to %08x, but first block at %08x\n",
+                    (int)(new_first_block->physical_addr), (int)(next_block_addr), (int)(first_block->physical_addr)
+                );
+            }
+            next_block_addrs.insert(next_block_addr);
             all_blocks.push_back(std::move(new_first_block));
         }
     }
@@ -412,6 +421,7 @@ std::vector<std::unique_ptr<block>> get_all_blocks(elf_file *elf, std::unique_pt
 
 std::vector<std::unique_ptr<block>> get_all_blocks(std::vector<uint8_t> &bin, uint32_t storage_addr, std::unique_ptr<block> &first_block, get_more_bin_cb more_cb) {
     uint32_t next_block_addr = first_block->physical_addr + first_block->next_block_rel;
+    std::set<uint32_t> next_block_addrs = {next_block_addr};
     std::vector<std::unique_ptr<block>> all_blocks;
     uint32_t read_size = PICOBIN_MAX_BLOCK_SIZE;
     uint32_t current_bin_start = storage_addr;
@@ -454,6 +464,13 @@ std::vector<std::unique_ptr<block>> get_all_blocks(std::vector<uint8_t> &bin, ui
         } else {
             DEBUG_LOG("Continue looping\n");
             next_block_addr = new_first_block->physical_addr + new_first_block->next_block_rel;
+            if (next_block_addrs.find(next_block_addr) != next_block_addrs.end()) {
+                fail(ERROR_UNKNOWN,
+                    "Block loop is not valid - contains a loop from %08x to %08x, but first block at %08x\n",
+                    (int)(new_first_block->physical_addr), (int)(next_block_addr), (int)(first_block->physical_addr)
+                );
+            }
+            next_block_addrs.insert(next_block_addr);
             all_blocks.push_back(std::move(new_first_block));
         }
     }
