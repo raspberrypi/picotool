@@ -284,44 +284,11 @@ block place_new_block(elf_file *elf, std::unique_ptr<block> &first_block, model_
     } else {
         DEBUG_LOG("There is already a block loop\n");
         if (set_others_ignored) set_block_ignored(elf, first_block->physical_addr);
-        uint32_t next_block_addr = first_block->physical_addr + first_block->next_block_rel;
-        while (true) {
-            auto segment = elf->segment_from_physical_address(next_block_addr);
-            if (segment == nullptr) {
-                fail(ERROR_NOT_POSSIBLE, "The ELF file does not contain the next block address %x", next_block_addr);
-            }
-            auto data = elf->content(*segment);
-            auto offset = next_block_addr - segment->physical_address();
-            std::vector<uint32_t> words = lsb_bytes_to_words(data.begin() + offset, data.end());
-            if (words.front() != PICOBIN_BLOCK_MARKER_START) {
-                fail(ERROR_UNKNOWN, "Block loop is not valid - no block found at %08x\n", (int)(next_block_addr));
-            }
-            words.erase(words.begin());
-            DEBUG_LOG("Checking block at %x\n", next_block_addr);
-            for(auto next_item = words.begin(); next_item < words.end(); ) {
-                unsigned int size = item::decode_size(*next_item);
-                if ((uint8_t)*next_item == PICOBIN_BLOCK_ITEM_2BS_LAST) {
-                    if (size == next_item - words.begin()) {
-                        if (next_item < words.end() && next_item[2] == PICOBIN_BLOCK_MARKER_END) {
-                            DEBUG_LOG("is a valid block\n");
-                            new_first_block = block::parse(next_block_addr, next_item + 1, words.begin(), words.begin() + size);
-                            break;
-                        }
-                    }
-                } else {
-                    next_item += size;
-                }
-            }
-            if (new_first_block->physical_addr + new_first_block->next_block_rel == first_block->physical_addr) {
-                DEBUG_LOG("Found last block in block loop\n");
-                break;
-            } else {
-                DEBUG_LOG("Continue looping\n");
-                if (set_others_ignored) set_block_ignored(elf, new_first_block->physical_addr);
-                next_block_addr = new_first_block->physical_addr + new_first_block->next_block_rel;
-                new_first_block.reset();
-            }
+        auto all_blocks = get_all_blocks(elf, first_block);
+        for (auto &block : all_blocks) {
+            if (set_others_ignored) set_block_ignored(elf, block->physical_addr);
         }
+        new_first_block = std::move(all_blocks.back());
         set_next_block(elf, new_first_block, highest_address);
         new_block_addr = new_first_block->physical_addr + new_first_block->next_block_rel;
         loop_start_rel = first_block->physical_addr - new_block_addr;
@@ -519,6 +486,7 @@ block place_new_block(std::vector<uint8_t> &bin, uint32_t storage_addr, std::uni
         if (set_others_ignored) set_block_ignored(bin, storage_addr, first_block->physical_addr);
     } else {
         DEBUG_LOG("Ooh, there is already a block loop - lets find it's end\n");
+        if (set_others_ignored) set_block_ignored(bin, storage_addr, first_block->physical_addr);
         auto all_blocks = get_all_blocks(bin, storage_addr, first_block);
         for (auto &block : all_blocks) {
             if (set_others_ignored) set_block_ignored(bin, storage_addr, block->physical_addr);
