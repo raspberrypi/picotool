@@ -580,23 +580,14 @@ std::vector<const elf32_ph_entry *> elf_file::sorted_segments(void) {
 }
 
 void elf_file::store_squashed(model_t model, const std::vector<uint32_t> &pinned_addresses) {
-    uint32_t highest_ram_address = 0;
-    uint32_t highest_flash_address = 0;
-
     for(const auto &seg : sorted_segments()) {
         const uint32_t paddr = seg->physical_address();
         const uint32_t psize = seg->physical_size();
         if (psize == 0) continue;
-        if (paddr >= model->sram_start() && paddr < model->sram_striped_end()) {
-            highest_ram_address = std::max(paddr + psize, highest_ram_address);
-        } else if (paddr >=  model->flash_start() && paddr < model->flash_end()) {
-            highest_flash_address = std::max(paddr + psize, highest_flash_address);
+        if (paddr >= model->flash_start() && paddr < model->flash_end()) {
+            // cannot squash flash binaries
+            return;
         }
-    }
-
-    if (highest_flash_address != 0) {
-        // cannot squash flash binaries
-        return;
     }
 
     uint32_t last_seg_end = 0;

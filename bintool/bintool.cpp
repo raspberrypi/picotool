@@ -256,6 +256,8 @@ block place_new_block(elf_file *elf, std::unique_ptr<block> &first_block, model_
         if (psize == 0) continue;
         if (paddr >= model->sram_start() && paddr < model->sram_striped_end()) {
             highest_ram_address = std::max(paddr + psize, highest_ram_address);
+        } else if (paddr >= model->xip_sram_start() && paddr < model->xip_sram_end()) {
+            highest_ram_address = std::max(paddr + psize, highest_ram_address);
         } else if (paddr >=  model->flash_start() && paddr < model->flash_end()) {
             highest_flash_address = std::max(paddr + psize, highest_flash_address);
         }
@@ -459,6 +461,8 @@ block place_new_block(std::vector<uint8_t> &bin, uint32_t storage_addr, std::uni
     const uint32_t paddr = storage_addr;
     const uint32_t psize = bin.size();
     if (paddr >= model->sram_start() && paddr < model->sram_striped_end()) {
+        highest_ram_address = std::max(paddr + psize, highest_ram_address);
+    } else if (paddr >= model->xip_sram_start() && paddr < model->xip_sram_end()) {
         highest_ram_address = std::max(paddr + psize, highest_ram_address);
     } else if (paddr >=  model->flash_start() && paddr < model->flash_end()) {
         highest_flash_address = std::max(paddr + psize, highest_flash_address);
