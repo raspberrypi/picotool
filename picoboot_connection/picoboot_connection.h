@@ -16,13 +16,15 @@
 #include "boot/picoboot.h"
 #include "model.h"
 
-#define VENDOR_ID_RASPBERRY_PI 0x2e8au
-#define PRODUCT_ID_RP2040_USBBOOT 0x0003u
-#define PRODUCT_ID_PICOPROBE   0x0004u
-#define PRODUCT_ID_MICROPYTHON 0x0005u
-#define PRODUCT_ID_STDIO_USB   0x0009u
+#define VENDOR_ID_RASPBERRY_PI      0x2e8au
+#define PRODUCT_ID_RP2040_USBBOOT   0x0003u
+#define PRODUCT_ID_PICOPROBE        0x0004u
+#define PRODUCT_ID_MICROPYTHON      0x0005u
+#define PRODUCT_ID_STDIO_USB        0x0009u
 #define PRODUCT_ID_RP2040_STDIO_USB 0x000au
-#define PRODUCT_ID_RP2350_USBBOOT 0x000fu
+#define PRODUCT_ID_CIRCUITPYTHON    0x000bu
+#define PRODUCT_ID_DEBUGPROBE       0x000cu
+#define PRODUCT_ID_RP2350_USBBOOT   0x000fu
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,11 +35,16 @@ enum picoboot_device_result {
     dr_vidpid_bootrom_no_interface,
     dr_vidpid_bootrom_cant_connect,
     dr_vidpid_micropython,
+    dr_vidpid_circuitpython,
     dr_vidpid_picoprobe,
+    dr_vidpid_debugprobe,
+    dr_vidpid_debugprobe_cant_connect,
+    dr_vidpid_debugprobe_no_reset,
     dr_vidpid_unknown,
     dr_error,
-    dr_vidpid_stdio_usb,
-    dr_vidpid_stdio_usb_cant_connect,
+    dr_vidpid_usb_reset,
+    dr_vidpid_usb_reset_cant_connect,
+    dr_vidpid_cant_connect,
 };
 
 
