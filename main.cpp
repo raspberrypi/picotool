@@ -72,13 +72,6 @@ static __forceinline int __builtin_ctz(unsigned x) {
 }
 #endif
 
-// tsk namespace is polluted on windows
-#ifdef _WIN32
-#undef min
-#undef max
-
-#define _CRT_SECURE_NO_WARNINGS
-#endif
 
 // preprocessor macros
 #define STR_HELPER(x) #x
@@ -10142,13 +10135,6 @@ bool reboot_command::execute(device_map &devices) {
 #include <sys/ioctl.h>
 #endif
 
-// tsk namespace is polluted on windows
-#ifdef _WIN32
-#undef min
-#undef max
-
-#define _CRT_SECURE_NO_WARNINGS
-#endif
 
 static void sleep_ms(int ms) {
 #if defined(__unix__) || defined(__APPLE__)
