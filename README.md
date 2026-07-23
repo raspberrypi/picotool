@@ -44,40 +44,97 @@ SYNOPSIS:
     picotool bdev ls|mkdir|cp|rm|cat|format
 
 COMMANDS:
-    help        Show general help or help for a specific command
-    version     Display picotool version
+    help        Show general help, or help for a specific command or topic.
+    version     Display picotool version.
     info        Display information from the target device(s) or file.
                 Without any arguments, this will display basic information for all connected
-                RP-series devices in BOOTSEL mode
+                RP-series devices in BOOTSEL mode.
     config      Display or change program configuration settings from the target device(s) or
                 file.
     load        Load the program / memory range stored in a file onto the device.
     save        Save the program / memory stored in flash on the device to a file.
     verify      Check that the device contents match those in the file.
     erase       Erase the program / memory stored in flash on the device.
-    reboot      Reboot the device
+    reboot      Reboot the device.
     seal        Add final metadata to a binary, optionally including a hash and/or signature.
     encrypt     Encrypt the program.
-    partition   Commands related to RP2350 Partition Tables
-    uf2         Commands related to UF2 creation and status
-    otp         Commands related to the RP2350 OTP (One-Time-Programmable) Memory
+    partition   Commands related to RP2350 Partition Tables.
+    uf2         Commands related to UF2 creation and status.
+    otp         Commands related to the RP2350 OTP (One-Time-Programmable) Memory.
     coprodis    Post-process coprocessor instructions in disassembly files.
     link        Link multiple binaries into one block loop.
-    bdev        Commands related to embedded block devices
+    bdev        Commands related to embedded block devices.
 
-Use "picotool help <cmd>" for more info
+TOPICS:
+    device-selection   Options for Target Device Selection and Rebooting
+    family-ids         Valid Family IDs
+
+Use "picotool help <cmd>" or "picotool help <topic>" for more info
 ```
 
 Note commands that aren't acting on files require a device in BOOTSEL mode to be connected.
 
-## Links to documentation for `picotool` commands
-[`info`](#info) [`config`](#config) [`load`](#load) [`save`](#save) [`verify`](#verify) [`erase`](#erase) [`reboot`](#reboot) [`seal`](#seal) [`encrypt`](#encrypt) [`partition`](#partition) [`uf2`](#uf2) [`otp`](#otp) [`coprodis`](#coprodis) [`link`](#link) [`bdev`](#bdev)
+## Links to documentation for `picotool` commands and help topics
+[`version`](#version) [`info`](#info) [`config`](#config) [`load`](#load) [`save`](#save) [`verify`](#verify) [`erase`](#erase) [`reboot`](#reboot) [`seal`](#seal) [`encrypt`](#encrypt) [`partition`](#partition) [`uf2`](#uf2) [`otp`](#otp) [`coprodis`](#coprodis) [`link`](#link) [`bdev`](#bdev) [`device-selection`](#device-selection) [`family-ids`](#family-ids)
 
 ## Building & Installing
 
 If you don't want to build picotool yourself, you can find pre-built executables for Windows, macOS, and Linux in the [pico-sdk-tools](https://github.com/raspberrypi/pico-sdk-tools/releases) repository. Assuming you've extracted that archive to `<extract_location>` (with the actual picotool executable at `<extract_location>/picotool/picotool`), you can point the Pico SDK at this binary by setting the `picotool_DIR` environment variable to `<extract_location>/picotool`, or by passing `-Dpicotool_DIR=<extract_location>/picotool` to your `cmake` command or setting it in your `CMakeLists.txt` file.
 
 If you do wish to build picotool yourself, then see [Building](BUILDING.md#building) for build instructions. For the Pico SDK to find your picotool you will need to install it, the simplest way being to run `cmake --install .` - see [Installing](BUILDING.md#installing-so-the-pico-sdk-can-find-it) for more details and alternatives. **You cannot just copy the binary into your `PATH`, else the Pico SDK will not be able to locate it.**
+
+## version
+
+Displays the picotool version, and also allows checking compatibility with an expected `picotool` version, for example to check a newer `picotool` is backwards compatible with an older version.
+
+```text
+$ picotool help version
+VERSION:
+    Display picotool version.
+
+SYNOPSIS:
+    picotool version [-s] [<version>]
+
+OPTIONS:
+        -s, --semantic
+            Output semantic version number only
+        <version>
+            Check compatibility with version
+```
+
+The normal output is this format:
+```text
+$ picotool version
+picotool v2.3.0 (Linux, GNU-12.2.0, Release)
+```
+
+When built without libusb you get an additional message:
+```text
+$ picotool version
+picotool v2.3.0 (Linux, GNU-12.2.0, Release)
+
+This version of picotool was compiled without USB support. Some commands are not available.
+```
+
+The semantic output is:
+```text
+$ picotool version -s
+2.3.0
+```
+
+When checking compatibility with a compatible version (e.g. 2.2.0 with version 2.3.0):
+```text
+$ picotool version -s 2.2.0
+2.3.0
+```
+
+Or with an incompatible version (e.g. 2.4.0 with version 2.3.0), it will exit with error code `ERROR_INCOMPATIBLE` (-3):
+```text
+$ picotool version -s 2.4.0
+2.3.0
+ERROR: Version 2.4.0 not compatible with this software
+
+```
 
 ## info
 
@@ -92,7 +149,7 @@ $ picotool help info
 INFO:
     Display information from the target device(s) or file.
     Without any arguments, this will display basic information for all connected RP-series
-    devices in BOOTSEL mode
+    devices in BOOTSEL mode.
 
 SYNOPSIS:
     picotool info [-b] [-m] [-p] [-d] [--debug] [-l] [-a] [device-selection]
@@ -116,39 +173,12 @@ OPTIONS:
             Include all information
 
 TARGET SELECTION:
-    To target one or more connected RP-series device(s) in BOOTSEL mode (the default)
-        --bus <bus>
-            Filter devices by USB bus number
-        --address <addr>
-            Filter devices by USB device address
-        --vid <vid>
-            Filter by vendor id
-        --pid <pid>
-            Filter by product id
-        --ser <ser>
-            Filter by serial number
-        --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid
-            with an RP2040 on Windows, and is ignored on other operating systems
-        -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be rebooted back to application mode
-        -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be left connected and accessible to picotool, but
-            without the USB drive mounted
-        --bootsel-led <gpio>
-            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
-            BOOTSEL mode
-        --bootsel-led-active-low
-            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
+    To target one or more connected RP-series device(s) (the default)
+        See "picotool help device-selection" for available options
     To target a file
         <filename>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
 ```
 
@@ -225,47 +255,18 @@ SYNOPSIS:
     picotool config [-s <key> <value>] [-g <group>] <filename> [-t <type>]
 
 OPTIONS:
-        <key>
-            Variable name
-        <value>
-            New value
-        -g <group>
+        -s, --set <key> <value>
+            Set config variable name to new value
+        -g, --group <group>
             Filter by feature group
 
 TARGET SELECTION:
-    To target one or more connected RP-series device(s) in BOOTSEL mode (the default)
-        --bus <bus>
-            Filter devices by USB bus number
-        --address <addr>
-            Filter devices by USB device address
-        --vid <vid>
-            Filter by vendor id
-        --pid <pid>
-            Filter by product id
-        --ser <ser>
-            Filter by serial number
-        --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid
-            with an RP2040 on Windows, and is ignored on other operating systems
-        -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be rebooted back to application mode
-        -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be left connected and accessible to picotool, but
-            without the USB drive mounted
-        --bootsel-led <gpio>
-            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
-            BOOTSEL mode
-        --bootsel-led-active-low
-            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
+    To target one or more connected RP-series device(s) (the default)
+        See "picotool help device-selection" for available options
     To target a file
         <filename>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
 ```
 
@@ -312,17 +313,13 @@ SYNOPSIS:
                 [-v] [-x] <filename> [-t <type>] [-o <offset>] [device-selection]
 
 OPTIONS:
-    Post load actions
+    Load options
         --ignore-partitions
             When writing flash data, ignore the partition table and write to absolute space
-        --family
+        --family <family_id>
             Specify the family ID of the file to load
-        <family_id>
-            family ID to use for load
-        -p, --partition
+        -p, --partition <partition>
             Specify the partition to load into
-        <partition>
-            partition to load into
         -n, --no-overwrite
             When writing flash data, do not overwrite an existing program in flash. If picotool
             cannot determine the size/presence of the program in flash, the command fails
@@ -341,42 +338,13 @@ OPTIONS:
     File to load from
         <filename>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
     BIN file options
-        -o, --offset
-            Specify the load address for a BIN file
-        <offset>
-            Load offset (memory address; default 0x10000000)
+        -o, --offset <offset>
+            Specify the load address for a BIN file (memory address; default 0x10000000)
     Target device selection
-        --bus <bus>
-            Filter devices by USB bus number
-        --address <addr>
-            Filter devices by USB device address
-        --vid <vid>
-            Filter by vendor id
-        --pid <pid>
-            Filter by product id
-        --ser <ser>
-            Filter by serial number
-        --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid
-            with an RP2040 on Windows, and is ignored on other operating systems
-        -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be rebooted back to application mode
-        -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be left connected and accessible to picotool, but
-            without the USB drive mounted
-        --bootsel-led <gpio>
-            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
-            BOOTSEL mode
-        --bootsel-led-active-low
-            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
+        See "picotool help device-selection" for available options
 ```
 
 e.g.
@@ -417,44 +385,15 @@ OPTIONS:
     Other
         -v, --verify
             Verify the data was saved correctly
-        --family
+        --family <family_id>
             Specify the family ID to save the file as
-        <family_id>
-            family ID to save file as
     File to save to
         <filename>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
     Source device selection
-        --bus <bus>
-            Filter devices by USB bus number
-        --address <addr>
-            Filter devices by USB device address
-        --vid <vid>
-            Filter by vendor id
-        --pid <pid>
-            Filter by product id
-        --ser <ser>
-            Filter by serial number
-        --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid
-            with an RP2040 on Windows, and is ignored on other operating systems
-        -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be rebooted back to application mode
-        -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be left connected and accessible to picotool, but
-            without the USB drive mounted
-        --bootsel-led <gpio>
-            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
-            BOOTSEL mode
-        --bootsel-led-active-low
-            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
+        See "picotool help device-selection" for available options
 ```
 
 e.g. first looking at what is on the device...
@@ -498,48 +437,16 @@ OPTIONS:
     The file to compare against
         <filename>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
     Address options
-        -r, --range
-            Compare a sub range of memory only
-        <from>
-            The lower address bound in hex
-        <to>
-            The upper address bound in hex
-        -o, --offset
-            Specify the load address when comparing with a BIN file
-        <offset>
-            Load offset (memory address; default 0x10000000)
+        -r, --range <from> <to>
+            Compare a sub range of memory only (address bounds in hex)
+        -o, --offset <offset>
+            Specify the load address (memory address; default 0x10000000) when comparing with a
+            BIN file
     Target device selection
-        --bus <bus>
-            Filter devices by USB bus number
-        --address <addr>
-            Filter devices by USB device address
-        --vid <vid>
-            Filter by vendor id
-        --pid <pid>
-            Filter by product id
-        --ser <ser>
-            Filter by serial number
-        --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid
-            with an RP2040 on Windows, and is ignored on other operating systems
-        -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be rebooted back to application mode
-        -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be left connected and accessible to picotool, but
-            without the USB drive mounted
-        --bootsel-led <gpio>
-            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
-            BOOTSEL mode
-        --bootsel-led-active-low
-            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
+        See "picotool help device-selection" for available options
 ```
 
 ## erase
@@ -572,35 +479,8 @@ OPTIONS:
             The lower address bound in hex
         <to>
             The upper address bound in hex
-    Source device selection
-        --bus <bus>
-            Filter devices by USB bus number
-        --address <addr>
-            Filter devices by USB device address
-        --vid <vid>
-            Filter by vendor id
-        --pid <pid>
-            Filter by product id
-        --ser <ser>
-            Filter by serial number
-        --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid
-            with an RP2040 on Windows, and is ignored on other operating systems
-        -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be rebooted back to application mode
-        -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be left connected and accessible to picotool, but
-            without the USB drive mounted
-        --bootsel-led <gpio>
-            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
-            BOOTSEL mode
-        --bootsel-led-active-low
-            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
+    Target device selection
+        See "picotool help device-selection" for available options
 ```
 
 e.g. first looking at what is on the device...
@@ -650,7 +530,7 @@ Partition 1
 ```text
 $ picotool help reboot
 REBOOT:
-    Reboot the device
+    Reboot the device.
 
 SYNOPSIS:
     picotool reboot [-a] [-u] [-g <partition>] [-c <cpu>] [device-selection]
@@ -661,39 +541,12 @@ OPTIONS:
             Reboot back into the application (this is the default)
         -u, --usb
             Reboot back into BOOTSEL mode
-        -g <partition>
+        -g, --diagnostic <partition>
             Select diagnostic partition
-        -c <cpu>
+        -c, --cpu <cpu>
             Select arm | riscv CPU (if possible)
     Selecting the device to reboot
-        --bus <bus>
-            Filter devices by USB bus number
-        --address <addr>
-            Filter devices by USB device address
-        --vid <vid>
-            Filter by vendor id
-        --pid <pid>
-            Filter by product id
-        --ser <ser>
-            Filter by serial number
-        --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid
-            with an RP2040 on Windows, and is ignored on other operating systems
-        -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be rebooted back to application mode
-        -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be left connected and accessible to picotool, but
-            without the USB drive mounted
-        --bootsel-led <gpio>
-            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
-            BOOTSEL mode
-        --bootsel-led-active-low
-            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
+        See "picotool help device-selection" for available options
 ```
 
 ## seal
@@ -747,17 +600,15 @@ OPTIONS:
     File to load from
         <infile>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
     BIN file options
-        -o, --offset
-            Specify the load address for a BIN file
-        <offset>
-            Load offset (memory address; default 0x10000000)
+        -o, --offset <offset>
+            Specify the load address for a BIN file (memory address; default 0x10000000)
     File to save to
         <outfile>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
 ```
 
@@ -805,10 +656,9 @@ OPTIONS:
             Use ~180MHz ROSC configuration for embedded bootloader
         --use-mbedtls
             Use MbedTLS implementation of embedded bootloader (faster but less secure)
-        --otp-key-page
-            Specify the OTP page storing the AES key (IV salt is stored on the next page)
-        <page>
-            OTP page (default 29)
+        --otp-key-page <page>
+            Specify the OTP page storing the AES key (default 29; IV salt is stored on the next
+            page)
         <aes_key>
             AES Key Share or AES Key
         <iv_salt>
@@ -829,23 +679,40 @@ OPTIONS:
     File to load from
         <infile>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
     BIN file options
-        -o, --offset
-            Specify the load address for a BIN file
-        <offset>
-            Load offset (memory address; default 0x10000000)
+        -o, --offset <offset>
+            Specify the load address for a BIN file (memory address; default 0x10000000)
     File to save to
         <outfile>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
 ```
 
 ## partition
 
 The `partition` commands allow you to interact with the partition tables on RP2350 devices, and also create them.
+
+```text
+$ picotool help partition
+PARTITION:
+    Commands related to RP2350 Partition Tables.
+
+SYNOPSIS:
+    picotool partition info [-m <family_id>] [device-selection]
+    picotool partition create [--quiet] [--verbose] <infile> <outfile> [-t <type>] [[-o
+                <offset>] [--family <family_id>]] [<bootloader>] [-t <type>] [[--sign
+                <keyfile>] [-t <type>] [--no-hash] [--singleton] [--no-btstack-flash-bank]]
+                [[--abs-block] [<abs_block_loc>]]
+
+SUB COMMANDS:
+    info     Print the device's partition table.
+    create   Create a partition table from json.
+
+Use "picotool help partition <subcmd>" for more info
+```
 
 ### info
 
@@ -858,37 +725,10 @@ SYNOPSIS:
     picotool partition info [-m <family_id>] [device-selection]
 
 OPTIONS:
-        -m <family_id>
+        -m, --family <family_id>
             family ID (will show target partition for said family)
     Target device selection
-        --bus <bus>
-            Filter devices by USB bus number
-        --address <addr>
-            Filter devices by USB device address
-        --vid <vid>
-            Filter by vendor id
-        --pid <pid>
-            Filter by product id
-        --ser <ser>
-            Filter by serial number
-        --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid
-            with an RP2040 on Windows, and is ignored on other operating systems
-        -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be rebooted back to application mode
-        -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be left connected and accessible to picotool, but
-            without the USB drive mounted
-        --bootsel-led <gpio>
-            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
-            BOOTSEL mode
-        --bootsel-led-active-low
-            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
+        See "picotool help device-selection" for available options
 ```
 
 ```text
@@ -917,7 +757,7 @@ By default, all partition tables are hashed, and you can also sign them. The sch
 ```text
 $ picotool help partition create
 PARTITION CREATE:
-    Create a partition table from json
+    Create a partition table from json.
 
 SYNOPSIS:
     picotool partition create [--quiet] [--verbose] <infile> <outfile> [-t <type>] [[-o
@@ -935,26 +775,22 @@ OPTIONS:
     output file
         <outfile>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
     UF2 output options
-        -o, --offset
-            Specify the load address for UF2 file output
-        <offset>
-            Load offset (memory address; default 0x10000000)
-        --family
-            Specify the family if for UF2 file output
-        <family_id>
-            family ID for UF2 (default absolute)
+        -o, --offset <offset>
+            Specify the load address for UF2 file output (memory address; default 0x10000000)
+        --family <family_id>
+            Specify the family id for UF2 file output (default absolute)
     embed partition table into bootloader ELF
         <bootloader>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (elf) explicitly, ignoring file extension
     Partition Table Options
         --sign <keyfile>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (pem) explicitly, ignoring file extension
         --no-hash
             Don't hash the partition table
@@ -972,6 +808,28 @@ OPTIONS:
 ## uf2
 
 The `uf2` commands allow for creation of UF2s, and can provide information if a UF2 download has failed.
+
+```text
+$ picotool help uf2
+UF2:
+    Commands related to UF2 creation and status.
+
+SYNOPSIS:
+    picotool uf2 convert [--quiet] [--verbose] <infile> [-t <type>] <outfile> [-t <type>] [-o
+                <offset>] [--family <family_id>] [--platform <platform>] [[--abs-block]
+                [<abs_block_loc>]]
+    picotool uf2 combine [--quiet] [--verbose] <infile1> [-t <type>] <infile2> [-t <type>]
+                <outfile> [-t <type>] [--family <family_id>] [--offset <offset>] [--partition
+                <partition>] [[--abs-block] [<abs_block_loc>]]
+    picotool uf2 info [device-selection]
+
+SUB COMMANDS:
+    convert   Convert ELF/BIN to UF2.
+    combine   Combine multiple UF2 files.
+    info      Print info about UF2 download. (RP2350 only)
+
+Use "picotool help uf2 <subcmd>" for more info
+```
 
 ### convert
 
@@ -995,28 +853,22 @@ OPTIONS:
     File to load from
         <infile>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
     File to save UF2 to
         <outfile>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2) explicitly, ignoring file extension
     Packaging Options
-        -o, --offset
-            Specify the load address
-        <offset>
-            Load offset (memory address; default 0x10000000 for BIN file)
+        -o, --offset <offset>
+            Specify the load address (memory address; default 0x10000000 for BIN file)
     UF2 Family options
-        --family
-            Specify the family ID
-        <family_id>
-            family ID for UF2
+        --family <family_id>
+            Specify the family ID for UF2
     Platform options
-        --platform
-            Optional platform for memory-address validation
-        <platform>
-            platform to use (eg rp2040, rp2350)
+        --platform <platform>
+            Optional platform for memory-address validation (eg rp2040, rp2350)
     Errata RP2350-E10 Fix
         --abs-block
             Add an absolute block
@@ -1046,33 +898,27 @@ OPTIONS:
     First file to combine
         <infile1>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2) explicitly, ignoring file extension
     Second file to combine
         <infile2>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2) explicitly, ignoring file extension
     File to save output to
         <outfile>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2) explicitly, ignoring file extension
     UF2 Family options
-        --family
-            Specify the family ID
-        <family_id>
-            family ID for combined UF2 (defaults to first one)
+        --family <family_id>
+            Specify the family ID for combined UF2 (defaults to first one)
     Offset options
-        --offset
+        --offset <offset>
             Offset second UF2 by amount
-        <offset>
-            offset amount (default to 0)
     Partition options
-        --partition
+        --partition <partition>
             Place second UF2 in partition (first UF2 must contain a partition table)
-        <partition>
-            partition number (default to 0)
     Errata RP2350-E10 Fix
         --abs-block
             Add an absolute block
@@ -1124,46 +970,19 @@ $ picotool load -x combined.uf2
 
 ### info
 
-This command reads the information on a device about why a UF2 download has failed. It will only give information if the most recent download has failed.
+This command reads the information on an RP2350 device about why a UF2 download has failed. It will only give information if the most recent download has failed.
 
 ```text
 $ picotool help uf2 info
 UF2 INFO:
-    Print info about UF2 download.
+    Print info about UF2 download. (RP2350 only)
 
 SYNOPSIS:
     picotool uf2 info [device-selection]
 
 OPTIONS:
     Target device selection
-        --bus <bus>
-            Filter devices by USB bus number
-        --address <addr>
-            Filter devices by USB device address
-        --vid <vid>
-            Filter by vendor id
-        --pid <pid>
-            Filter by product id
-        --ser <ser>
-            Filter by serial number
-        --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid
-            with an RP2040 on Windows, and is ignored on other operating systems
-        -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be rebooted back to application mode
-        -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be left connected and accessible to picotool, but
-            without the USB drive mounted
-        --bootsel-led <gpio>
-            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
-            BOOTSEL mode
-        --bootsel-led-active-low
-            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
+        See "picotool help device-selection" for available options
 ```
 
 ## otp
@@ -1178,7 +997,7 @@ For the `list`, `set`, `get` and `load` commands, you can define your own OTP la
 ```text
 $ picotool help otp
 OTP:
-    Commands related to the RP2350 OTP (One-Time-Programmable) Memory
+    Commands related to the RP2350 OTP (One-Time-Programmable) Memory.
 
 SYNOPSIS:
     picotool otp get [-c <copies>] [-r] [-e] [-n] [-i <filename>] [device-selection] [-z]
@@ -1187,7 +1006,7 @@ SYNOPSIS:
                 [device-selection]
     picotool otp load [-r] [-e] [-s <row>] [-i <filename>] <filename> [-t <type>]
                 [device-selection]
-    picotool otp white-label -s <row> <filename> [device-selection]
+    picotool otp white-label [-s <row>] <filename> [device-selection]
     picotool otp permissions <filename> [--led <pin>] [--hash] [--sign] [<key>]
                 [device-selection]
     picotool otp dump [-r] [-e] [-p] [--output <filename>] [device-selection]
@@ -1195,24 +1014,26 @@ SYNOPSIS:
     picotool otp list [-p] [-n] [-f] [-i <filename>] [<selector>..]
 
 SUB COMMANDS:
-    get           Get the value of one or more OTP registers/fields (RP2350 only)
-    set           Set the value of an OTP row/field (RP2350 only)
+    get           Get the value of one or more OTP registers/fields. (RP2350 only)
+    set           Set the value of an OTP row/field. (RP2350 only)
     load          Load the row range stored in a file into OTP and verify. Data is 2 bytes/row
                   for ECC, 4 bytes/row for raw (MSB is ignored). (RP2350 only)
-    white-label   Set the white labelling values in OTP (RP2350 only)
-    permissions   Set the OTP access permissions (RP2350 only)
-    dump          Dump entire OTP (RP2350 only)
-    list          List matching known registers/fields
+    white-label   Set the white labelling values in OTP. (RP2350 only)
+    permissions   Set the OTP access permissions. (RP2350 only)
+    dump          Dump entire OTP. (RP2350 only)
+    list          List matching known registers/fields.
+
+Use "picotool help otp <subcmd>" for more info
 ```
 
-### set/get
+### get/set
 
-These commands will set/get specific rows of OTP. By default, they will write/read all redundant rows, but this can be overridden with the `-c` argument
+These commands will get/set specific rows of OTP. By default, they will read/write all redundant rows, but this can be overridden with the `-c` argument
 
 ```text
 $ picotool help otp get
 OTP GET:
-    Get the value of one or more OTP registers/fields
+    Get the value of one or more OTP registers/fields. (RP2350 only)
 
 SYNOPSIS:
     picotool otp get [-c <copies>] [-r] [-e] [-n] [-i <filename>] [device-selection] [-z]
@@ -1220,7 +1041,7 @@ SYNOPSIS:
 
 OPTIONS:
     Row/field options
-        -c <copies>
+        -c, --copies <copies>
             Read multiple redundant values
         -r, --raw
             Get raw 24-bit values
@@ -1228,7 +1049,7 @@ OPTIONS:
             Use error correction
         -n, --no-descriptions
             Don't show descriptions
-        -i <filename>
+        -i, --include <filename>
             Include extra otp definition
     Row/Field Selection
         -z, --fuzzy
@@ -1252,40 +1073,13 @@ OPTIONS:
 
 TARGET SELECTION:
     Target device selection
-        --bus <bus>
-            Filter devices by USB bus number
-        --address <addr>
-            Filter devices by USB device address
-        --vid <vid>
-            Filter by vendor id
-        --pid <pid>
-            Filter by product id
-        --ser <ser>
-            Filter by serial number
-        --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid
-            with an RP2040 on Windows, and is ignored on other operating systems
-        -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be rebooted back to application mode
-        -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be left connected and accessible to picotool, but
-            without the USB drive mounted
-        --bootsel-led <gpio>
-            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
-            BOOTSEL mode
-        --bootsel-led-active-low
-            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
+        See "picotool help device-selection" for available options
 ```
 
 ```text
 $ picotool help otp set
 OTP SET:
-    Set the value of an OTP row/field
+    Set the value of an OTP row/field. (RP2350 only)
 
 SYNOPSIS:
     picotool otp set [-c <copies>] [-r] [-e] [-s] [-i <filename>] [-z] <selector> <value>
@@ -1293,7 +1087,7 @@ SYNOPSIS:
 
 OPTIONS:
     Redundancy/Error Correction Overrides
-        -c <copies>
+        -c, --copies <copies>
             Write multiple redundant values
         -r, --raw
             Set raw 24-bit values
@@ -1301,7 +1095,7 @@ OPTIONS:
             Use error correction
         -s, --set-bits
             Set bits only
-        -i <filename>
+        -i, --include <filename>
             Include extra otp definition
         <value>
             The value to set
@@ -1325,34 +1119,7 @@ OPTIONS:
 
 TARGET SELECTION:
     Target device selection
-        --bus <bus>
-            Filter devices by USB bus number
-        --address <addr>
-            Filter devices by USB device address
-        --vid <vid>
-            Filter by vendor id
-        --pid <pid>
-            Filter by product id
-        --ser <ser>
-            Filter by serial number
-        --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid
-            with an RP2040 on Windows, and is ignored on other operating systems
-        -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be rebooted back to application mode
-        -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be left connected and accessible to picotool, but
-            without the USB drive mounted
-        --bootsel-led <gpio>
-            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
-            BOOTSEL mode
-        --bootsel-led-active-low
-            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
+        See "picotool help device-selection" for available options
 ```
 
 ### load
@@ -1363,7 +1130,7 @@ This command allows loading of a range of OTP rows onto the device. The source c
 $ picotool help otp load
 OTP LOAD:
     Load the row range stored in a file into OTP and verify. Data is 2 bytes/row for ECC, 4
-    bytes/row for raw (MSB is ignored).
+    bytes/row for raw (MSB is ignored). (RP2350 only)
 
 SYNOPSIS:
     picotool otp load [-r] [-e] [-s <row>] [-i <filename>] <filename> [-t <type>]
@@ -1375,44 +1142,17 @@ OPTIONS:
             Set raw 24-bit values. This is the default for BIN files
         -e, --ecc
             Use error correction
-        -s <row>
+        -s, --start_row <row>
             Start row to load at (note use 0x for hex)
-        -i <filename>
+        -i, --include <filename>
             Include extra otp definition
     File to load row(s) from
         <filename>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (json | bin) explicitly, ignoring file extension
     Target device selection
-        --bus <bus>
-            Filter devices by USB bus number
-        --address <addr>
-            Filter devices by USB device address
-        --vid <vid>
-            Filter by vendor id
-        --pid <pid>
-            Filter by product id
-        --ser <ser>
-            Filter by serial number
-        --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid
-            with an RP2040 on Windows, and is ignored on other operating systems
-        -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be rebooted back to application mode
-        -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be left connected and accessible to picotool, but
-            without the USB drive mounted
-        --bootsel-led <gpio>
-            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
-            BOOTSEL mode
-        --bootsel-led-active-low
-            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
+        See "picotool help device-selection" for available options
 ```
 
 For example, if you wish to sign a binary and then test secure boot with it, you can run the following set of commands:
@@ -1431,43 +1171,19 @@ This can be configured from a JSON file, an example of which is in [sample-wl.js
 ```text
 $ picotool help otp white-label
 OTP WHITE-LABEL:
-    Set the white labelling values in OTP
+    Set the white labelling values in OTP. (RP2350 only)
 
 SYNOPSIS:
-    picotool otp white-label -s <row> <filename> [device-selection]
+    picotool otp white-label [-s <row>] <filename> [device-selection]
 
 OPTIONS:
+    Row options
+        -s, --start_row <row>
+            Start row for white label struct (default 0x100) (note use 0x for hex)
         <filename>
             JSON file with white labelling values
     Target device selection
-        --bus <bus>
-            Filter devices by USB bus number
-        --address <addr>
-            Filter devices by USB device address
-        --vid <vid>
-            Filter by vendor id
-        --pid <pid>
-            Filter by product id
-        --ser <ser>
-            Filter by serial number
-        --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid
-            with an RP2040 on Windows, and is ignored on other operating systems
-        -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be rebooted back to application mode
-        -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be left connected and accessible to picotool, but
-            without the USB drive mounted
-        --bootsel-led <gpio>
-            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
-            BOOTSEL mode
-        --bootsel-led-active-low
-            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
+        See "picotool help device-selection" for available options
 ```
 
 ```text
@@ -1510,7 +1226,7 @@ Device Descriptor:
 
 ### permissions
 
-This command will run a binary on your device in order to set the OTP permissions, as these are not directly accessible from `picotool` due to errata RP2350-E15 on RP2350 A2. 
+This command will run a binary on your device in order to set the OTP permissions, which may not be accessible in BOOTSEL mode. For example on RP2350 A2, the permissions for pages 32-63 are not writeable from BOOTSEL mode due to errata RP2350-E15. You may also have previously configured the permissions to block writes in BOOTSEL mode using `LOCK_BL`, but now wish to lock them down further.
 Because it runs a binary, the binary needs to be signed if secure boot is enabled. The binary will light an LED when running, which
 can be configured using the `--led` argument. You can define your OTP permissions in a json file, an example of which
 is in [sample-permissions.json](json/sample-permissions.json). The schema for this JSON file is [here](json/schemas/permissions-schema.json)
@@ -1518,7 +1234,7 @@ is in [sample-permissions.json](json/sample-permissions.json). The schema for th
 ```text
 $ picotool help otp permissions
 OTP PERMISSIONS:
-    Set the OTP access permissions
+    Set the OTP access permissions. (RP2350 only)
 
 SYNOPSIS:
     picotool otp permissions <filename> [--led <pin>] [--hash] [--sign] [<key>]
@@ -1537,34 +1253,7 @@ OPTIONS:
         <key>
             Key file (.pem)
     Target device selection
-        --bus <bus>
-            Filter devices by USB bus number
-        --address <addr>
-            Filter devices by USB device address
-        --vid <vid>
-            Filter by vendor id
-        --pid <pid>
-            Filter by product id
-        --ser <ser>
-            Filter by serial number
-        --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid
-            with an RP2040 on Windows, and is ignored on other operating systems
-        -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be rebooted back to application mode
-        -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be left connected and accessible to picotool, but
-            without the USB drive mounted
-        --bootsel-led <gpio>
-            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
-            BOOTSEL mode
-        --bootsel-led-active-low
-            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
+        See "picotool help device-selection" for available options
 ```
 
 ```text
@@ -1594,7 +1283,7 @@ This command will read the entire OTP contents and print it out as hex.
 ```text
 $ picotool help otp dump
 OTP DUMP:
-    Dump entire OTP
+    Dump entire OTP. (RP2350 only)
 
 SYNOPSIS:
     picotool otp dump [-r] [-e] [-p] [--output <filename>] [device-selection]
@@ -1613,38 +1302,11 @@ OPTIONS:
 
 TARGET SELECTION:
     To dump the contents of a target device
-        --bus <bus>
-            Filter devices by USB bus number
-        --address <addr>
-            Filter devices by USB device address
-        --vid <vid>
-            Filter by vendor id
-        --pid <pid>
-            Filter by product id
-        --ser <ser>
-            Filter by serial number
-        --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid
-            with an RP2040 on Windows, and is ignored on other operating systems
-        -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be rebooted back to application mode
-        -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be left connected and accessible to picotool, but
-            without the USB drive mounted
-        --bootsel-led <gpio>
-            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
-            BOOTSEL mode
-        --bootsel-led-active-low
-            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
+        See "picotool help device-selection" for available options
     To dump the contents of an OTP JSON file
         <input>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (json) explicitly, ignoring file extension
 ```
 
@@ -1655,7 +1317,7 @@ This command will list all the defined OTP rows & fields. You can list specific 
 ```text
 $ picotool help otp list
 OTP LIST:
-    List matching known registers/fields
+    List matching known registers/fields.
 
 SYNOPSIS:
     picotool otp list [-p] [-n] [-f] [-i <filename>] [<selector>..]
@@ -1668,7 +1330,7 @@ OPTIONS:
             Don't show descriptions
         -f, --field-descriptions
             Show all field descriptions
-        -i <filename>
+        -i, --include <filename>
             Include extra otp definition
         <selector>
             The row/field selector, each of which can select a whole row:
@@ -1729,17 +1391,17 @@ OPTIONS:
             Don't print any output
         --verbose
             Print verbose output
-        -p <pad>
+        -p, --pad <pad>
             Specify alignment to pad to, defaults to 0x1000
     File to write to
         <outfile>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2 | bin) explicitly, ignoring file extension
     Files to link
         <infile1>
             The file name
-        -t <type>
+        -t, --type <type>
             Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
         <infile2>
             The file name
@@ -1754,7 +1416,7 @@ The `bdev` commands are for interacting with block devices in Flash. The block d
 ```text
 $ picotool help bdev
 BDEV:
-    Commands related to embedded block devices
+    Commands related to embedded block devices.
 
 SYNOPSIS:
     picotool bdev ls [<dirname>] [-r] [-p <partition number>] [--partition-name <partition
@@ -1777,13 +1439,15 @@ SYNOPSIS:
                 [--force-writeable] [device-selection]
 
 SUB COMMANDS:
-    ls       List contents of the block device
-    mkdir    Create directory on the block device
+    ls       List contents of the block device.
+    mkdir    Create directory on the block device.
     cp       Copy file to/from the block device - use :filename to indicate files on the device
-             (eg `cp main.py :main.py` to upload to the device)
-    rm       Delete a file or an empty directory on the block device
-    cat      Print contents of file on the block device
-    format   Format the block device
+             (eg `cp main.py :main.py` to upload to the device).
+    rm       Delete a file or an empty directory on the block device.
+    cat      Print contents of file on the block device.
+    format   Format the block device.
+
+Use "picotool help bdev <subcmd>" for more info
 ```
 
 ### ls
@@ -1793,7 +1457,7 @@ List contents of the block device
 ```text
 $ picotool help bdev ls
 BDEV LS:
-    List contents of the block device
+    List contents of the block device.
 
 SYNOPSIS:
     picotool bdev ls [<dirname>] [-r] [-p <partition number>] [--partition-name <partition
@@ -1806,22 +1470,14 @@ OPTIONS:
         -r, --recursive
             List files in directories recursively
     Block device options
-        -p, --partition-number
+        -p, --partition-number <partition number>
             Partition number to use as block device
-        <partition number>
-            partition number
-        --partition-name
+        --partition-name <partition name>
             Partition name to use as block device
-        <partition name>
-            partition name
-        --partition-id
+        --partition-id <partition id>
             Partition ID to use as block device
-        <partition id>
-            partition id
-        --filesystem
-            Specify filesystem to use
-        <fs>
-            littlefs|fatfs
+        --filesystem <fs>
+            Specify filesystem to use (littlefs|fatfs)
         --force-formattable
             Allow formatting, even if the block device is not marked as fomattable
         --force-writeable
@@ -1829,34 +1485,7 @@ OPTIONS:
         --format
             Format the drive if necessary (may result in data loss)
     Target device selection
-        --bus <bus>
-            Filter devices by USB bus number
-        --address <addr>
-            Filter devices by USB device address
-        --vid <vid>
-            Filter by vendor id
-        --pid <pid>
-            Filter by product id
-        --ser <ser>
-            Filter by serial number
-        --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid
-            with an RP2040 on Windows, and is ignored on other operating systems
-        -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be rebooted back to application mode
-        -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be left connected and accessible to picotool, but
-            without the USB drive mounted
-        --bootsel-led <gpio>
-            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
-            BOOTSEL mode
-        --bootsel-led-active-low
-            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
+        See "picotool help device-selection" for available options
 ```
 
 ### mkdir
@@ -1866,7 +1495,7 @@ Create directory on the block device
 ```text
 $ picotool help bdev mkdir
 BDEV MKDIR:
-    Create directory on the block device
+    Create directory on the block device.
 
 SYNOPSIS:
     picotool bdev mkdir <dirname> [-p <partition number>] [--partition-name <partition name>]
@@ -1877,22 +1506,14 @@ OPTIONS:
         <dirname>
             The directory name
     Block device options
-        -p, --partition-number
+        -p, --partition-number <partition number>
             Partition number to use as block device
-        <partition number>
-            partition number
-        --partition-name
+        --partition-name <partition name>
             Partition name to use as block device
-        <partition name>
-            partition name
-        --partition-id
+        --partition-id <partition id>
             Partition ID to use as block device
-        <partition id>
-            partition id
-        --filesystem
-            Specify filesystem to use
-        <fs>
-            littlefs|fatfs
+        --filesystem <fs>
+            Specify filesystem to use (littlefs|fatfs)
         --force-formattable
             Allow formatting, even if the block device is not marked as fomattable
         --force-writeable
@@ -1900,34 +1521,7 @@ OPTIONS:
         --format
             Format the drive if necessary (may result in data loss)
     Target device selection
-        --bus <bus>
-            Filter devices by USB bus number
-        --address <addr>
-            Filter devices by USB device address
-        --vid <vid>
-            Filter by vendor id
-        --pid <pid>
-            Filter by product id
-        --ser <ser>
-            Filter by serial number
-        --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid
-            with an RP2040 on Windows, and is ignored on other operating systems
-        -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be rebooted back to application mode
-        -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be left connected and accessible to picotool, but
-            without the USB drive mounted
-        --bootsel-led <gpio>
-            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
-            BOOTSEL mode
-        --bootsel-led-active-low
-            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
+        See "picotool help device-selection" for available options
 ```
 
 ### cp
@@ -1939,7 +1533,7 @@ Copy file to/from the block device - use :filename to indicate files on the devi
 $ picotool help bdev cp
 BDEV CP:
     Copy file to/from the block device - use :filename to indicate files on the device (eg `cp
-    main.py :main.py` to upload to the device)
+    main.py :main.py` to upload to the device).
 
 SYNOPSIS:
     picotool bdev cp <src> <dest> [-p <partition number>] [--partition-name <partition name>]
@@ -1952,22 +1546,14 @@ OPTIONS:
         <dest>
             The file name
     Block device options
-        -p, --partition-number
+        -p, --partition-number <partition number>
             Partition number to use as block device
-        <partition number>
-            partition number
-        --partition-name
+        --partition-name <partition name>
             Partition name to use as block device
-        <partition name>
-            partition name
-        --partition-id
+        --partition-id <partition id>
             Partition ID to use as block device
-        <partition id>
-            partition id
-        --filesystem
-            Specify filesystem to use
-        <fs>
-            littlefs|fatfs
+        --filesystem <fs>
+            Specify filesystem to use (littlefs|fatfs)
         --force-formattable
             Allow formatting, even if the block device is not marked as fomattable
         --force-writeable
@@ -1975,34 +1561,7 @@ OPTIONS:
         --format
             Format the drive if necessary (may result in data loss)
     Target device selection
-        --bus <bus>
-            Filter devices by USB bus number
-        --address <addr>
-            Filter devices by USB device address
-        --vid <vid>
-            Filter by vendor id
-        --pid <pid>
-            Filter by product id
-        --ser <ser>
-            Filter by serial number
-        --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid
-            with an RP2040 on Windows, and is ignored on other operating systems
-        -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be rebooted back to application mode
-        -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be left connected and accessible to picotool, but
-            without the USB drive mounted
-        --bootsel-led <gpio>
-            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
-            BOOTSEL mode
-        --bootsel-led-active-low
-            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
+        See "picotool help device-selection" for available options
 ```
 
 ### rm
@@ -2012,7 +1571,7 @@ Delete a file or an empty directory on the block device
 ```text
 $ picotool help bdev rm
 BDEV RM:
-    Delete a file or an empty directory on the block device
+    Delete a file or an empty directory on the block device.
 
 SYNOPSIS:
     picotool bdev rm <filename> [-p <partition number>] [--partition-name <partition name>]
@@ -2023,22 +1582,14 @@ OPTIONS:
         <filename>
             The file name
     Block device options
-        -p, --partition-number
+        -p, --partition-number <partition number>
             Partition number to use as block device
-        <partition number>
-            partition number
-        --partition-name
+        --partition-name <partition name>
             Partition name to use as block device
-        <partition name>
-            partition name
-        --partition-id
+        --partition-id <partition id>
             Partition ID to use as block device
-        <partition id>
-            partition id
-        --filesystem
-            Specify filesystem to use
-        <fs>
-            littlefs|fatfs
+        --filesystem <fs>
+            Specify filesystem to use (littlefs|fatfs)
         --force-formattable
             Allow formatting, even if the block device is not marked as fomattable
         --force-writeable
@@ -2046,34 +1597,7 @@ OPTIONS:
         --format
             Format the drive if necessary (may result in data loss)
     Target device selection
-        --bus <bus>
-            Filter devices by USB bus number
-        --address <addr>
-            Filter devices by USB device address
-        --vid <vid>
-            Filter by vendor id
-        --pid <pid>
-            Filter by product id
-        --ser <ser>
-            Filter by serial number
-        --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid
-            with an RP2040 on Windows, and is ignored on other operating systems
-        -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be rebooted back to application mode
-        -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be left connected and accessible to picotool, but
-            without the USB drive mounted
-        --bootsel-led <gpio>
-            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
-            BOOTSEL mode
-        --bootsel-led-active-low
-            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
+        See "picotool help device-selection" for available options
 ```
 
 ### cat
@@ -2083,7 +1607,7 @@ Print contents of file on the block device
 ```text
 $ picotool help bdev cat
 BDEV CAT:
-    Print contents of file on the block device
+    Print contents of file on the block device.
 
 SYNOPSIS:
     picotool bdev cat <filename> [-p <partition number>] [--partition-name <partition name>]
@@ -2094,22 +1618,14 @@ OPTIONS:
         <filename>
             The file name
     Block device options
-        -p, --partition-number
+        -p, --partition-number <partition number>
             Partition number to use as block device
-        <partition number>
-            partition number
-        --partition-name
+        --partition-name <partition name>
             Partition name to use as block device
-        <partition name>
-            partition name
-        --partition-id
+        --partition-id <partition id>
             Partition ID to use as block device
-        <partition id>
-            partition id
-        --filesystem
-            Specify filesystem to use
-        <fs>
-            littlefs|fatfs
+        --filesystem <fs>
+            Specify filesystem to use (littlefs|fatfs)
         --force-formattable
             Allow formatting, even if the block device is not marked as fomattable
         --force-writeable
@@ -2117,6 +1633,59 @@ OPTIONS:
         --format
             Format the drive if necessary (may result in data loss)
     Target device selection
+        See "picotool help device-selection" for available options
+```
+
+### format
+
+Format the block device - may result in data loss
+
+```text
+$ picotool help bdev format
+BDEV FORMAT:
+    Format the block device.
+
+SYNOPSIS:
+    picotool bdev format [-p <partition number>] [--partition-name <partition name>]
+                [--partition-id <partition id>] [--filesystem <fs>] [--force-formattable]
+                [--force-writeable] [device-selection]
+
+OPTIONS:
+    Block device options
+        -p, --partition-number <partition number>
+            Partition number to use as block device
+        --partition-name <partition name>
+            Partition name to use as block device
+        --partition-id <partition id>
+            Partition ID to use as block device
+        --filesystem <fs>
+            Specify filesystem to use (littlefs|fatfs)
+        --force-formattable
+            Allow formatting, even if the block device is not marked as fomattable
+        --force-writeable
+            Allow writing, even if the block device is not marked as writeable
+    Target device selection
+        See "picotool help device-selection" for available options
+```
+
+## Help topics
+
+`picotool help <topic>` shows additional documentation that applies across multiple commands, rather than to a single command.
+
+### device-selection
+
+```text
+$ picotool help device-selection
+Options for Target Device Selection and Rebooting:
+    Options for selecting or filtering the target RP-series device(s), including rebooting
+    devices to BOOTSEL mode first. These options are accepted by most commands which target a
+    device.
+
+    For the `-f/F` options, compatible code is defined as code which uses stdio_usb or the
+    pico_usb_reset library, and which is still running. See Forced Reboots in the README
+    (https://github.com/raspberrypi/picotool#forced-reboots) for more information.
+
+OPTIONS:
         --bus <bus>
             Filter devices by USB bus number
         --address <addr>
@@ -2147,71 +1716,18 @@ OPTIONS:
             The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
 ```
 
-### format
-
-Format the block device - may result in data loss
+### family-ids
 
 ```text
-$ picotool help bdev format
-BDEV FORMAT:
-    Format the block device
+$ picotool help family-ids
+Valid Family IDs:
+    A family ID identifies the target chip and/or image type of a UF2 file, and is accepted by
+    the --family option of several commands.
 
-SYNOPSIS:
-    picotool bdev format [-p <partition number>] [--partition-name <partition name>]
-                [--partition-id <partition id>] [--filesystem <fs>] [--force-formattable]
-                [--force-writeable] [device-selection]
+    Valid family IDs are: data, absolute, rp2040, rp2350-arm-s, rp2350-arm-ns, rp2350-riscv,
+    cyw43-firmware.
 
-OPTIONS:
-    Block device options
-        -p, --partition-number
-            Partition number to use as block device
-        <partition number>
-            partition number
-        --partition-name
-            Partition name to use as block device
-        <partition name>
-            partition name
-        --partition-id
-            Partition ID to use as block device
-        <partition id>
-            partition id
-        --filesystem
-            Specify filesystem to use
-        <fs>
-            littlefs|fatfs
-        --force-formattable
-            Allow formatting, even if the block device is not marked as fomattable
-        --force-writeable
-            Allow writing, even if the block device is not marked as writeable
-    Target device selection
-        --bus <bus>
-            Filter devices by USB bus number
-        --address <addr>
-            Filter devices by USB device address
-        --vid <vid>
-            Filter by vendor id
-        --pid <pid>
-            Filter by product id
-        --ser <ser>
-            Filter by serial number
-        --rp2040
-            Assume the device is an RP2040 - this is only required when using a custom vid/pid
-            with an RP2040 on Windows, and is ignored on other operating systems
-        -f, --force
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be rebooted back to application mode
-        -F, --force-no-reboot
-            Force a device not in BOOTSEL mode but running compatible code to reset so the
-            command can be executed. After executing the command (unless the command itself is
-            a 'reboot') the device will be left connected and accessible to picotool, but
-            without the USB drive mounted
-        --bootsel-led <gpio>
-            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
-            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
-            BOOTSEL mode
-        --bootsel-led-active-low
-            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
+    A family ID may also be given directly as a 32 bit hex value, e.g. 0x12345678.
 ```
 
 ## Binary Information
@@ -2401,27 +1917,13 @@ quotes, newlines etc you may have better luck defining via bi_decl in the code.
 ### Block devices
 
 MicroPython and CircuitPython, eventually the SDK and others may support one or more storage devices in flash. We already
-have macros to define these although picotool doesn't do anything with them yet... but backup/restore/file copy and even fuse mount
-in the future might be interesting.
+have macros to define these, and they can be accessed with the [`bdev`](#bdev) commands. In the future, backup/restore and even fuse mount might be interesting additions.
 
-I suggest we tag these now... 
-
-This is what I have right now off the top of my head (at the time)
+These can be tagged using the `bi_block_device` macro:
 ```c
 #define bi_block_device(_tag, _name, _offset, _size, _extra, _flags)
 ```
-with the data going into
-```c
-typedef struct __packed _binary_info_block_device {
-        struct _binary_info_core core;
-        bi_ptr_of(const char) name; // optional static name (independent of what is formatted)
-        uint32_t offset;
-        uint32_t size;
-        bi_ptr_of(binary_info_t) extra; // additional info
-        uint16_t flags;
-} binary_info_block_device_t;
-```
-and
+using the following flags
 ```c
 enum {
     BINARY_INFO_BLOCK_DEV_FLAG_READ = 1 << 0, // if not readable, then it is basically hidden, but tools may choose to avoid overwriting it
@@ -2434,6 +1936,7 @@ enum {
     BINARY_INFO_BLOCK_DEV_FLAG_PT_NONE = 3 << 4, // no partition table
 };
 ```
+For more information see the Pico SDK, where this macro and flags are defined.
 
 ### Forced Reboots
 
@@ -2443,9 +1946,9 @@ purposes of binaries compiled using the [pico-sdk](https://github.com/raspberryp
 If your code has returned then rebooting with `-f/F` will not work - instead you can set the compile definition `PICO_ENTER_USB_BOOT_ON_EXIT`
 to reboot and be accessible to picotool once your code has finished execution, for example with
 `target_compile_definitions(<yourTargetName> PRIVATE PICO_ENTER_USB_BOOT_ON_EXIT=1)`
-- Uses stdio_usb -
-If your binary calls `stdio_init_all()` and you have `pico_enable_stdio_usb(<yourTargetName> 1)` in your CMakeLists.txt file then you meet
-this requirement (see the [hello_usb](https://github.com/raspberrypi/pico-examples/tree/master/hello_world/usb) example)
+- Uses stdio_usb or the pico_usb_reset library -
+If your binary calls `stdio_init_all()`, does not use TinyUSB directly (i.e. does not link `tinyusb_device`), and you have `pico_enable_stdio_usb(<yourTargetName> 1)` in your CMakeLists.txt file, then you meet
+this requirement (see the [hello_usb](https://github.com/raspberrypi/pico-examples/tree/master/hello_world/usb) example). If you are using TinyUSB directly, see the [library documentation](https://www.raspberrypi.com/documentation/pico-sdk/high_level.html#group_pico_usb_reset) or the [dev_multi_cdc](https://github.com/raspberrypi/pico-examples/tree/master/usb/device/dev_multi_cdc) example for more details on how to enable the `pico_usb_reset` library.
 
 ### Issues
 

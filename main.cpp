@@ -723,7 +723,37 @@ auto device_selection =
     #endif
         ", ignored by RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to BOOTSEL mode"
         + option("--bootsel-led-active-low").set(settings.active_low) % "The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)"
-    ).min(0).doc_non_optional(true).collapse_synopsys("device-selection");
+    ).min(0).doc_non_optional(true).collapse_synopsys("device-selection").help_topic("device-selection");
+
+struct help_topic {
+    string title;
+    string doc;
+    group options; // optional, leave blank for topics without options
+};
+
+string family_id_help_text() {
+    return string("A family ID identifies the target chip and/or image type of a UF2 file, and is "
+           "accepted by the --family option of several commands.\n\n"
+           "Valid family IDs are: ") + cli::join(family_names, ", ") + ".\n\n"
+           "A family ID may also be given directly as a 32 bit hex value, e.g. 0x12345678.";
+}
+
+std::map<string, help_topic> help_topics {
+#if HAS_LIBUSB
+    { "device-selection", {
+        "Options for Target Device Selection and Rebooting",
+        "Options for selecting or filtering the target RP-series device(s), including rebooting devices to BOOTSEL mode first. "
+        "These options are accepted by most commands which target a device.\n\n"
+        "For the `-f/F` options, compatible code is defined as code which uses stdio_usb or the pico_usb_reset library, and which is still running. "
+        "See Forced Reboots in the README (https://github.com/raspberrypi/picotool#forced-reboots) for more information.",
+        group(device_selection).force_expand_help(true)
+    } },
+#endif
+    { "family-ids", {
+        "Valid Family IDs",
+        family_id_help_text()
+    } },
+};
 
 #define file_types_x(i)\
 (option ('t', "--type") & value("type").set(settings.file_types[i]))\
@@ -818,6 +848,10 @@ auto device_selection =
 auto file_types = (option ('t', "--type") & value("type").set(settings.file_types[0]))
             % "Specify file type (uf2 | elf | bin) explicitly, ignoring file extension";
 
+group as_section(const group &g) {
+    return group() + g;
+}
+
 auto file_selection =
         (
             value("filename").with_exclusion_filter([](const string &value) {
@@ -849,7 +883,7 @@ struct info_command : public cmd {
             ).min(0).doc_non_optional(true) % "Information to display" +
             (
             #if HAS_LIBUSB
-                device_selection % "To target one or more connected RP-series device(s) in BOOTSEL mode (the default)" |
+                device_selection % "To target one or more connected RP-series device(s) (the default)" |
             #endif
                 file_selection % "To target a file"
             ).major_group("TARGET SELECTION").min(0).doc_non_optional(true)
@@ -858,7 +892,7 @@ struct info_command : public cmd {
 
     string get_doc() const override {
         #if HAS_LIBUSB
-        return "Display information from the target device(s) or file.\nWithout any arguments, this will display basic information for all connected RP-series devices in BOOTSEL mode";
+        return "Display information from the target device(s) or file.\nWithout any arguments, this will display basic information for all connected RP-series devices in BOOTSEL mode.";
         #else
         return "Display information from the target file.";
         #endif
@@ -878,13 +912,13 @@ struct config_command : public cmd {
     group get_cli() override {
         return (
             (option('s', "--set") & (
-                value("key").set(settings.config.key) % "Variable name" +
-                value("value").set(settings.config.value) % "New value")
-            ).force_expand_help(true) +
+                value("key").set(settings.config.key) +
+                value("value").set(settings.config.value))
+            ) % "Set config variable name to new value" +
             (option('g', "--group") & value("group").set(settings.config.group)) % "Filter by feature group" + 
             (
             #if HAS_LIBUSB
-                device_selection % "To target one or more connected RP-series device(s) in BOOTSEL mode (the default)" |
+                device_selection % "To target one or more connected RP-series device(s) (the default)" |
             #endif
                 file_selection % "To target a file"
             ).major_group("TARGET SELECTION").min(0).doc_non_optional(true)
@@ -902,14 +936,14 @@ struct config_command : public cmd {
 
 #if HAS_LIBUSB
 auto bdev_base_options = (
-    (option('p', "--partition-number") % "Partition number to use as block device" &
-            integer("partition number").set(settings.bdev.partition_number) % "partition number").force_expand_help(true) +
-    (option("--partition-name") % "Partition name to use as block device" &
-            value("partition name").set(settings.bdev.partition_name) % "partition name").force_expand_help(true) +
-    (option("--partition-id") % "Partition ID to use as block device" &
-            integer("partition id").set(settings.bdev.partition_id) % "partition id").force_expand_help(true) +
-    (option("--filesystem") % "Specify filesystem to use" &
-            bdev_fs("fs").set(settings.bdev.fs) % "littlefs|fatfs").force_expand_help(true) +
+    (option('p', "--partition-number") &
+            integer("partition number").set(settings.bdev.partition_number)) % "Partition number to use as block device" +
+    (option("--partition-name") &
+            value("partition name").set(settings.bdev.partition_name)) % "Partition name to use as block device" +
+    (option("--partition-id") &
+            integer("partition id").set(settings.bdev.partition_id)) % "Partition ID to use as block device" +
+    (option("--filesystem") &
+            bdev_fs("fs").set(settings.bdev.fs)) % "Specify filesystem to use (littlefs|fatfs)" +
     (option("--force-formattable").set(settings.bdev.force_formattable) % "Allow formatting, even if the block device is not marked as fomattable") +
     (option("--force-writeable").set(settings.bdev.force_writeable) % "Allow writing, even if the block device is not marked as writeable")
 ).min(0).doc_non_optional(true) % "Block device options";
@@ -931,7 +965,7 @@ struct bdev_ls_command : public cmd {
     }
 
     string get_doc() const override {
-        return "List contents of the block device";
+        return "List contents of the block device.";
     }
 };
 
@@ -948,7 +982,7 @@ struct bdev_mkdir_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Create directory on the block device";
+        return "Create directory on the block device.";
     }
 };
 
@@ -966,7 +1000,7 @@ struct bdev_cp_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Copy file to/from the block device - use :filename to indicate files on the device (eg `cp main.py :main.py` to upload to the device)";
+        return "Copy file to/from the block device - use :filename to indicate files on the device (eg `cp main.py :main.py` to upload to the device).";
     }
 };
 
@@ -983,7 +1017,7 @@ struct bdev_rm_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Delete a file or an empty directory on the block device";
+        return "Delete a file or an empty directory on the block device.";
     }
 };
 
@@ -1000,7 +1034,7 @@ struct bdev_cat_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Print contents of file on the block device";
+        return "Print contents of file on the block device.";
     }
 };
 
@@ -1016,7 +1050,7 @@ struct bdev_format_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Format the block device";
+        return "Format the block device.";
     }
 };
 
@@ -1031,7 +1065,7 @@ vector<std::shared_ptr<cmd>> bdev_sub_commands {
 struct bdev_command : public multi_cmd {
     bdev_command() : multi_cmd("bdev", bdev_sub_commands) {}
     string get_doc() const override {
-        return "Commands related to embedded block devices";
+        return "Commands related to embedded block devices.";
     }
 };
 
@@ -1043,11 +1077,11 @@ struct verify_command : public cmd {
         return (
             file_selection % "The file to compare against" +
             (
-                (option('r', "--range").set(settings.range_set) % "Compare a sub range of memory only" &
-                    hex("from").set(settings.from) % "The lower address bound in hex" &
-                    hex("to").set(settings.to) % "The upper address bound in hex").force_expand_help(true) +
-                (option('o', "--offset").set(settings.offset_set) % "Specify the load address when comparing with a BIN file" &
-                    hex("offset").set(settings.offset) % "Load offset (memory address; default 0x10000000)").force_expand_help(true)
+                (option('r', "--range").set(settings.range_set) &
+                    hex("from").set(settings.from) &
+                    hex("to").set(settings.to)) % "Compare a sub range of memory only (address bounds in hex)" +
+                (option('o', "--offset").set(settings.offset_set) &
+                    hex("offset").set(settings.offset)) % "Specify the load address (memory address; default 0x10000000) when comparing with a BIN file"
             ).min(0).doc_non_optional(true) % "Address options" +
             device_selection % "Target device selection"
         );
@@ -1074,8 +1108,8 @@ struct save_command : public cmd {
                 ).min(0).doc_non_optional(true)
             ).min(0).doc_non_optional(true).no_match_beats_error(false) % "Selection of data to save" +
             option('v', "--verify").set(settings.save.verify) % "Verify the data was saved correctly" +
-            (option("--family") % "Specify the family ID to save the file as" &
-                family_id("family_id").set(settings.family_id) % "family ID to save file as").force_expand_help(true) +
+            (option("--family") &
+                family_id("family_id").set(settings.family_id)) % "Specify the family ID to save the file as" +
             ( // note this parenthesis seems to help with error messages for say save --foo
                 file_selection % "File to save to" +
                 device_selection % "Source device selection"
@@ -1095,21 +1129,21 @@ struct load_command : public cmd {
         return (
             (
                 option("--ignore-partitions").set(settings.load.ignore_pt) % "When writing flash data, ignore the partition table and write to absolute space" +
-                (option("--family") % "Specify the family ID of the file to load" &
-                        family_id("family_id").set(settings.family_id) % "family ID to use for load").force_expand_help(true) +
-                (option('p', "--partition") % "Specify the partition to load into" &
-                        integer("partition").set(settings.load.partition) % "partition to load into").force_expand_help(true) +
+                (option("--family") &
+                        family_id("family_id").set(settings.family_id)) % "Specify the family ID of the file to load" +
+                (option('p', "--partition") &
+                        integer("partition").set(settings.load.partition)) % "Specify the partition to load into" +
                 option('n', "--no-overwrite").set(settings.load.no_overwrite) % "When writing flash data, do not overwrite an existing program in flash. If picotool cannot determine the size/presence of the program in flash, the command fails" +
                 option('N', "--no-overwrite-unsafe").set(settings.load.no_overwrite_force) % "When writing flash data, do not overwrite an existing program in flash. If picotool cannot determine the size/presence of the program in flash, the load continues anyway" +
                 option('u', "--update").set(settings.load.update) % "Skip writing flash sectors that already contain identical data" +
                 option('v', "--verify").set(settings.load.verify) % "Verify the data was written correctly" +
                 option('x', "--execute").set(settings.load.execute) % "Perform a bootrom reboot to execute the downloaded file as a program after the load - either a flash update boot for binaries in flash, or a RAM image boot for other binaries "
-            ).min(0).doc_non_optional(true) % "Post load actions" +
+            ).min(0).doc_non_optional(true) % "Load options" +
             file_selection % "File to load from" +
-            (
-                option('o', "--offset").set(settings.offset_set) % "Specify the load address for a BIN file" &
-                     hex("offset").set(settings.offset) % "Load offset (memory address; default 0x10000000)"
-            ).force_expand_help(true) % "BIN file options" +
+            as_section(
+                (option('o', "--offset").set(settings.offset_set) &
+                     hex("offset").set(settings.offset)) % "Specify the load address for a BIN file (memory address; default 0x10000000)"
+            ).min(0).doc_non_optional(true) % "BIN file options" +
             device_selection % "Target device selection"
         );
     }
@@ -1138,7 +1172,7 @@ struct erase_command : public cmd {
                 ).min(0).doc_non_optional(true)
             ).min(0).doc_non_optional(true).no_match_beats_error(false) % "Selection of data to erase" +
             ( // note this parenthesis seems to help with error messages for say erase --foo
-                device_selection % "Source device selection"
+                device_selection % "Target device selection"
             )
         );
     }
@@ -1162,9 +1196,9 @@ struct encrypt_command : public cmd {
             option("--fast-rosc").set(settings.encrypt.fast_rosc) % "Use ~180MHz ROSC configuration for embedded bootloader" +
             option("--use-mbedtls").set(settings.encrypt.use_mbedtls) % "Use MbedTLS implementation of embedded bootloader (faster but less secure)" +
             (
-                option("--otp-key-page").set(settings.encrypt.otp_key_page_set) % "Specify the OTP page storing the AES key (IV salt is stored on the next page)" &
-                    integer("page").set(settings.encrypt.otp_key_page) % "OTP page (default 29)"
-            ).force_expand_help(true) +
+                option("--otp-key-page").set(settings.encrypt.otp_key_page_set) &
+                    integer("page").set(settings.encrypt.otp_key_page)
+            ) % "Specify the OTP page storing the AES key (default 29; IV salt is stored on the next page)" +
             (
                 option("--hash").set(settings.seal.hash) % "Hash the encrypted file" +
                 option("--sign").set(settings.seal.sign) % "Sign the encrypted file" +
@@ -1172,10 +1206,10 @@ struct encrypt_command : public cmd {
                 option("--pin-xip-sram").set(settings.seal.pin_xip_sram) % "Pin XIP SRAM on load"
             ).min(0).doc_non_optional(true) % "Signing Configuration" +
             named_file_selection_x("infile", 0) % "File to load from" +
-            (
-                option('o', "--offset").set(settings.offset_set) % "Specify the load address for a BIN file" &
-                     hex("offset").set(settings.offset) % "Load offset (memory address; default 0x10000000)"
-            ).force_expand_help(true) % "BIN file options" +
+            as_section(
+                (option('o', "--offset").set(settings.offset_set) &
+                     hex("offset").set(settings.offset)) % "Specify the load address for a BIN file (memory address; default 0x10000000)"
+            ).min(0).doc_non_optional(true) % "BIN file options" +
             named_file_selection_x("outfile", 1) % "File to save to" +
             named_untyped_file_selection_x("aes_key", 2) % "AES Key Share or AES Key" +
             named_untyped_file_selection_x("iv_salt", 3) % "IV Salt" +
@@ -1206,10 +1240,10 @@ struct seal_command : public cmd {
                 option("--no-squash").set(settings.seal.no_squash) % "Don't squash segments in the ELF file"
             ).min(0).doc_non_optional(true) % "Configuration" +
             named_file_selection_x("infile", 0) % "File to load from" +
-            (
-                option('o', "--offset").set(settings.offset_set) % "Specify the load address for a BIN file" &
-                     hex("offset").set(settings.offset) % "Load offset (memory address; default 0x10000000)"
-            ).force_expand_help(true) % "BIN file options" +
+            as_section(
+                (option('o', "--offset").set(settings.offset_set) &
+                     hex("offset").set(settings.offset)) % "Specify the load address for a BIN file (memory address; default 0x10000000)"
+            ).min(0).doc_non_optional(true) % "BIN file options" +
             named_file_selection_x("outfile", 1) % "File to save to" +
             optional_untyped_file_selection_x("key", 2) % "Key file (.pem)" +
             optional_untyped_file_selection_x("otp", 3) % "JSON file to save OTP to (will edit existing file if it exists)" +
@@ -1287,10 +1321,10 @@ struct partition_create_command : public cmd {
                 named_untyped_file_selection_x("infile", 0) % "partition table JSON" +
                 (named_file_selection_x("outfile", 1) % "output file" +
                 (
-                    (option('o', "--offset").set(settings.offset_set) % "Specify the load address for UF2 file output" &
-                        hex("offset").set(settings.offset) % "Load offset (memory address; default 0x10000000)").force_expand_help(true) +
-                    (option("--family") % "Specify the family if for UF2 file output" &
-                        family_id("family_id").set(settings.family_id) % "family ID for UF2 (default absolute)").force_expand_help(true)
+                    (option('o', "--offset").set(settings.offset_set) &
+                        hex("offset").set(settings.offset)) % "Specify the load address for UF2 file output (memory address; default 0x10000000)" +
+                    (option("--family") &
+                        family_id("family_id").set(settings.family_id)) % "Specify the family id for UF2 file output (default absolute)"
                 ).min(0).force_expand_help(true) % "UF2 output options") +
                 optional_typed_file_selection_x("bootloader", 2, "elf") % "embed partition table into bootloader ELF" + 
                 (
@@ -1315,7 +1349,7 @@ struct partition_create_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Create a partition table from json";
+        return "Create a partition table from json.";
     }
 };
 
@@ -1330,7 +1364,7 @@ vector<std::shared_ptr<cmd>> partition_sub_commands {
 struct partition_command : public multi_cmd {
     partition_command() : multi_cmd("partition", partition_sub_commands) {}
     string get_doc() const override {
-        return "Commands related to RP2350 Partition Tables";
+        return "Commands related to RP2350 Partition Tables.";
     }
 };
 
@@ -1363,7 +1397,7 @@ struct otp_list_command : public cmd {
     }
 
     string get_doc() const override {
-        return "List matching known registers/fields";
+        return "List matching known registers/fields.";
     }
 };
 #if HAS_LIBUSB
@@ -1402,7 +1436,7 @@ struct otp_get_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Get the value of one or more OTP registers/fields";
+        return "Get the value of one or more OTP registers/fields.";
     }
 };
 
@@ -1434,7 +1468,7 @@ struct otp_dump_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Dump entire OTP";
+        return "Dump entire OTP.";
     }
 };
 
@@ -1497,7 +1531,7 @@ struct otp_set_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Set the value of an OTP row/field";
+        return "Set the value of an OTP row/field.";
     }
 };
 
@@ -1521,7 +1555,7 @@ struct otp_permissions_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Set the OTP access permissions";
+        return "Set the OTP access permissions.";
     }
 };
 
@@ -1533,7 +1567,7 @@ struct otp_white_label_command : public cmd {
 
     group get_cli() override {
         return (
-                (
+                as_section(
                         (option('s', "--start_row") & integer("row").set(settings.otp.row)) % "Start row for white label struct (default 0x100) (note use 0x for hex)"
                 ).min(0).doc_non_optional(true) % "Row options" +
                 named_untyped_file_selection_x("filename", 0) % "JSON file with white labelling values" +
@@ -1542,7 +1576,7 @@ struct otp_white_label_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Set the white labelling values in OTP";
+        return "Set the white labelling values in OTP.";
     }
 };
 #endif
@@ -1563,13 +1597,14 @@ vector<std::shared_ptr<cmd>> otp_sub_commands {
 struct otp_command : public multi_cmd {
     otp_command() : multi_cmd("otp", otp_sub_commands) {}
     string get_doc() const override {
-        return "Commands related to the RP2350 OTP (One-Time-Programmable) Memory";
+        return "Commands related to the RP2350 OTP (One-Time-Programmable) Memory.";
     }
 };
 
 #if HAS_LIBUSB
 struct uf2_info_command : public cmd {
     uf2_info_command() : cmd("info") {}
+    virtual bool requires_rp2350() const override { return true; }
     bool execute(device_map &devices) override;
 
     group get_cli() override {
@@ -1595,18 +1630,18 @@ struct uf2_convert_command : public cmd {
                 option("--verbose").set(settings.verbose) % "Print verbose output" +
                 named_file_selection_x("infile", 0) % "File to load from" +
                 named_typed_file_selection_x("outfile", 1, "uf2") % "File to save UF2 to" +
-                (
-                    option('o', "--offset").set(settings.offset_set) % "Specify the load address" &
-                        hex("offset").set(settings.offset) % "Load offset (memory address; default 0x10000000 for BIN file)"
-                ).force_expand_help(true) % "Packaging Options" + 
-                (
-                    option("--family") % "Specify the family ID" &
-                        family_id("family_id").set(settings.family_id) % "family ID for UF2"
-                ).force_expand_help(true) % "UF2 Family options" +
-                (
-                    option("--platform") % "Optional platform for memory-address validation" &
-                        platform_model("platform").set(settings.model) % "platform to use (eg rp2040, rp2350)"
-                ).force_expand_help(true) % "Platform options"
+                as_section(
+                    (option('o', "--offset").set(settings.offset_set) &
+                        hex("offset").set(settings.offset)) % "Specify the load address (memory address; default 0x10000000 for BIN file)"
+                ).min(0).doc_non_optional(true) % "Packaging Options" +
+                as_section(
+                    (option("--family") &
+                        family_id("family_id").set(settings.family_id)) % "Specify the family ID for UF2"
+                ).min(0).doc_non_optional(true) % "UF2 Family options" +
+                as_section(
+                    (option("--platform") &
+                        platform_model("platform").set(settings.model)) % "Optional platform for memory-address validation (eg rp2040, rp2350)"
+                ).min(0).doc_non_optional(true) % "Platform options"
             #if SUPPORT_RP2350_A2
                 + (
                     option("--abs-block").set(settings.uf2.abs_block) % "Add an absolute block" +
@@ -1633,18 +1668,18 @@ struct uf2_combine_command : public cmd {
                 named_typed_file_selection_x("infile1", 1, "uf2") % "First file to combine" +
                 named_typed_file_selection_x("infile2", 2, "uf2") % "Second file to combine" +
                 named_typed_file_selection_x("outfile", 0, "uf2") % "File to save output to" +
-                (
-                    option("--family") % "Specify the family ID" &
-                        family_id("family_id").set(settings.family_id) % "family ID for combined UF2 (defaults to first one)"
-                ).force_expand_help(true) % "UF2 Family options" +
-                (
-                    option("--offset").set(settings.uf2.offset_set) % "Offset second UF2 by amount" &
-                        hex("offset").set(settings.uf2.offset) % "offset amount (default to 0)"
-                ).force_expand_help(true) % "Offset options" +
-                (
-                    option("--partition").set(settings.uf2.partition_set) % "Place second UF2 in partition (first UF2 must contain a partition table)" &
-                        integer("partition").min_value(0).max_value(PARTITION_TABLE_MAX_PARTITIONS-1).set(settings.uf2.partition) % "partition number (default to 0)"
-                ).force_expand_help(true) % "Partition options"
+                as_section(
+                    (option("--family") &
+                        family_id("family_id").set(settings.family_id)) % "Specify the family ID for combined UF2 (defaults to first one)"
+                ).min(0).doc_non_optional(true) % "UF2 Family options" +
+                as_section(
+                    (option("--offset").set(settings.uf2.offset_set) &
+                        hex("offset").set(settings.uf2.offset)) % "Offset second UF2 by amount"
+                ).min(0).doc_non_optional(true) % "Offset options" +
+                as_section(
+                    (option("--partition").set(settings.uf2.partition_set) &
+                        integer("partition").min_value(0).max_value(PARTITION_TABLE_MAX_PARTITIONS-1).set(settings.uf2.partition)) % "Place second UF2 in partition (first UF2 must contain a partition table)"
+                ).min(0).doc_non_optional(true) % "Partition options"
             #if SUPPORT_RP2350_A2
                 + (
                     option("--abs-block").set(settings.uf2.abs_block) % "Add an absolute block" +
@@ -1670,7 +1705,7 @@ vector<std::shared_ptr<cmd>> uf2_sub_commands {
 struct uf2_command : public multi_cmd {
     uf2_command() : multi_cmd("uf2", uf2_sub_commands) {}
     string get_doc() const override {
-        return "Commands related to UF2 creation and status";
+        return "Commands related to UF2 creation and status.";
     }
 };
 
@@ -1710,7 +1745,7 @@ struct help_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Show general help or help for a specific command";
+        return "Show general help, or help for a specific command or topic.";
     }
 };
 
@@ -1757,7 +1792,7 @@ struct version_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Display picotool version";
+        return "Display picotool version.";
     }
 };
 
@@ -1784,7 +1819,7 @@ struct reboot_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Reboot the device";
+        return "Reboot the device.";
     }
 };
 auto reboot_cmd = std::shared_ptr<reboot_command>(new reboot_command());
@@ -1854,18 +1889,60 @@ int parse(const int argc, char **argv) {
 
     int tab = 4;
     bool first = true;
-    auto section_header=[&](const string &name) {
+    auto section_header=[&](const string &name, bool upper = true) {
         fos.first_column(0);
         fos.hanging_indent(0);
         if (!first) fos.wrap_hard();
         first = false;
-        fos << (uppercase(name) + ":\n");
+        fos << ((upper ? uppercase(name) : name) + ":\n");
+    };
+    auto print_options_for=[&](const group &g) {
+        cli::option_map options;
+        g.get_option_help("", "", options);
+        for (const auto &major : options.contents.ordered_keys()) {
+            section_header(major.empty() ? "OPTIONS" : major);
+            bool first_opt = true;
+            for (const auto &minor : options.contents[major].ordered_keys()) {
+                fos.first_column(tab);
+                fos.hanging_indent(tab*2);
+                if (!minor.empty()) {
+                    fos << minor << "\n";
+                } else if (!first_opt) {
+                    fos << "Other\n";
+                }
+                first_opt = false;
+                for (const auto &opts : options.contents[major][minor]) {
+                    if (!opts.first.empty()) {
+                        fos.first_column(tab*2);
+                        fos.hanging_indent(0);
+                        fos << opts.first << "\n";
+                        fos.first_column(tab*3);
+                    } else {
+                        fos.first_column(tab*2);
+                    }
+                    fos.hanging_indent(0);
+                    fos << opts.second << "\n";
+                }
+            }
+        }
+    };
+    auto print_help_topic=[&](const help_topic &topic) {
+        section_header(topic.title, false);
+        fos.first_column(tab);
+        fos.hanging_indent(0);
+        fos << topic.doc << "\n";
+        print_options_for(topic.options);
+        fos.flush();
     };
     auto usage=[&]() {
         if (help_mode && selected_cmd) {
             section_header(help_mode_prefix + selected_cmd->name());
             fos.first_column(tab);
-            fos << selected_cmd->get_doc() << "\n";
+            fos << selected_cmd->get_doc();
+            if (selected_cmd->requires_rp2350()) {
+                fos << " (RP2350 only)";
+            }
+            fos << "\n";
         } else if (!selected_cmd && !no_global_header) {
             section_header(tool_name);
             fos.first_column(tab);
@@ -1931,6 +2008,12 @@ int parse(const int argc, char **argv) {
             s << "\n";
             fos << s.str();
         };
+        auto write_topic = [&](size_t max, const std::string& name, const help_topic& topic) {
+            fos.first_column(tab);
+            fos << name;
+            fos.first_column((int) (max + tab + 3));
+            fos << topic.title << "\n";
+        };
         if (!selected_cmd) {
             size_t max = 0;
             section_header("COMMANDS");
@@ -1939,6 +2022,16 @@ int parse(const int argc, char **argv) {
             }
             for (auto &cmd: commands) {
                 write_command(max, cmd->name(), cmd);
+            }
+            if (!help_topics.empty()) {
+                size_t topic_max = 0;
+                for (auto &topic: help_topics) {
+                    topic_max = std::max(topic.first.size(), topic_max);
+                }
+                section_header("TOPICS");
+                for (auto &topic: help_topics) {
+                    write_topic(topic_max, topic.first, topic.second);
+                }
             }
         } else if (selected_cmd->is_multi()) {
             section_header("SUB COMMANDS");
@@ -1975,36 +2068,17 @@ int parse(const int argc, char **argv) {
             fos << built_without_libusb_message;
             #endif
         } else {
-            cli::option_map options;
-            selected_cmd->get_cli().get_option_help("", "", options);
-            for (const auto &major : options.contents.ordered_keys()) {
-                section_header(major.empty() ? "OPTIONS" : major);
-                bool first = true;
-                for (const auto &minor : options.contents[major].ordered_keys()) {
-                    fos.first_column(tab);
-                    fos.hanging_indent(tab*2);
-                    if (!minor.empty()) {
-                        fos << minor << "\n";
-                    } else if (!first) {
-                        fos << "Other\n";
-                    }
-                    first = false;
-                    for (const auto &opts : options.contents[major][minor]) {
-                        fos.first_column(tab*2);
-                        fos.hanging_indent(0);
-                        fos << opts.first << "\n";
-                        fos.first_column(tab*3);
-                        fos.hanging_indent(0);
-                        fos << opts.second << "\n";
-                    }
-                }
-            }
+            print_options_for(selected_cmd->get_cli());
         }
-        if (!selected_cmd) {
+        if (!selected_cmd || selected_cmd->is_multi()) {
             fos.first_column(0);
             fos.hanging_indent(0);
             fos.wrap_hard();
-            fos << "Use \"picotool help <cmd>\" for more info\n";
+            if (selected_cmd) {
+                fos << "Use \"picotool help " << selected_cmd->name() << " <subcmd>\" for more info\n";
+            } else {
+                fos << "Use \"picotool help <cmd>\" or \"picotool help <topic>\" for more info\n";
+            }
             #if !HAS_LIBUSB
             if (!help_mode) {
                 fos << built_without_libusb_message;
@@ -2015,6 +2089,12 @@ int parse(const int argc, char **argv) {
     };
 
     auto args = cli::make_args(argc, argv);
+
+    // Check if the only argument is --version, if so replace it with version
+    if (args[0] == "--version" && args.size() == 1) {
+        printf("WARNING: Use \"picotool version\" instead of \"picotool --version\"\n");
+        args[0] = "version";
+    }
 
     // Check if any -h or --help argument was requested, if so insert the help subcommand before any
     // arguments, this will ensure the correct help gets printed automatically.
@@ -2079,6 +2159,12 @@ int parse(const int argc, char **argv) {
                 usage();
                 return 0;
             } else {
+                auto topic = help_topics.find(args[0]);
+                if (topic != help_topics.end()) {
+                    selected_cmd = nullptr;
+                    print_help_topic(topic->second);
+                    return 0;
+                }
                 selected_cmd = find_command(args[0]);
                 if (selected_cmd->is_multi() && args.size() > 1) {
                     help_mode_prefix = selected_cmd->name() + " ";
