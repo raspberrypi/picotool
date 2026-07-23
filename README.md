@@ -759,12 +759,11 @@ For example, with a DebugProbe and an RP2350 connected:
 $ picotool list
 Detected 2 RP-series devices:
 
-  RP2350 device at bus 1, address 25 appears to have a USB reset interface, so consider -f (or
+  RP2350 device at bus 1, address 31 appears to have a USB reset interface, so consider -f (or
       -F) to force reboot in order to run the command.
 
-  RP2040 device at bus 1, address 27 appears to be an RP-series DebugProbe device not in
-      BOOTSEL mode, but with a USB reset interface, so consider --debugprobe to force reboot it
-      in order to run the command.
+  RP2040 device at bus 1, address 32 appears to be a DebugProbe with a USB reset interface, so
+      consider --debugprobe to force reboot it in order to run the command.
 
 ```
 
@@ -774,11 +773,10 @@ Then after running `picotool reboot -f -u`:
 $ picotool list
 Detected 2 RP-series devices:
 
-  RP2350 device at bus 1, address 29 appears to be an RP-series device in BOOTSEL mode.
+  RP2350 device at bus 1, address 33 appears to be in BOOTSEL mode.
 
-  RP2040 device at bus 1, address 27 appears to be an RP-series DebugProbe device not in
-      BOOTSEL mode, but with a USB reset interface, so consider --debugprobe to force reboot it
-      in order to run the command.
+  RP2040 device at bus 1, address 32 appears to be a DebugProbe with a USB reset interface, so
+      consider --debugprobe to force reboot it in order to run the command.
 
 ```
 
@@ -788,9 +786,9 @@ And also running `picotool reboot --debugprobe -u`:
 $ picotool list
 Detected 2 RP-series devices:
 
-  RP2040 device at bus 1, address 30 appears to be an RP-series device in BOOTSEL mode.
+  RP2040 device at bus 1, address 34 appears to be in BOOTSEL mode.
 
-  RP2350 device at bus 1, address 29 appears to be an RP-series device in BOOTSEL mode.
+  RP2350 device at bus 1, address 33 appears to be in BOOTSEL mode.
 
 ```
 

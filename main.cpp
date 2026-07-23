@@ -10177,13 +10177,13 @@ static void print_device_info(device_map &devices, bool had_note=false, bool inc
     // Devices in BOOTSEL
     if (settings.target_debugprobe) {
         printer(dr_vidpid_bootrom_ok,
-                " appears to be an RP-series device already in BOOTSEL mode, but --debugprobe was passed so this is only targetting DebugProbes not already in BOOTSEL mode.");
+                " appears to already be in BOOTSEL mode, but --debugprobe was passed so this is only targetting DebugProbes not already in BOOTSEL mode.");
     } else if (settings.only_force) {
         printer(dr_vidpid_bootrom_ok,
-                " appears to be an RP-series device already in BOOTSEL mode, but --only-force was passed so this is only targetting devices not already in BOOTSEL mode.");
+                " appears to already be in BOOTSEL mode, but --only-force was passed so this is only targetting devices not already in BOOTSEL mode.");
     } else if (include_bootsel) {
         printer(dr_vidpid_bootrom_ok,
-                " appears to be an RP-series device in BOOTSEL mode.");
+                " appears to be in BOOTSEL mode.");
     }
 
     // Devices missing required interfaces, so cannot be used by picotool
@@ -10191,13 +10191,8 @@ static void print_device_info(device_map &devices, bool had_note=false, bool inc
         printer(dr_vidpid_bootrom_no_interface,
                 " was tried, but it does not have a PICOBOOT interface.");
     }
-    if (settings.target_debugprobe) {
-        printer(dr_vidpid_debugprobe_no_reset,
-                " appears to be an RP-series DebugProbe device not in BOOTSEL mode, but it does not have a USB reset interface so must be manually put into BOOTSEL mode.");
-    } else {
-        printer(dr_vidpid_debugprobe_no_reset,
-                " appears to be an RP-series DebugProbe device not in BOOTSEL mode.");
-    }
+    printer(dr_vidpid_debugprobe_no_reset,
+            " appears to be a DebugProbe without a USB reset interface, so must be manually put into BOOTSEL mode.");
     printer(dr_vidpid_stdio_usb_no_reset,
             " appears to have a USB serial connection, but it does not have a USB reset interface so must be manually put into BOOTSEL mode.");
     if (selected_cmd->force_requires_pre_reboot()) {
@@ -10232,13 +10227,13 @@ static void print_device_info(device_map &devices, bool had_note=false, bool inc
 
     // Other known pids
     printer(dr_vidpid_debugprobe,
-            " appears to be an RP-series DebugProbe device not in BOOTSEL mode, but with a USB reset interface, so consider --debugprobe to force reboot it in order to run the command.");
+            " appears to be a DebugProbe with a USB reset interface, so consider --debugprobe to force reboot it in order to run the command.");
     printer(dr_vidpid_micropython,
-            " appears to be an RP-series MicroPython device not in BOOTSEL mode.");
+            " appears to be running MicroPython, so must be manually put into BOOTSEL mode.");
     printer(dr_vidpid_circuitpython,
-            " appears to be an RP-series CircuitPython device not in BOOTSEL mode.");
+            " appears to be running CircuitPython, so must be manually put into BOOTSEL mode.");
     printer(dr_vidpid_debugprobe_old,
-            " appears to be an RP-series DebugProbe device not in BOOTSEL mode, running old firmware - you should manually put it into BOOTSEL mode and update the firmware (https://github.com/raspberrypi/debugprobe/releases).");
+            " appears to be a DebugProbe running old firmware - you should manually put it into BOOTSEL mode and update the firmware (https://github.com/raspberrypi/debugprobe/releases).");
 }
 
 bool list_command::execute(device_map &devices) {
