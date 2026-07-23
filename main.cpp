@@ -714,10 +714,10 @@ auto device_selection =
         (option("--pid") & integer("pid").set(settings.pid)) % "Filter by product id" +
         (option("--ser") & value("ser").set(settings.ser)) % "Filter by serial number"
         + option("--rp2040").set(settings.force_rp2040) % "Assume the device is an RP2040 - this is only required when using a custom vid/pid with an RP2040 on Windows, and is ignored on other operating systems"
-        + option("--debugprobe").set(settings.target_debugprobe) % "Force a DebugProbe device version >2.3.1 to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode"
+        + option("--debugprobe").set(settings.target_debugprobe) % "Force a DebugProbe device using firmware version >2.3.1 to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode"
         + option('f', "--force").set(settings.force) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode" +
                 option('F', "--force-no-reboot").set(settings.force_no_reboot) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the USB drive mounted"
-        + option("--only-force").set(settings.only_force) % "Same as --force, but will only target devices not currently in BOOTSEL mode"
+        + option("--only-force").set(settings.only_force) % "Same as --force, but will ignore devices already in BOOTSEL mode"
         + (option("--bootsel-led") & integer("gpio").set(settings.led)) % 
         "Specify the GPIO for the BOOTSEL activity LED to flash (default "
     #if DEFAULT_BOOTSEL_LED < 0
@@ -10302,7 +10302,7 @@ int main(int argc, char **argv) {
                                     fos << " You may need to install a driver via Zadig. See Zadig in the README (https://github.com/raspberrypi/picotool#zadig) for more information.";
                                 }
 #endif
-                                fos << " It is possible the device is not responding, and will have to be manually entered into BOOTSEL mode.\n";
+                                fos << " It is possible the device is not responding, and will have to be manually put into BOOTSEL mode.\n";
                                 had_note = true; // suppress "but:" in this case
                             }
                             fos << "\n";
@@ -10317,40 +10317,21 @@ int main(int argc, char **argv) {
                                     fos << bus_device_string(std::get<1>(d), std::get<0>(d)) << description << "\n";
                                 }
                             };
-    #if defined(__linux__) || defined(__APPLE__)
-                            printer(dr_vidpid_bootrom_cant_connect,
-                                    " appears to be in BOOTSEL mode, but picotool was unable to connect. Maybe try 'sudo' or check your permissions.");
-                            printer(dr_vidpid_usb_reset_cant_connect,
-                                    " appears to have a USB reset interface, but picotool was unable to connect. Maybe try 'sudo' or check your permissions.");
-                            printer(dr_vidpid_debugprobe_cant_connect,
-                                    " appears to be a DebugProbe, but picotool was unable to connect. Maybe try 'sudo' or check your permissions.");
-                            printer(dr_vidpid_cant_connect,
-                                    " was tried, but picotool was unable to connect. Maybe try 'sudo' or check your permissions.");
-    #else
-                            printer(dr_vidpid_bootrom_cant_connect,
-                                    " appears to be in BOOTSEL mode, but picotool was unable to connect. You may need to install a driver via Zadig. See Zadig in the README (https://github.com/raspberrypi/picotool#zadig) for more information");
-                            printer(dr_vidpid_usb_reset_cant_connect,
-                                    " appears to have a USB reset interface, but picotool was unable to connect.");
-                            printer(dr_vidpid_debugprobe_cant_connect,
-                                    " appears to be a DebugProbe, but picotool was unable to connect.");
-                            printer(dr_vidpid_cant_connect,
-                                    " was tried, but picotool was unable to connect.");
-    #endif
-                            printer(dr_vidpid_picoprobe,
-                                    " appears to be an RP-series PicoProbe device not in BOOTSEL mode.");
-                            printer(dr_vidpid_micropython,
-                                    " appears to be an RP-series MicroPython device not in BOOTSEL mode.");
-                            printer(dr_vidpid_circuitpython,
-                                    " appears to be an RP-series CircuitPython device not in BOOTSEL mode.");
-                            printer(dr_vidpid_debugprobe,
-                                    " appears to be an RP-series DebugProbe device not in BOOTSEL mode, but with a USB reset interface, so consider --debugprobe to force reboot it in order to run the command.");
+
+                            // Devices missing required interfaces, so cannot be used by picotool
+                            if (settings.vid != 0) { // if vid=0, vid/pid filtering is skipped, so this is returned for every accessible device (e.g. every USB device with sudo)
+                                printer(dr_vidpid_bootrom_no_interface,
+                                        " was tried, but it does not have a PICOBOOT interface.");
+                            }
                             if (settings.target_debugprobe) {
                                 printer(dr_vidpid_debugprobe_no_reset,
-                                        " appears to be an RP-series DebugProbe device not in BOOTSEL mode, but it does not have a USB reset interface so must be manually entered into BOOTSEL mode.");
+                                        " appears to be an RP-series DebugProbe device not in BOOTSEL mode, but it does not have a USB reset interface so must be manually put into BOOTSEL mode.");
                             } else {
                                 printer(dr_vidpid_debugprobe_no_reset,
                                         " appears to be an RP-series DebugProbe device not in BOOTSEL mode.");
                             }
+                            printer(dr_vidpid_stdio_usb_no_reset,
+                                    " appears to have a USB serial connection, but it does not have a USB reset interface so must be manually put into BOOTSEL mode.");
                             if (selected_cmd->force_requires_pre_reboot()) {
                                 printer(dr_vidpid_usb_reset,
                                         " appears to have a USB reset interface, so consider -f (or -F) to force reboot in order to run the command.");
@@ -10359,14 +10340,45 @@ int main(int argc, char **argv) {
                                 printer(dr_vidpid_usb_reset,
                                         " appears to have a USB reset interface, so consider -f to force the reboot.");
                             }
-                            if (settings.only_force) {
-                                if (settings.target_debugprobe) {
-                                    printer(dr_vidpid_bootrom_ok,
-                                            " appears to be an RP-series device already in BOOTSEL mode, but --debugprobe was passed so this is only targetting DebugProbes not already in BOOTSEL mode.");
-                                } else {
-                                    printer(dr_vidpid_bootrom_ok,
-                                            " appears to be an RP-series device already in BOOTSEL mode, but --only-force was passed so this is only targetting devices not already in BOOTSEL mode.");
-                                }
+
+                            // Devices failed to open (e.g. requires sudo)
+    #if defined(__linux__) || defined(__APPLE__)
+                            printer(dr_vidpid_bootrom_cant_connect,
+                                    " appears to be in BOOTSEL mode, but picotool was unable to connect. Maybe try 'sudo' or check your permissions.");
+                            printer(dr_vidpid_stdio_usb_cant_connect,
+                                    " appears to have a USB serial connection, but picotool was unable to connect. Maybe try 'sudo' or check your permissions.");
+                            printer(dr_vidpid_debugprobe_cant_connect,
+                                    " appears to be a DebugProbe, but picotool was unable to connect. Maybe try 'sudo' or check your permissions.");
+                            printer(dr_vidpid_cant_connect,
+                                    " was tried, but picotool was unable to connect. Maybe try 'sudo' or check your permissions.");
+    #else
+                            printer(dr_vidpid_bootrom_cant_connect,
+                                    " appears to be in BOOTSEL mode, but picotool was unable to connect. You may need to install a driver via Zadig. See Zadig in the README (https://github.com/raspberrypi/picotool#zadig) for more information");
+                            printer(dr_vidpid_stdio_usb_cant_connect,
+                                    " appears to have a USB serial connection, but picotool was unable to connect.");
+                            printer(dr_vidpid_debugprobe_cant_connect,
+                                    " appears to be a DebugProbe, but picotool was unable to connect.");
+                            printer(dr_vidpid_cant_connect,
+                                    " was tried, but picotool was unable to connect.");
+    #endif
+
+                            // Other known pids
+                            printer(dr_vidpid_debugprobe,
+                                    " appears to be an RP-series DebugProbe device not in BOOTSEL mode, but with a USB reset interface, so consider --debugprobe to force reboot it in order to run the command.");
+                            printer(dr_vidpid_micropython,
+                                    " appears to be an RP-series MicroPython device not in BOOTSEL mode.");
+                            printer(dr_vidpid_circuitpython,
+                                    " appears to be an RP-series CircuitPython device not in BOOTSEL mode.");
+                            printer(dr_vidpid_debugprobe_old,
+                                    " appears to be an RP-series DebugProbe device not in BOOTSEL mode, running old firmware - you should manually put it into BOOTSEL mode and update the firmware (https://github.com/raspberrypi/debugprobe/releases).");
+
+                            // Devices in BOOTSEL
+                            if (settings.target_debugprobe) {
+                                printer(dr_vidpid_bootrom_ok,
+                                        " appears to be an RP-series device already in BOOTSEL mode, but --debugprobe was passed so this is only targetting DebugProbes not already in BOOTSEL mode.");
+                            } else if (settings.only_force) {
+                                printer(dr_vidpid_bootrom_ok,
+                                        " appears to be an RP-series device already in BOOTSEL mode, but --only-force was passed so this is only targetting devices not already in BOOTSEL mode.");
                             }
                             rc = ERROR_NO_DEVICE;
                         } else {

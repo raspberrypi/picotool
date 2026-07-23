@@ -18,7 +18,7 @@
 
 #define VENDOR_ID_RASPBERRY_PI      0x2e8au
 #define PRODUCT_ID_RP2040_USBBOOT   0x0003u
-#define PRODUCT_ID_PICOPROBE        0x0004u
+#define PRODUCT_ID_DEBUGPROBE_OLD   0x0004u
 #define PRODUCT_ID_MICROPYTHON      0x0005u
 #define PRODUCT_ID_STDIO_USB        0x0009u
 #define PRODUCT_ID_RP2040_STDIO_USB 0x000au
@@ -31,20 +31,33 @@ extern "C" {
 #endif
 
 enum picoboot_device_result {
-    dr_vidpid_bootrom_ok,
-    dr_vidpid_bootrom_no_interface,
-    dr_vidpid_bootrom_cant_connect,
-    dr_vidpid_micropython,
-    dr_vidpid_circuitpython,
-    dr_vidpid_picoprobe,
-    dr_vidpid_debugprobe,
-    dr_vidpid_debugprobe_cant_connect,
-    dr_vidpid_debugprobe_no_reset,
-    dr_vidpid_unknown,
-    dr_error,
-    dr_vidpid_usb_reset,
-    dr_vidpid_usb_reset_cant_connect,
-    dr_vidpid_cant_connect,
+    // For these comments, selected vid/pid means either BOOTSEL vid/pid, stdio_usb vid/pid, or vid/pid was passed to picoboot_open_device
+    // (e.g. by passing --vid, --pid, or --debugprobe)
+
+    // Devices that can be used by picotool
+    dr_vidpid_bootrom_ok,               // selected vid/pid has a picoboot interface (i.e. device in BOOTSEL)
+    dr_vidpid_usb_reset,                // selected vid/pid has a USB reset interface (e.g. stdio_usb, or custom vid/pid)
+
+    // Devices missing required interfaces, so cannot be used by picotool
+    dr_vidpid_bootrom_no_interface,     // selected vid/pid has no picoboot interface (and no reset interface as that is checked for first)
+    dr_vidpid_debugprobe_no_reset,      // debugprobe vid/pid, but no reset interface (e.g. firmware <=2.3.1)
+    dr_vidpid_stdio_usb_no_reset,       // stdio_usb vid/pid, but no reset interface (e.g. PICO_ENABLE_USB_RESET_VIA_VENDOR_INTERFACE=0)
+
+    // Devices failed to open (e.g. requires sudo)
+    dr_vidpid_bootrom_cant_connect,     // bootrom vid/pid
+    dr_vidpid_debugprobe_cant_connect,  // debugprobe vid/pid
+    dr_vidpid_stdio_usb_cant_connect,   // stdio_usb vid/pid
+    dr_vidpid_cant_connect,             // custom vid/pid
+
+    // Other known pids for no device found messages
+    dr_vidpid_debugprobe,               // debugprobe vid/pid, with a USB reset interface - only returned when not searching for debugprobe vid/pid
+    dr_vidpid_micropython,              // micropython vid/pid
+    dr_vidpid_circuitpython,            // circuitpython vid/pid
+    dr_vidpid_debugprobe_old,           // old debugprobe vid/pid (v1.0 and v1.0.1)
+
+    // Ignored devices
+    dr_vidpid_unknown,                  // unknown device (e.g. no vid/pid/serial match)
+    dr_error,                           // an error occurred (e.g. libusb_get_device_descriptor or libusb_get_active_config_descriptor failed)
 };
 
 

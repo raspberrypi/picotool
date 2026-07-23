@@ -68,7 +68,7 @@ enum picoboot_device_result picoboot_open_device(libusb_device *device, libusb_d
     *chip = unknown;
     bool custom_vid_pid = !(vid < 0 && pid < 0);
     bool checking_for_debugprobe = false;
-    if (vid <= 0 || vid == VENDOR_ID_RASPBERRY_PI) { // no filtering is not custom_vid_pid
+    if (vid <= 0 || vid == VENDOR_ID_RASPBERRY_PI) { // no filtering if not custom_vid_pid
         if (pid < 0
             || pid == PRODUCT_ID_RP2040_USBBOOT
             || pid == PRODUCT_ID_RP2350_USBBOOT
@@ -111,8 +111,8 @@ enum picoboot_device_result picoboot_open_device(libusb_device *device, libusb_d
             switch (desc.idProduct) {
                 case PRODUCT_ID_MICROPYTHON:
                     return dr_vidpid_micropython;
-                case PRODUCT_ID_PICOPROBE:
-                    return dr_vidpid_picoprobe;
+                case PRODUCT_ID_DEBUGPROBE_OLD:
+                    return dr_vidpid_debugprobe_old;
                 case PRODUCT_ID_CIRCUITPYTHON:
                     return dr_vidpid_circuitpython;
                 case PRODUCT_ID_DEBUGPROBE:
@@ -152,11 +152,11 @@ enum picoboot_device_result picoboot_open_device(libusb_device *device, libusb_d
             if (vid == 0 || strlen(ser) != 0) {
                 // didn't check vid or ser, so treat as unknown
                 return dr_vidpid_unknown;
-            } else if (res == dr_vidpid_usb_reset) {
-                return dr_vidpid_usb_reset_cant_connect;
-            } else if (res == dr_vidpid_debugprobe) {
+            } else if (res == dr_vidpid_usb_reset) { // only set by having STDIO_USB PIDs
+                return dr_vidpid_stdio_usb_cant_connect;
+            } else if (res == dr_vidpid_debugprobe || checking_for_debugprobe) {
                 return dr_vidpid_debugprobe_cant_connect;
-            } else if (*chip != unknown) {
+            } else if (*chip != unknown) { // set by the two cases caught above, plus BOOTSEL PIDs
                 return dr_vidpid_bootrom_cant_connect;
             } else {
                 return dr_vidpid_cant_connect;
@@ -195,6 +195,11 @@ enum picoboot_device_result picoboot_open_device(libusb_device *device, libusb_d
         if (res == dr_vidpid_debugprobe || checking_for_debugprobe) {
             // DebugProbe with no reset interface
             return dr_vidpid_debugprobe_no_reset;
+        }
+
+        if (res == dr_vidpid_usb_reset) {
+            // STDIO_USB with no reset interface
+            return dr_vidpid_stdio_usb_no_reset;
         }
     }
 
