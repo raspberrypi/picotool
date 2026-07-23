@@ -3201,7 +3201,7 @@ bool string_to_hex_array(const string& str, uint8_t *array, size_t size, const s
     if (!str.empty() && str.find("0x") == 0) {
         // Hex string instead of file
         if (str.size() != size*2 + 2) {
-            fail(ERROR_ARGS, "%s hex string must be %d characters long (the supplied string is %d characters)", error_msg.c_str(), size*2, str.size() - 2);
+            fail(ERROR_ARGS, "%s hex string must be %lu characters long (the supplied string is %lu characters)", error_msg.c_str(), size*2, str.size() - 2);
         }
         for (size_t i=0; i < size; i++) {
             auto value = "0x" + str.substr(2 + i*2, 2);
@@ -5720,7 +5720,7 @@ bool encrypt_command::execute(device_map &devices) {
             aes_file->seekg(0, std::ios::beg);
             aes_file->read((char*)aes_key_share.bytes, sizeof(aes_key_share.bytes));
         } else {
-            fail(ERROR_INCOMPATIBLE, "The AES key file must be a 128 byte key share, or a 32 byte key (the supplied file is %d bytes)", aes_key_file_size);
+            fail(ERROR_INCOMPATIBLE, "The AES key file must be a 128 byte key share, or a 32 byte key (the supplied file is %d bytes)", (int)aes_key_file_size);
         }
     }
 
@@ -5818,7 +5818,7 @@ bool encrypt_command::execute(device_map &devices) {
         iv_salt_file->exceptions(std::iostream::failbit | std::iostream::badbit);
         iv_salt_file->seekg(0, std::ios::end);
         if (iv_salt_file->tellg() != 16) {
-            fail(ERROR_INCOMPATIBLE, "The IV OTP salt must be a 16 byte file (the supplied file is %d bytes)", iv_salt_file->tellg());
+            fail(ERROR_INCOMPATIBLE, "The IV OTP salt must be a 16 byte file (the supplied file is %d bytes)", (int)iv_salt_file->tellg());
         }
         iv_salt_file->seekg(0, std::ios::beg);
         iv_salt_file->read((char*)iv_salt.data(), iv_salt.size());
@@ -7905,7 +7905,7 @@ bool partition_create_command::execute(device_map &devices) {
             new_p.name = p["name"];
             new_p.flags |= PICOBIN_PARTITION_FLAGS_HAS_NAME_BITS;
             if (new_p.name.size() > 127) {
-                fail(ERROR_INCOMPATIBLE, "Partition name \"%s\" is %d characters long - max length is 127 characters\n", new_p.name.c_str(), new_p.name.size());
+                fail(ERROR_INCOMPATIBLE, "Partition name \"%s\" is %lu characters long - max length is 127 characters\n", new_p.name.c_str(), new_p.name.size());
             }
         }
         if (p.contains("id")) {
