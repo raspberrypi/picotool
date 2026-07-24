@@ -49,8 +49,10 @@ enum picoboot_device_result {
     dr_vidpid_stdio_usb_cant_connect,   // stdio_usb vid/pid
     dr_vidpid_cant_connect,             // custom vid/pid
 
-    // Other known pids for no device found messages
+    // Special known pids that require extra detection (e.g. USB reset interface)
     dr_vidpid_debugprobe,               // debugprobe vid/pid, with a USB reset interface - only returned when not searching for debugprobe vid/pid
+
+    // Other known pids for no device found messages
     dr_vidpid_micropython,              // micropython vid/pid
     dr_vidpid_circuitpython,            // circuitpython vid/pid
     dr_vidpid_debugprobe_old,           // old debugprobe vid/pid (v1.0 and v1.0.1)
