@@ -59,6 +59,34 @@ unsigned int interface;
 unsigned int out_ep;
 unsigned int in_ep;
 
+enum picoboot_device_result match_rpi_pid(chip_t *chip, int dev_pid) {
+    switch (dev_pid) {
+        case PRODUCT_ID_MICROPYTHON:
+            return dr_vidpid_micropython;
+        case PRODUCT_ID_DEBUGPROBE_OLD:
+            return dr_vidpid_debugprobe_old;
+        case PRODUCT_ID_CIRCUITPYTHON:
+            return dr_vidpid_circuitpython;
+        case PRODUCT_ID_DEBUGPROBE:
+            *chip = rp2040;
+            return dr_vidpid_debugprobe;
+        case PRODUCT_ID_RP2040_STDIO_USB:
+            *chip = rp2040;
+            return dr_vidpid_usb_reset;
+        case PRODUCT_ID_STDIO_USB:
+            *chip = rp2350;
+            return dr_vidpid_usb_reset;
+        case PRODUCT_ID_RP2040_USBBOOT:
+            *chip = rp2040;
+            return dr_vidpid_bootrom_ok;
+        case PRODUCT_ID_RP2350_USBBOOT:
+            *chip = rp2350;
+            return dr_vidpid_bootrom_ok;
+        default:
+            return dr_vidpid_unknown;
+    }
+}
+
 enum picoboot_device_result picoboot_open_device(libusb_device *device, libusb_device_handle **dev_handle, chip_t *chip, int vid, int pid, const char* ser) {
     struct libusb_device_descriptor desc;
     struct libusb_config_descriptor *config;
@@ -66,6 +94,10 @@ enum picoboot_device_result picoboot_open_device(libusb_device *device, libusb_d
     definitely_exclusive = false;
     *dev_handle = NULL;
     *chip = unknown;
+    bool checking_for_debugprobe = false;
+    if (vid == VENDOR_ID_RASPBERRY_PI && pid == PRODUCT_ID_DEBUGPROBE) {
+        checking_for_debugprobe = true;
+    }
     int ret = libusb_get_device_descriptor(device, &desc);
     enum picoboot_device_result res = dr_vidpid_unknown;
     if (ret && verbose) {
@@ -75,34 +107,42 @@ enum picoboot_device_result picoboot_open_device(libusb_device *device, libusb_d
         if (pid >= 0) {
             bool match_vid = (vid < 0 ? VENDOR_ID_RASPBERRY_PI : (unsigned int)vid) == desc.idVendor;
             bool match_pid = pid == desc.idProduct;
-            if (!(match_vid && match_pid)) {
-                return dr_vidpid_unknown;
-            }
-        } else if (vid != 0) { // ignore vid/pid filtering if no pid and vid == 0
-            if (desc.idVendor != (vid < 0 ? VENDOR_ID_RASPBERRY_PI : (unsigned int)vid)) {
-                return dr_vidpid_unknown;
-            }
-            switch (desc.idProduct) {
-                case PRODUCT_ID_MICROPYTHON:
-                    return dr_vidpid_micropython;
-                case PRODUCT_ID_PICOPROBE:
-                    return dr_vidpid_picoprobe;
-                case PRODUCT_ID_RP2040_STDIO_USB:
-                    *chip = rp2040;
-                    res = dr_vidpid_stdio_usb;
-                    break;
-                case PRODUCT_ID_STDIO_USB:
-                    *chip = rp2350;
-                    res = dr_vidpid_stdio_usb;
-                    break;
-                case PRODUCT_ID_RP2040_USBBOOT:
-                    *chip = rp2040;
-                    break;
-                case PRODUCT_ID_RP2350_USBBOOT:
-                    *chip = rp2350;
-                    break;
-                default:
+            if (checking_for_debugprobe) {
+                // Special case - if you pass --debugprobe but there is an RP2040 in bootsel mode,
+                // treat that as a match so it returns dr_vidpid_bootrom_ok - it will not pick
+                // that anyway, 
+                if (!match_vid || !(match_pid || desc.idProduct == PRODUCT_ID_RP2040_USBBOOT)) {
                     return dr_vidpid_unknown;
+                } else {
+                    *chip = rp2040;
+                    if (desc.idProduct == PRODUCT_ID_RP2040_USBBOOT) {
+                        // No longer checking for debugprobe, as this is an RP2040 in bootsel mode
+                        checking_for_debugprobe = false;
+                        res = dr_vidpid_bootrom_ok;
+                    }
+                }
+            } else if (!match_vid || !match_pid) {
+                return dr_vidpid_unknown;
+            } else if (desc.idVendor == VENDOR_ID_RASPBERRY_PI) {
+                // Handle the case where --pid was passed, but it's a standard value
+                res = match_rpi_pid(chip, desc.idProduct);
+                if (res > dr_vidpid_debugprobe) {
+                    // everything after dr_vidpid_debugprobe isn't handled in the rest of the function,
+                    // so set back to unknown as it was selected and needs to be detected
+                    // (e.g. micropython with a reset interface added)
+                    res = dr_vidpid_unknown;
+                }
+            }
+        } else { // ignore vid/pid filtering if no pid and vid == 0
+            if (vid != 0 && desc.idVendor != (vid < 0 ? VENDOR_ID_RASPBERRY_PI : (unsigned int)vid)) {
+                return dr_vidpid_unknown;
+            } else if (desc.idVendor == VENDOR_ID_RASPBERRY_PI) {
+                res = match_rpi_pid(chip, desc.idProduct);
+                if (res > dr_vidpid_debugprobe) {
+                    // everything after dr_vidpid_debugprobe isn't handled in the rest of the function,
+                    // so return it now as it was not selected (e.g. micropython)
+                    return res;
+                }
             }
         }
         ret = libusb_get_active_config_descriptor(device, &config);
@@ -120,40 +160,59 @@ enum picoboot_device_result picoboot_open_device(libusb_device *device, libusb_d
             if (vid == 0 || strlen(ser) != 0) {
                 // didn't check vid or ser, so treat as unknown
                 return dr_vidpid_unknown;
-            } else if (res == dr_vidpid_stdio_usb) {
+            } else if (res == dr_vidpid_usb_reset) { // only set by having STDIO_USB PIDs
                 return dr_vidpid_stdio_usb_cant_connect;
-            } else {
+            } else if (res == dr_vidpid_debugprobe || checking_for_debugprobe) {
+                return dr_vidpid_debugprobe_cant_connect;
+            } else if (res = dr_vidpid_bootrom_ok) {
                 return dr_vidpid_bootrom_cant_connect;
+            } else {
+                return dr_vidpid_cant_connect;
             }
         }
     }
 
-    if (!ret && res == dr_vidpid_stdio_usb) {
-        if (strlen(ser) != 0) {
-            // Check USB serial number
+    // Check USB serial number - skipped for BOOTSEL rp2040 vid/pid, as it is not unique, so flash ID is used instead
+    bool usb_ser_match = strlen(ser) == 0; // true if no serial number passed, false otherwise
+    if (!ret && !(res == dr_vidpid_bootrom_ok && *chip == rp2040)) {
+        if (!usb_ser_match) {
             char ser_str[128];
             libusb_get_string_descriptor_ascii(*dev_handle, desc.iSerialNumber, (unsigned char*)ser_str, sizeof(ser_str));
             if (strcmp(ser, ser_str)) {
                 return dr_vidpid_unknown;
             } else {
-                return res;
+                usb_ser_match = true;
             }
-        } else {
-            return res;
         }
     }
 
-    // Runtime reset interface with thirdparty VID
-    if (!ret) {
+    // Runtime reset interface detection - only runs if USB serial number above matched, or no serial number passed
+    if (!ret && usb_ser_match) {
         for (int i = 0; i < config->bNumInterfaces; i++) {
             if (config->interface[i].altsetting[0].bInterfaceClass == 0xff &&
                 config->interface[i].altsetting[0].bInterfaceSubClass == RESET_INTERFACE_SUBCLASS &&
                 config->interface[i].altsetting[0].bInterfaceProtocol == RESET_INTERFACE_PROTOCOL) {
-                return dr_vidpid_stdio_usb;
+                if (res == dr_vidpid_unknown) {
+                    return dr_vidpid_usb_reset;
+                } else {
+                    // May already be setup, e.g dr_vidpid_debugprobe
+                    return res;
+                }
             }
+        }
+
+        if (res == dr_vidpid_debugprobe || checking_for_debugprobe) {
+            // DebugProbe with no reset interface
+            return dr_vidpid_debugprobe_no_reset;
+        }
+
+        if (res == dr_vidpid_usb_reset) {
+            // STDIO_USB with no reset interface
+            return dr_vidpid_stdio_usb_no_reset;
         }
     }
 
+    // Picoboot interface detection
     if (!ret) {
         if (config->bNumInterfaces == 1) {
             interface = 0;

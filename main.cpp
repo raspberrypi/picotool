@@ -519,7 +519,7 @@ struct bdev_fs : public cli::value_base<bdev_fs> {
 struct cmd {
     explicit cmd(string name) : _name(std::move(name)) {}
     virtual ~cmd() = default;
-    enum device_support { none, one, zero_or_more };
+    enum device_support { none, one, zero_or_more, any };
     virtual group get_cli() = 0;
     virtual string get_doc() const = 0;
     virtual device_support get_device_support() { return one; }
@@ -562,6 +562,7 @@ struct _settings {
     int led=DEFAULT_BOOTSEL_LED;
     bool active_low=false;
     bool force_rp2040 = false;
+    bool target_debugprobe = false;
     uint32_t offset = 0;
     uint32_t from = 0;
     uint32_t to = 0;
@@ -573,6 +574,7 @@ struct _settings {
     int reboot_diagnostic_partition = BOOT_PARTITION_NONE;
     bool force = false;
     bool force_no_reboot = false;
+    bool only_force = false;
     string switch_cpu;
     uint32_t family_id = 0;
     model_t model = nullptr;
@@ -708,12 +710,14 @@ auto device_selection =
             .if_missing([] { return "missing bus number"; })) % "Filter devices by USB bus number" +
         (option("--address") & integer("addr").min_value(1).max_value(127).set(settings.address)
             .if_missing([] { return "missing address"; })) % "Filter devices by USB device address" +
-        (option("--vid") & integer("vid").set(settings.vid).if_missing([] { return "missing vid"; })) % "Filter by vendor id" +
+        (option("--vid") & integer("vid").set(settings.vid).min(1).if_missing([] { return "missing vid"; })) % "Filter by vendor id" +
         (option("--pid") & integer("pid").set(settings.pid)) % "Filter by product id" +
         (option("--ser") & value("ser").set(settings.ser)) % "Filter by serial number"
         + option("--rp2040").set(settings.force_rp2040) % "Assume the device is an RP2040 - this is only required when using a custom vid/pid with an RP2040 on Windows, and is ignored on other operating systems"
+        + option("--debugprobe").set(settings.target_debugprobe) % "Force a DebugProbe device using firmware version >2.3.1 to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode"
         + option('f', "--force").set(settings.force) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode" +
                 option('F', "--force-no-reboot").set(settings.force_no_reboot) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the USB drive mounted"
+        + option("--only-force").set(settings.only_force) % "Same as --force, but will ignore devices already in BOOTSEL mode"
         + (option("--bootsel-led") & integer("gpio").set(settings.led)) % 
         "Specify the GPIO for the BOOTSEL activity LED to flash (default "
     #if DEFAULT_BOOTSEL_LED < 0
@@ -1762,6 +1766,23 @@ struct version_command : public cmd {
 };
 
 #if HAS_LIBUSB
+struct list_command : public cmd {
+    list_command() : cmd("list") {}
+    bool execute(device_map &devices) override;
+
+    device_support get_device_support() override {
+        return device_support::any;
+    }
+
+    group get_cli() override {
+        return group();
+    }
+
+    string get_doc() const override {
+        return "List all connected RP-series devices";
+    }
+};
+
 struct reboot_command : public cmd {
     bool quiet;
     reboot_command() : cmd("reboot") {}
@@ -1802,6 +1823,7 @@ vector<std::shared_ptr<cmd>> commands {
         std::shared_ptr<cmd>(new verify_command()),
         std::shared_ptr<cmd>(new erase_command()),
         reboot_cmd,
+        std::shared_ptr<cmd>(new list_command()),
     #endif
     #if HAS_MBEDTLS
         std::shared_ptr<cmd>(new seal_command()),
@@ -4451,6 +4473,14 @@ string missing_device_string(bool wasRetry, bool requires_rp2350 = false) {
         }
     } else if (settings.bus != -1) {
         snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found on bus %d.", device_name, settings.bus);
+    } else if (settings.vid > 0) {
+        if (settings.pid != -1) {
+            snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found with vid %04x, pid %04x.", device_name, settings.vid, settings.pid);
+        } else {
+            snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found with vid %04x.", device_name, settings.vid);
+        }
+    } else if (settings.pid != -1) {
+        snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found with pid %04x.", device_name, settings.pid);
     } else if (!settings.ser.empty()) {
         snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found with serial number %s.", device_name, settings.ser.c_str());
     } else {
@@ -10054,8 +10084,8 @@ bool reboot_command::execute(device_map &devices) {
         if (!settings.switch_cpu.empty()) {
             fail(ERROR_ARGS, "--cpu may not be specified for forced reboot");
         }
-        selected_chip = std::get<0>(devices[dr_vidpid_stdio_usb][0]);
-        reboot_device(std::get<1>(devices[dr_vidpid_stdio_usb][0]), std::get<2>(devices[dr_vidpid_stdio_usb][0]), settings.reboot_usb);
+        selected_chip = std::get<0>(devices[dr_vidpid_usb_reset][0]);
+        reboot_device(std::get<1>(devices[dr_vidpid_usb_reset][0]), std::get<2>(devices[dr_vidpid_usb_reset][0]), settings.reboot_usb);
         if (!quiet) {
             if (settings.reboot_usb) {
                 std::cout << "The device was asked to reboot into BOOTSEL mode.\n";
@@ -10132,6 +10162,98 @@ bool reboot_command::execute(device_map &devices) {
     }
     return true;
 }
+
+static void print_device_info(device_map &devices, bool had_note=false, bool include_bootsel=false) {
+    auto printer = [&](enum picoboot_device_result r, const string &description) {
+        if (!had_note && !devices[r].empty()) {
+            fos << "\nbut:\n\n";
+            had_note = true;
+        }
+        for (auto d : devices[r]) {
+            fos << bus_device_string(std::get<1>(d), std::get<0>(d)) << description << "\n";
+        }
+    };
+
+    // Devices in BOOTSEL
+    if (settings.target_debugprobe) {
+        printer(dr_vidpid_bootrom_ok,
+                " appears to already be in BOOTSEL mode, but --debugprobe was passed so this is only targetting DebugProbes not already in BOOTSEL mode.");
+    } else if (settings.only_force) {
+        printer(dr_vidpid_bootrom_ok,
+                " appears to already be in BOOTSEL mode, but --only-force was passed so this is only targetting devices not already in BOOTSEL mode.");
+    } else if (include_bootsel) {
+        printer(dr_vidpid_bootrom_ok,
+                " appears to be in BOOTSEL mode.");
+    }
+
+    // Devices missing required interfaces, so cannot be used by picotool
+    if (settings.vid != 0) { // if vid=0, vid/pid filtering is skipped, so this is returned for every accessible device (e.g. every USB device with sudo)
+        printer(dr_vidpid_bootrom_no_interface,
+                " was tried, but it does not have a PICOBOOT interface.");
+    }
+    printer(dr_vidpid_debugprobe_no_reset,
+            " appears to be a DebugProbe without a USB reset interface, so must be manually put into BOOTSEL mode.");
+    printer(dr_vidpid_stdio_usb_no_reset,
+            " appears to have a USB serial connection, but it does not have a USB reset interface so must be manually put into BOOTSEL mode.");
+    if (selected_cmd->force_requires_pre_reboot()) {
+        printer(dr_vidpid_usb_reset,
+                " appears to have a USB reset interface, so consider -f (or -F) to force reboot in order to run the command.");
+    } else {
+        // special case message for what is actually just reboot (the only command that doesn't require reboot first)
+        printer(dr_vidpid_usb_reset,
+                " appears to have a USB reset interface, so consider -f to force the reboot.");
+    }
+
+    // Devices failed to open (e.g. requires sudo)
+#if defined(__linux__) || defined(__APPLE__)
+    printer(dr_vidpid_bootrom_cant_connect,
+            " appears to be in BOOTSEL mode, but picotool was unable to connect. Maybe try 'sudo' or check your permissions.");
+    printer(dr_vidpid_stdio_usb_cant_connect,
+            " appears to have a USB serial connection, but picotool was unable to connect. Maybe try 'sudo' or check your permissions.");
+    printer(dr_vidpid_debugprobe_cant_connect,
+            " appears to be a DebugProbe, but picotool was unable to connect. Maybe try 'sudo' or check your permissions.");
+    printer(dr_vidpid_cant_connect,
+            " was tried, but picotool was unable to connect. Maybe try 'sudo' or check your permissions.");
+#else
+    printer(dr_vidpid_bootrom_cant_connect,
+            " appears to be in BOOTSEL mode, but picotool was unable to connect. You may need to install a driver via Zadig. See Zadig in the README (https://github.com/raspberrypi/picotool#zadig) for more information");
+    printer(dr_vidpid_stdio_usb_cant_connect,
+            " appears to have a USB serial connection, but picotool was unable to connect.");
+    printer(dr_vidpid_debugprobe_cant_connect,
+            " appears to be a DebugProbe, but picotool was unable to connect.");
+    printer(dr_vidpid_cant_connect,
+            " was tried, but picotool was unable to connect.");
+#endif
+
+    // Other known pids
+    printer(dr_vidpid_debugprobe,
+            " appears to be a DebugProbe with a USB reset interface, so consider --debugprobe to force reboot it in order to run the command.");
+    printer(dr_vidpid_micropython,
+            " appears to be running MicroPython, so must be manually put into BOOTSEL mode.");
+    printer(dr_vidpid_circuitpython,
+            " appears to be running CircuitPython, so must be manually put into BOOTSEL mode.");
+    printer(dr_vidpid_debugprobe_old,
+            " appears to be a DebugProbe running old firmware - you should manually put it into BOOTSEL mode and update the firmware (https://github.com/raspberrypi/debugprobe/releases).");
+}
+
+bool list_command::execute(device_map &devices) {
+    int num_devices = 0;
+
+    for (auto devs = devices.begin(); devs != devices.end(); devs++) {
+        if (devs->first != dr_vidpid_unknown) {
+            num_devices += devs->second.size();
+        }
+    }
+
+    fos << "Detected " << num_devices << " RP-series devices:\n\n";
+    fos.first_column(2);
+    fos.hanging_indent(4);
+    fos.paragraph_spacing(1);
+    fos.min_paragraph_lines_for_spacing(1);
+    print_device_info(devices, true, true);
+
+    return false;
+}
 #endif
 
 #if defined(_WIN32)
@@ -10205,8 +10327,15 @@ int main(int argc, char **argv) {
 #if HAS_LIBUSB
     libusb_context *ctx = nullptr;
 
+    if (settings.target_debugprobe) {
+        if (settings.vid >= 0 || settings.pid >= 0) fail(ERROR_ARGS, "Cannot pass --debugprobe along with --vid or --pid");
+        settings.vid = VENDOR_ID_RASPBERRY_PI;
+        settings.pid = PRODUCT_ID_DEBUGPROBE;
+        settings.only_force = true;
+    }
+
     // save complicating the grammar
-    if (settings.force_no_reboot) settings.force = true;
+    if (settings.force_no_reboot || settings.only_force) settings.force = true;
 
     struct libusb_device **devs = nullptr;
     device_map devices;
@@ -10255,13 +10384,22 @@ int main(int argc, char **argv) {
                 }
             }
             auto supported = selected_cmd->get_device_support();
+            bool bootsel_not_found = devices[dr_vidpid_bootrom_ok].empty();
+            bool usb_reset_not_found = devices[dr_vidpid_usb_reset].empty();
+            bool no_device_found = false;
+            if (settings.only_force) {
+                no_device_found = usb_reset_not_found;
+            } else if (settings.force) {
+                no_device_found = usb_reset_not_found && bootsel_not_found;
+            } else {
+                no_device_found = bootsel_not_found;
+            }
             switch (supported) {
                 case cmd::device_support::zero_or_more:
                     if (!settings.filenames[0].empty()) break;
                     // fall thru
                 case cmd::device_support::one:
-                    if (devices[dr_vidpid_bootrom_ok].empty() &&
-                        (!settings.force || devices[dr_vidpid_stdio_usb].empty())) {
+                    if (no_device_found) {
                         if (tries == 0 || tries == MAX_REBOOT_TRIES) {
                             if (tries) {
                                 fos << "\n\n";
@@ -10274,44 +10412,13 @@ int main(int argc, char **argv) {
                                     fos << " You may need to install a driver via Zadig. See Zadig in the README (https://github.com/raspberrypi/picotool#zadig) for more information.";
                                 }
 #endif
-                                fos << " It is possible the device is not responding, and will have to be manually entered into BOOTSEL mode.\n";
+                                fos << " It is possible the device is not responding, and will have to be manually put into BOOTSEL mode.\n";
                                 had_note = true; // suppress "but:" in this case
                             }
                             fos << "\n";
                             fos.first_column(0);
                             fos.hanging_indent(4);
-                            auto printer = [&](enum picoboot_device_result r, const string &description) {
-                                if (!had_note && !devices[r].empty()) {
-                                    fos << "\nbut:\n\n";
-                                    had_note = true;
-                                }
-                                for (auto d : devices[r]) {
-                                    fos << bus_device_string(std::get<1>(d), std::get<0>(d)) << description << "\n";
-                                }
-                            };
-    #if defined(__linux__) || defined(__APPLE__)
-                            printer(dr_vidpid_bootrom_cant_connect,
-                                    " appears to be in BOOTSEL mode, but picotool was unable to connect. Maybe try 'sudo' or check your permissions.");
-                            printer(dr_vidpid_stdio_usb_cant_connect,
-                                    " appears to have a USB serial connection, but picotool was unable to connect. Maybe try 'sudo' or check your permissions.");
-    #else
-                            printer(dr_vidpid_bootrom_cant_connect,
-                                    " appears to be in BOOTSEL mode, but picotool was unable to connect. You may need to install a driver via Zadig. See Zadig in the README (https://github.com/raspberrypi/picotool#zadig) for more information");
-                            printer(dr_vidpid_stdio_usb_cant_connect,
-                                    " appears to have a USB serial connection, but picotool was unable to connect.");
-    #endif
-                            printer(dr_vidpid_picoprobe,
-                                    " appears to be an RP-series PicoProbe device not in BOOTSEL mode.");
-                            printer(dr_vidpid_micropython,
-                                    " appears to be an RP-series MicroPython device not in BOOTSEL mode.");
-                            if (selected_cmd->force_requires_pre_reboot()) {
-                                printer(dr_vidpid_stdio_usb,
-                                        " appears to have a USB serial connection, so consider -f (or -F) to force reboot in order to run the command.");
-                            } else {
-                                // special case message for what is actually just reboot (the only command that doesn't require reboot first)
-                                printer(dr_vidpid_stdio_usb,
-                                        " appears to have a USB serial connection, so consider -f to force the reboot.");
-                            }
+                            print_device_info(devices, had_note);
                             rc = ERROR_NO_DEVICE;
                         } else {
                             // waiting for rebooted device to show up
@@ -10319,39 +10426,41 @@ int main(int argc, char **argv) {
                         }
                     } else if (supported == cmd::device_support::one) {
                         if (devices[dr_vidpid_bootrom_ok].size() > 1 ||
-                            (devices[dr_vidpid_bootrom_ok].empty() && devices[dr_vidpid_stdio_usb].size() > 1)) {
+                            (devices[dr_vidpid_bootrom_ok].empty() && devices[dr_vidpid_usb_reset].size() > 1)) {
                             fail(ERROR_NOT_POSSIBLE, "Command requires a single RP-series device to be targeted.");
                         }
-                        if (!devices[dr_vidpid_bootrom_ok].empty()) {
+                        if (!devices[dr_vidpid_bootrom_ok].empty() && !settings.only_force) {
                             settings.force = false; // we have a device, so we're not forcing
                         }
-                    } else if (supported == cmd::device_support::zero_or_more && settings.force && !devices[dr_vidpid_bootrom_ok].empty()) {
+                    } else if (supported == cmd::device_support::zero_or_more && settings.force && !devices[dr_vidpid_bootrom_ok].empty() && !settings.only_force) {
                         // we have usable devices, so lets use them without force
                         settings.force = false;
                     }
                     fos.first_column(0);
                     fos.hanging_indent(0);
                     break;
+                case cmd::device_support::any:
                 default:
                     break;
             }
             if (!rc) {
                 if (settings.force && ctx) { // actually ctx should never be null as we are targeting device if force is set, but still
-                    if (devices[dr_vidpid_stdio_usb].size() != 1 && !tries) {
+                    if (devices[dr_vidpid_usb_reset].size() != 1 && !tries) {
                         fail(ERROR_NOT_POSSIBLE,
                              "Forced command requires a single rebootable RP-series device to be targeted.");
                     }
                     if (selected_cmd->force_requires_pre_reboot()) {
                         if (!tries) {
                             // we reboot into BOOTSEL mode and disable MSC interface (the 1 here)
-                            auto &to_reboot = std::get<1>(devices[dr_vidpid_stdio_usb][0]);
-                            auto &to_reboot_handle = std::get<2>(devices[dr_vidpid_stdio_usb][0]);
+                            auto to_reboot_chip = std::get<0>(devices[dr_vidpid_usb_reset][0]);
+                            auto &to_reboot = std::get<1>(devices[dr_vidpid_usb_reset][0]);
+                            auto &to_reboot_handle = std::get<2>(devices[dr_vidpid_usb_reset][0]);
                             unsigned int disable_mask = 1;  // disable MSC interface
     #if defined(_WIN32)
                             {
                                 struct libusb_device_descriptor desc;
                                 libusb_get_device_descriptor(to_reboot, &desc);
-                                if (desc.idProduct == PRODUCT_ID_RP2040_STDIO_USB || settings.force_rp2040) {
+                                if (to_reboot_chip == rp2040 || settings.force_rp2040) {
                                     // the Zadig driver should be setup for the device in BOOTSEL mode with no interfaces disabled,  
                                     // as all the interfaces are enabled when you plug it in while holding down the BOOTSEL button  
                                     disable_mask = 0;
@@ -10393,6 +10502,8 @@ int main(int argc, char **argv) {
                         // again is to assume it has the same serial number.
                         settings.address = -1;
                         settings.bus = -1;
+                        // also clear only_force, as the device should now be rebooting to BOOTSEL mode
+                        settings.only_force = false;
                         if (settings.pid != -1 || settings.vid != -1) {
                             // vid/pid filtering was enabled, but may change in BOOTSEL mode, so needs to be disabled
                             if (settings.ser.empty()) {
