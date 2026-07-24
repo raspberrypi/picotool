@@ -14,9 +14,11 @@ cc_library(
 py_binary(
     name = "binh",
     srcs = ["binh.py"],
+    legacy_create_init = False,
 )
 
 py_binary(
     name = "jsonh",
     srcs = ["jsonh.py"],
+    legacy_create_init = False,
 )
