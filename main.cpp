@@ -10452,6 +10452,7 @@ int main(int argc, char **argv) {
                     if (selected_cmd->force_requires_pre_reboot()) {
                         if (!tries) {
                             // we reboot into BOOTSEL mode and disable MSC interface (the 1 here)
+                            auto to_reboot_chip = std::get<0>(devices[dr_vidpid_usb_reset][0]);
                             auto &to_reboot = std::get<1>(devices[dr_vidpid_usb_reset][0]);
                             auto &to_reboot_handle = std::get<2>(devices[dr_vidpid_usb_reset][0]);
                             unsigned int disable_mask = 1;  // disable MSC interface
@@ -10459,7 +10460,7 @@ int main(int argc, char **argv) {
                             {
                                 struct libusb_device_descriptor desc;
                                 libusb_get_device_descriptor(to_reboot, &desc);
-                                if (desc.idProduct == PRODUCT_ID_RP2040_STDIO_USB || settings.force_rp2040) {
+                                if (to_reboot_chip == rp2040 || settings.force_rp2040) {
                                     // the Zadig driver should be setup for the device in BOOTSEL mode with no interfaces disabled,  
                                     // as all the interfaces are enabled when you plug it in while holding down the BOOTSEL button  
                                     disable_mask = 0;
