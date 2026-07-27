@@ -2,6 +2,11 @@
 
 ALLOWED_MISSING_COMMANDS="version"
 
+if ! command -v picotool; then
+    echo "Failing job due to picotool command not being in the PATH"
+    exit 1
+fi
+
 mkdir -p tmp
 cp README.md tmp/README.md
 
