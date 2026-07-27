@@ -1639,7 +1639,7 @@ struct uf2_combine_command : public cmd {
                 ).force_expand_help(true) % "UF2 Family options" +
                 (
                     option("--offset").set(settings.uf2.offset_set) % "Offset second UF2 by amount" &
-                        hex("offset").set(settings.uf2.offset) % "offset amount (default to 0)"
+                        hex("offset").set(settings.uf2.offset) % "offset amount (default to 0x0)"
                 ).force_expand_help(true) % "Offset options" +
                 (
                     option("--partition").set(settings.uf2.partition_set) % "Place second UF2 in partition (first UF2 must contain a partition table)" &
