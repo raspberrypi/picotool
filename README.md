@@ -1067,7 +1067,7 @@ OPTIONS:
         --offset
             Offset second UF2 by amount
         <offset>
-            offset amount (default to 0)
+            offset amount (default to 0x0)
     Partition options
         --partition
             Place second UF2 in partition (first UF2 must contain a partition table)
