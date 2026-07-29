@@ -6308,7 +6308,14 @@ bool link_command::execute(device_map &devices) {
         auto bin_start = ranges[0].from;
         auto bin_size = ranges[0].len();
 
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wfree-nonheap-object" // false GCC 15 warning
+#endif
         vector<uint8_t> bin = access.read_vector<uint8_t>(bin_start, bin_size, false);
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
 
         std::unique_ptr<block> first_block = find_first_block(bin, bin_start);
         if (!first_block) {
