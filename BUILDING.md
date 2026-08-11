@@ -8,7 +8,7 @@ git submodule update --init lib/mbedtls
 
 You also need to install `libusb-1.0` if you want to use the USB functionality.
 
-> If libusb-1.0 is not installed, picotool still builds, but it omits all options that deal with managing a pico via USB (load, save, erase, verify, reboot). Builds that do not include USB support can be identified by running `picotool version`, which will state `This version of picotool was compiled without USB support. Some commands are not available.`. Additionally, the unsupported commands won't appear in the output of the help command, and if you attempt to execute an invalid command you will get an error message. The build output message `libUSB is not found - no USB support will be built` also appears in the build logs.
+> If libusb-1.0 is not installed, picotool still builds, but it omits all options that deal with managing a pico via USB (load, save, erase, verify, reboot, bdev). Builds that do not include USB support can be identified by running `picotool version`, which will state `This version of picotool was compiled without USB support. Some commands are not available.`. Additionally, the unsupported commands won't appear in the output of the help command, and if you attempt to execute an invalid command you will get an error message. The build output message `libUSB is not found - no USB support will be built` also appears in the build logs.
 
 ### Linux / macOS
 
@@ -103,7 +103,7 @@ In order for the SDK to find `picotool` in this custom folder, you will usually 
 
 The `picotool` build has some CMake variables you can use to customise how the build works, and how `picotool` functions:
 
-- `GENERATE_FIXED_DOCS_WIDTH`: By default the width of the output from `picotool` adjusts to the width of the terminal. Setting this to `true` fixes the width to 140, which is used when generating the [README](README.md).
+- `GENERATE_FIXED_DOCS_WIDTH`: By default the width of the output from `picotool` adjusts to the width of the terminal. Setting this to `true` fixes the width to 95, which is used when generating the [README](README.md).
 - `DEFAULT_BOOTSEL_LED`: This can be used to set the default value for the `--bootsel-led` argument, so `picotool` always reboots devices to BOOTSEL with that LED used as the activity indicator.
 - `PICOTOOL_NO_LIBUSB`: By default `picotool` is compiled with USB support if libusb is found. Setting this to `true` explicitly compiles without USB support, which is used when the Pico SDK builds picotool.
 - `USE_PRECOMPILED`: By default the build uses pre-compiled ELF/BIN files for code that is run on the device (enc_bootloader, xip_ram_perms, and picoboot_flash_id). Setting this to `false` re-compiles these files instead.
