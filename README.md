@@ -1568,8 +1568,8 @@ OPTIONS:
 ```
 
 ```text
-$ picotool otp permissions --sign private.pem --tx 46 sample-permissions.json 
-Picking file ./xip_ram_perms.elf
+$ picotool otp permissions --sign private.pem sample-permissions.json 
+Picking file /usr/local/share/picotool/xip_ram_perms.elf
 page10
 page10 = 0
 setting page10 -> 4063233
@@ -1578,11 +1578,8 @@ page11 = 0
 setting page11 -> 4128781
 page12
 page12 = 0
-setting page12 -> 4128781
-tx_pin = 0
-setting tx_pin -> 46
+setting page12 -> 4128768
 Loading into XIP RAM: [==============================]  100%
->>> using flash update boot of 13ffc000
 
 The device was rebooted to start the application.
 ```
