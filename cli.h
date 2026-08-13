@@ -7,6 +7,11 @@
 #ifndef _CLI_H
 #define _CLI_H
 
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wsign-compare"
+#endif
+
 #include <algorithm>
 #include <exception>
 #include <functional>
@@ -1038,5 +1043,9 @@ namespace cli {
         }
     }
 }
+
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
 
 #endif

@@ -256,11 +256,11 @@ void elf_file::read_sh(void) {
 // but this is not necessary for signing/hashing
 void elf_file::remove_ph_holes(void) {
     auto sorted_ph_entries = sorted_segments();
-    for (int i=0; i+1 < ph_entries.size(); i++) {
+    for (size_t i=0; i+1 < ph_entries.size(); i++) {
         auto ph0 = &(ph_entries[i]);
         const elf32_ph_entry* ph1 = nullptr;
         // ph1 is the next segment by address
-        for (int j=0; j+1 < sorted_ph_entries.size(); j++) {
+        for (size_t j=0; j+1 < sorted_ph_entries.size(); j++) {
             auto tst_ph0 = sorted_ph_entries[j];
             if (tst_ph0->offset == ph0->offset) {
                 ph1 = sorted_ph_entries[j+1];
@@ -284,7 +284,7 @@ void elf_file::remove_ph_holes(void) {
             if (ph0->offset + ph0->filez + gap > ph1file.offset) {
                 fail(ERROR_INCOMPATIBLE, "Segment %d: Cannot plug gap without space in file - gap %d", i, gap);
             }
-            if (verbose) printf("Segment %d: Moving end from 0x%08x to 0x%08x to plug gap\n", i, ph0->paddr + ph0->filez, ph1->paddr);
+            if (verbose) printf("Segment %d: Moving end from 0x%08x to 0x%08x to plug gap\n", (int)i, ph0->paddr + ph0->filez, ph1->paddr);
             ph0->filez = ph1->paddr - ph0->paddr;
             ph0->memsz = ph0->filez;
         }
@@ -296,7 +296,7 @@ void elf_file::remove_ph_holes(void) {
 // signing/hashing/encrypting data that may not be written, as many tools write in sections not segments
 void elf_file::remove_sh_holes(void) {
     bool found_hole = false;
-    for (int i=0; i+1 < sh_entries.size(); i++) {
+    for (size_t i=0; i+1 < sh_entries.size(); i++) {
         auto sh0 = &(sh_entries[i]);
         elf32_sh_entry sh1 = sh_entries[i+1];
         if (
@@ -310,7 +310,7 @@ void elf_file::remove_sh_holes(void) {
             if (gap > sh1.addralign) {
                 fail(ERROR_INCOMPATIBLE, "Section %d: Cannot plug gap greater than alignment - gap %d, alignment %d", i, gap, sh1.addralign);
             }
-            if (verbose) printf("Section %d: Moving end from 0x%08x to 0x%08x to plug gap\n", i, sh0->addr + sh0->size, sh1.addr);
+            if (verbose) printf("Section %d: Moving end from 0x%08x to 0x%08x to plug gap\n", (int)i, sh0->addr + sh0->size, sh1.addr);
             sh0->size = sh1.addr - sh0->addr;
             found_hole = true;
         } else if (
@@ -321,7 +321,7 @@ void elf_file::remove_sh_holes(void) {
         ) {
             const elf32_ph_entry *seg = segment_from_section(*sh0);
             uint32_t gap = seg->offset + seg->filez - sh0->offset - sh0->size;
-            if (verbose) printf("Section %d: Moving end from 0x%08x to 0x%08x to plug gap at end of segment\n", i, sh0->addr + sh0->size, seg->offset + seg->filez);
+            if (verbose) printf("Section %d: Moving end from 0x%08x to 0x%08x to plug gap at end of segment\n", (int)i, sh0->addr + sh0->size, seg->offset + seg->filez);
             sh0->size = seg->offset + seg->filez - sh0->offset;
             found_hole = true;
         }
@@ -330,7 +330,7 @@ void elf_file::remove_sh_holes(void) {
 }
 
 void elf_file::remove_empty_ph_entries(void) {
-    for (int i = 0; i < ph_entries.size(); i++) {
+    for (size_t i = 0; i < ph_entries.size(); i++) {
         if (ph_entries[i].filez == 0) {
             ph_entries.erase(ph_entries.begin() + i);
             eh.ph_num--; i--;

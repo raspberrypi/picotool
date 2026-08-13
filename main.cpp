@@ -253,7 +253,7 @@ const string getFiletypeName(enum filetype type)
 struct cancelled_exception : std::exception { };
 
 struct not_mapped_exception : std::exception {
-    explicit not_mapped_exception(uint32_t addr) : addr(addr), std::exception() {}
+    explicit not_mapped_exception(uint32_t addr) : std::exception(), addr(addr) {}
     const char *what() const noexcept override {
         return "Hmm uncaught not mapped";
     }
@@ -1223,8 +1223,8 @@ struct seal_command : public cmd {
             ).min(0) % "Add Minor Version" +
             (
                 option("--rollback") &
-                    integer("rollback").set(settings.seal.rollback_version) +
-                    hex("rows").add_to(settings.seal.rollback_rows).min(0).repeatable()
+                    (integer("rollback").set(settings.seal.rollback_version) +
+                    hex("rows").add_to(settings.seal.rollback_rows).min(0).repeatable())
             ).min(0) % "Add Rollback Version"
         );
     }
@@ -2529,7 +2529,7 @@ struct picoboot_memory_access : public memory_access {
                 }
                 // Check if we need to erase (ie check for bits that need to be set)
                 bool do_erase = false;
-                for (int i = 0; i < write_data.size(); i++) {
+                for (size_t i = 0; i < write_data.size(); i++) {
                     if (buffer[i] & ~write_data[i]) {
                         do_erase = true;
                         break;
@@ -5132,7 +5132,7 @@ bool erase_command::execute(device_map &devices) {
         if (!partitions) {
             fail(ERROR_NOT_POSSIBLE, "There is no partition table on the device");
         }
-        if (settings.load.partition >= partitions->size()) {
+        if (settings.load.partition >= (int)partitions->size()) {
             fail(ERROR_NOT_POSSIBLE, "There are only %d partitions on the device", partitions->size());
         }
         size_t tmp;
@@ -5425,7 +5425,7 @@ bool load_command::execute(device_map &devices) {
         if (!partitions) {
             fail(ERROR_NOT_POSSIBLE, "There is no partition table on the device");
         }
-        if (settings.load.partition >= partitions->size()) {
+        if (settings.load.partition >= (int)partitions->size()) {
             fail(ERROR_NOT_POSSIBLE, "There are only %d partitions on the device", partitions->size());
         }
         uint32_t start = (*partitions)[settings.load.partition].start;
@@ -5800,7 +5800,7 @@ bool encrypt_command::execute(device_map &devices) {
     }
 
     // Key is stored as a 4-way share of each word, ie X[0] = A[0] ^ B[0] ^ C[0] ^ D[0], stored as A[0], B[0], C[0], D[0]
-    for (int i=0; i < count_of(aes_key.words); i++) {
+    for (size_t i=0; i < count_of(aes_key.words); i++) {
         aes_key.words[i] = aes_key_share.words[i*4]
                          ^ aes_key_share.words[i*4 + 1]
                          ^ aes_key_share.words[i*4 + 2]
@@ -5859,7 +5859,7 @@ bool encrypt_command::execute(device_map &devices) {
 
             // Salt IV
             assert(iv_data.size() == iv_salt.size());
-            for (int i=0; i < iv_data.size(); i++) {
+            for (size_t i=0; i < iv_data.size(); i++) {
                 iv_data[i] ^= iv_salt[i];
             }
             auto tmp = std::make_shared<std::stringstream>();
@@ -6024,30 +6024,30 @@ bool encrypt_command::execute(device_map &devices) {
         memcpy(page2_data.data(), iv_salt.data(), iv_salt.size());
 
         // The bits in rows 32-63 must be the inverse of the bits in rows 0-31
-        for (int i = 0; i < page0_data.size(); i += 2) {
+        for (size_t i = 0; i < page0_data.size(); i += 2) {
             page0_inverse[i*2] = ~page0_data[i];
             page0_inverse[i*2+1] = ~page0_data[i+1];
             page0_inverse[i*2+2] = ~otp_calculate_ecc(*(uint16_t*)&page0_data[i]) >> 16;
         }
-        for (int i = 0; i < page1_data.size(); i += 2) {
+        for (size_t i = 0; i < page1_data.size(); i += 2) {
             page1_inverse[i*2] = ~page1_data[i];
             page1_inverse[i*2+1] = ~page1_data[i+1];
             page1_inverse[i*2+2] = ~otp_calculate_ecc(*(uint16_t*)&page1_data[i]) >> 16;
         }
-        for (int i = 0; i < page2_data.size(); i += 2) {
+        for (size_t i = 0; i < page2_data.size(); i += 2) {
             page2_inverse[i*2] = ~page2_data[i];
             page2_inverse[i*2+1] = ~page2_data[i+1];
             page2_inverse[i*2+2] = ~otp_calculate_ecc(*(uint16_t*)&page2_data[i]) >> 16;
         }
 
         // Add otp AES key pages
-        for (int i = 0; i < page0_data.size(); i++) {
+        for (size_t i = 0; i < page0_data.size(); i++) {
             std::stringstream ss;
             ss << settings.encrypt.otp_key_page << ":0";
             otp_json[ss.str()]["ecc"] = true;
             otp_json[ss.str()]["value"][i] = page0_data[i];
         }
-        for (int i = 0; i < page1_data.size(); i++) {
+        for (size_t i = 0; i < page1_data.size(); i++) {
             std::stringstream ss;
             ss << settings.encrypt.otp_key_page + 1 << ":0";
             otp_json[ss.str()]["ecc"] = true;
@@ -6055,7 +6055,7 @@ bool encrypt_command::execute(device_map &devices) {
         }
 
         // Add otp IV salt page
-        for (int i = 0; i < page2_data.size(); i++) {
+        for (size_t i = 0; i < page2_data.size(); i++) {
             std::stringstream ss;
             ss << settings.encrypt.otp_key_page + 2 << ":0";
             otp_json[ss.str()]["ecc"] = true;
@@ -6063,19 +6063,19 @@ bool encrypt_command::execute(device_map &devices) {
         }
 
         // Add inverse pages
-        for (int i = 0; i < page0_inverse.size(); i++) {
+        for (size_t i = 0; i < page0_inverse.size(); i++) {
             std::stringstream ss;
             ss << settings.encrypt.otp_key_page << ":32";
             otp_json[ss.str()]["ecc"] = false;
             otp_json[ss.str()]["value"][i] = page0_inverse[i];
         }
-        for (int i = 0; i < page1_inverse.size(); i++) {
+        for (size_t i = 0; i < page1_inverse.size(); i++) {
             std::stringstream ss;
             ss << settings.encrypt.otp_key_page + 1 << ":32";
             otp_json[ss.str()]["ecc"] = false;
             otp_json[ss.str()]["value"][i] = page1_inverse[i];
         }
-        for (int i = 0; i < page2_inverse.size(); i++) {
+        for (size_t i = 0; i < page2_inverse.size(); i++) {
             std::stringstream ss;
             ss << settings.encrypt.otp_key_page + 2 << ":32";
             otp_json[ss.str()]["ecc"] = false;
@@ -6083,7 +6083,7 @@ bool encrypt_command::execute(device_map &devices) {
         }
     #else
         // Add otp AES key page
-        for (int i = 0; i < 128; ++i) {
+        for (size_t i = 0; i < 128; ++i) {
             std::stringstream ss;
             ss << settings.encrypt.otp_key_page << ":0";
             otp_json[ss.str()]["ecc"] = true;
@@ -6091,7 +6091,7 @@ bool encrypt_command::execute(device_map &devices) {
         }
 
         // Add otp IV salt page
-        for (int i = 0; i < iv_salt.size(); ++i) {
+        for (size_t i = 0; i < iv_salt.size(); ++i) {
             std::stringstream ss;
             ss << settings.encrypt.otp_key_page + 1 << ":0";
             otp_json[ss.str()]["ecc"] = true;
@@ -6428,7 +6428,7 @@ void setup_bdevfs_internal() {
             if (!partitions) {
                 fail(ERROR_NOT_POSSIBLE, "There is no partition table on the device");
             }
-            if (settings.bdev.partition_number >= partitions->size()) {
+            if (settings.bdev.partition_number >= (int)partitions->size()) {
                 fail(ERROR_NOT_POSSIBLE, "There are only %d partitions on the device", partitions->size());
             }
             chosen_partition = (*partitions)[settings.bdev.partition_number];
@@ -7064,7 +7064,7 @@ bool bdev_cp_command::execute(device_map &devices) {
                     err = lfs_file_read(lfs, &file, data_buf.data(), data_buf.size());
                     if (err < 0) {
                         fail(ERROR_READ_FAILED, "LittleFS Read Error: %s", lfs_err_str(err).c_str());
-                    } else if (err != data_buf.size()) {
+                    } else if (err != (int)data_buf.size()) {
                         fail(ERROR_READ_FAILED, "LittleFS Read too short - got %d bytes expected %d bytes", err, data_buf.size());
                     }
                     err = lfs_file_close(lfs, &file);
@@ -7079,7 +7079,7 @@ bool bdev_cp_command::execute(device_map &devices) {
                     err = lfs_file_write(lfs, &file, data_buf.data(), data_buf.size());
                     if (err < 0) {
                         fail(ERROR_WRITE_FAILED, "LittleFS Write Error: %s", lfs_err_str(err).c_str());
-                    } else if (err != data_buf.size()) {
+                    } else if (err != (int)data_buf.size()) {
                         fail(ERROR_WRITE_FAILED, "LittleFS Write too short - wrote %d bytes expected %d bytes", err, data_buf.size());
                     }
                     err = lfs_file_close(lfs, &file);
@@ -7214,7 +7214,7 @@ bool bdev_cat_command::execute(device_map &devices) {
                 err = lfs_file_read(lfs, &file, data_buf.data(), data_buf.size());
                 if (err < 0) {
                     fail(ERROR_READ_FAILED, "LittleFS Read Error: %s", lfs_err_str(err).c_str());
-                } else if (err != data_buf.size()) {
+                } else if (err != (int)data_buf.size()) {
                     fail(ERROR_READ_FAILED, "LittleFS Read too short - got %d bytes expected %d bytes", err, data_buf.size());
                 }
                 err = lfs_file_close(lfs, &file);
@@ -7689,11 +7689,11 @@ bool partition_info_command::execute(device_map &devices) {
 
     if (partitions) {
         printf("partitions:\n");
-        for (int i = 0; i < (*partitions).size(); i++) {
+        for (size_t i = 0; i < (*partitions).size(); i++) {
             auto partition = (*partitions)[i];
             uint32_t flags_and_permissions = partition.flags_and_permissions;
             uint64_t id = partition.id;
-            printf("  %d", i);
+            printf("  %d", (int)i);
             if ((flags_and_permissions & PICOBIN_PARTITION_FLAGS_LINK_TYPE_BITS) ==
                 PICOBIN_PARTITION_FLAGS_LINK_TYPE_AS_BITS(A_PARTITION)) {
                 printf("(B w/ %d) ", (flags_and_permissions & PICOBIN_PARTITION_FLAGS_LINK_VALUE_BITS)
@@ -8144,7 +8144,7 @@ bool uf2_combine_command::execute(device_map &devices) {
                 continue;
             }
 
-            if (settings.uf2.partition < 0 || settings.uf2.partition >= partition_table->partitions.size()) {
+            if (settings.uf2.partition < 0 || settings.uf2.partition >= (int)partition_table->partitions.size()) {
                 fail(ERROR_ARGS, "Partition table only contains partitions 0 -> %d\n", partition_table->partitions.size() - 1);
             }
 

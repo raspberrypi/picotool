@@ -1078,7 +1078,7 @@ int encrypt(elf_file *elf, block *new_block, const aes_key_t aes_key, const publ
 
     // Salt IV
     assert(iv_data.size() == iv_salt.size());
-    for (int i=0; i < iv_data.size(); i++) {
+    for (size_t i=0; i < iv_data.size(); i++) {
         iv_data[i] ^= iv_salt[i];
     }
 
@@ -1182,7 +1182,7 @@ std::vector<uint8_t> encrypt(std::vector<uint8_t> bin, uint32_t storage_addr, ui
 
     // Salt IV
     assert(iv_data.size() == iv_salt.size());
-    for (int i=0; i < iv_data.size(); i++) {
+    for (size_t i=0; i < iv_data.size(); i++) {
         iv_data[i] ^= iv_salt[i];
     }
 

@@ -128,11 +128,11 @@ public:
     virtual uint32_t unreadable_rom_end() { return 0xffffffff; }
     virtual const unsigned char *unreadable_rom_data() { return nullptr; }
 private:
+    chip_t _chip;
     std::string _name;
     chip_revision_t _chip_revision;
     uint32_t _rom_end;
     std::set<picoboot_cmd_id> _picoboot_cmds;
-    chip_t _chip;
     uint32_t _family_id;
 };
 

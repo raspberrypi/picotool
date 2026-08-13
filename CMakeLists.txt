@@ -6,6 +6,12 @@ if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
+include(CheckCXXCompilerFlag)
+check_cxx_compiler_flag("-Wall;-Wno-unused-function;-Wno-unused-variable;-Wno-unused-but-set-variable;-Werror" flag_supported)
+if(flag_supported)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wno-unused-function -Wno-unused-variable -Wno-unused-but-set-variable -Werror")
+endif()
+
 if (DEFINED ENV{PICO_SDK_PATH} AND (NOT PICO_SDK_PATH))
     set(PICO_SDK_PATH $ENV{PICO_SDK_PATH})
     message("Using PICO_SDK_PATH from environment ('${PICO_SDK_PATH}')")
