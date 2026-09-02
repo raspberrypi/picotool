@@ -5443,7 +5443,7 @@ bool load_command::execute(device_map &devices) {
             if (std::find(available_family_ids.begin(), available_family_ids.end(), override_family_id) == available_family_ids.end()) {
                 fos << "WARNING: Requested family ID " << family_name(override_family_id) << " not found in UF2 file, ";
                 fos << "so loading the first family ID found in the UF2 file (" << family_name(available_family_ids[0]) << "), ";
-                fos << "into where family ID " << family_name(override_family_id) << " would go\n";
+                fos << "into the location where family ID " << family_name(override_family_id) << " would normally go\n";
                 available_family_ids.resize(1);
             } else {
                 available_family_ids.resize(1);
