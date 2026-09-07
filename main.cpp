@@ -1094,7 +1094,7 @@ struct load_command : public cmd {
     group get_cli() override {
         return (
             (
-                option("--ignore-partitions").set(settings.load.ignore_pt) % "Ignore the partition table, or whether the family ID is compatible with the device" +
+                option("--ignore-partitions").set(settings.load.ignore_pt) % "Ignore the partition table, and ignore family ID compatibility" +
                 (option("--family") % "Specify the family ID of the file to load" &
                         family_id("family_id").set(settings.family_id) % "family ID to use for load").force_expand_help(true) +
                 (option('p', "--partition") % "Specify the partition to load into" &
@@ -1104,7 +1104,7 @@ struct load_command : public cmd {
                 option('u', "--update").set(settings.load.update) % "Skip writing flash sectors that already contain identical data" +
                 option('v', "--verify").set(settings.load.verify) % "Verify the data was written correctly" +
                 option('x', "--execute").set(settings.load.execute) % "Perform a bootrom reboot to execute the downloaded file as a program after the load - either a flash update boot for binaries in flash, or a RAM image boot for other binaries "
-            ).min(0).doc_non_optional(true) % "Post load actions" +
+            ).min(0).doc_non_optional(true) % "Load options" +
             file_selection % "File to load from" +
             (
                 option('o', "--offset").set(settings.offset_set) % "Specify the load address for a BIN file" &

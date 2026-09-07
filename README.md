@@ -312,9 +312,9 @@ SYNOPSIS:
                 [-v] [-x] <filename> [-t <type>] [-o <offset>] [device-selection]
 
 OPTIONS:
-    Post load actions
+    Load options
         --ignore-partitions
-            Ignore the partition table, or whether the family ID is compatible with the device
+            Ignore the partition table, and ignore family ID compatibility
         --family
             Specify the family ID of the file to load
         <family_id>
