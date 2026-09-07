@@ -1225,7 +1225,7 @@ struct seal_command : public cmd {
                 option("--rollback") &
                     integer("rollback").set(settings.seal.rollback_version) +
                     hex("rows").add_to(settings.seal.rollback_rows).min(0).repeatable()
-            ).min(0) % "Add Rollback Version"
+            ).min(0) % "Add Rollback Version, optionally specifying rollback rows in hex"
         );
     }
 
@@ -1248,7 +1248,7 @@ struct link_command : public cmd {
             named_file_selection_x("infile1", 1) % "Files to link" +
             named_file_selection_x("infile2", 2) % "Files to link" +
             optional_file_selection_x("infile3", 3) % "Files to link" +
-            (option('p', "--pad") & hex("pad").set(settings.link.align)) % "Specify alignment to pad to, defaults to 0x1000"
+            (option('p', "--pad") & hex("pad").set(settings.link.align)) % "Specify alignment to pad to (hexadecimal; default 0x1000)"
         );
     }
 
@@ -1308,7 +1308,7 @@ struct partition_create_command : public cmd {
             #if SUPPORT_RP2350_A2
                 + (
                     option("--abs-block").set(settings.uf2.abs_block) % "Enforce support for an absolute block" +
-                        hex("abs_block_loc").set(settings.uf2.abs_block_loc).min(0) % "absolute block location (default to 0x10ffff00)"
+                        hex("abs_block_loc").set(settings.uf2.abs_block_loc).min(0) % "absolute block location (memory address; default 0x10ffff00)"
                 ).force_expand_help(true).min(0) % "Errata RP2350-E10 Fix"
             #endif
         );
@@ -1610,7 +1610,7 @@ struct uf2_convert_command : public cmd {
             #if SUPPORT_RP2350_A2
                 + (
                     option("--abs-block").set(settings.uf2.abs_block) % "Add an absolute block" +
-                        hex("abs_block_loc").set(settings.uf2.abs_block_loc).min(0) % "absolute block location (default to 0x10ffff00)"
+                        hex("abs_block_loc").set(settings.uf2.abs_block_loc).min(0) % "absolute block location (memory address; default 0x10ffff00)"
                 ).force_expand_help(true).min(0) % "Errata RP2350-E10 Fix"
             #endif
         );
@@ -1648,7 +1648,7 @@ struct uf2_combine_command : public cmd {
             #if SUPPORT_RP2350_A2
                 + (
                     option("--abs-block").set(settings.uf2.abs_block) % "Add an absolute block" +
-                        hex("abs_block_loc").set(settings.uf2.abs_block_loc).min(0) % "absolute block location (default to 0x10ffff00)"
+                        hex("abs_block_loc").set(settings.uf2.abs_block_loc).min(0) % "absolute block location (memory address; default 0x10ffff00)"
                 ).force_expand_help(true).min(0) % "Errata RP2350-E10 Fix"
             #endif
         );
