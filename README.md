@@ -312,9 +312,9 @@ SYNOPSIS:
                 [-v] [-x] <filename> [-t <type>] [-o <offset>] [device-selection]
 
 OPTIONS:
-    Post load actions
+    Load options
         --ignore-partitions
-            When writing flash data, ignore the partition table and write to absolute space
+            Ignore the partition table, and ignore family ID compatibility
         --family
             Specify the family ID of the file to load
         <family_id>
