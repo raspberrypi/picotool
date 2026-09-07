@@ -732,7 +732,7 @@ OPTIONS:
         --minor <minor>
             Add Minor Version
         --rollback <rollback> [<rows>..]
-            Add Rollback Version
+            Add Rollback Version, optionally specifying rollback rows in hex
     Configuration
         --hash
             Hash the file
@@ -966,7 +966,7 @@ OPTIONS:
         --abs-block
             Enforce support for an absolute block
         <abs_block_loc>
-            absolute block location (default to 0x10ffff00)
+            absolute block location (memory address; default 0x10ffff00)
 ```
 
 ## uf2
@@ -1021,7 +1021,7 @@ OPTIONS:
         --abs-block
             Add an absolute block
         <abs_block_loc>
-            absolute block location (default to 0x10ffff00)
+            absolute block location (memory address; default 0x10ffff00)
 ```
 
 ### combine
@@ -1067,7 +1067,7 @@ OPTIONS:
         --offset
             Offset second UF2 by amount
         <offset>
-            offset amount (default to 0)
+            offset amount (hexadecimal; default 0x0)
     Partition options
         --partition
             Place second UF2 in partition (first UF2 must contain a partition table)
@@ -1077,7 +1077,7 @@ OPTIONS:
         --abs-block
             Add an absolute block
         <abs_block_loc>
-            absolute block location (default to 0x10ffff00)
+            absolute block location (memory address; default 0x10ffff00)
 ```
 
 The `--partition` argument can be used to place the second file in a partition number, provided that there is a partition table in the first file. For example, take this `pt.json`
@@ -1727,7 +1727,7 @@ OPTIONS:
         --verbose
             Print verbose output
         -p <pad>
-            Specify alignment to pad to, defaults to 0x1000
+            Specify alignment to pad to (hexadecimal; default 0x1000)
     File to write to
         <outfile>
             The file name
