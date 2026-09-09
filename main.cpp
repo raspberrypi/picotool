@@ -655,6 +655,7 @@ struct _settings {
     struct {
         bool all = false;
         bool verify = false;
+        int partition = -1;
     } save;
 
     struct {
@@ -1047,7 +1048,9 @@ struct verify_command : public cmd {
                     hex("from").set(settings.from) % "The lower address bound in hex" &
                     hex("to").set(settings.to) % "The upper address bound in hex").force_expand_help(true) +
                 (option('o', "--offset").set(settings.offset_set) % "Specify the load address when comparing with a BIN file" &
-                    hex("offset").set(settings.offset) % "Load offset (memory address; default 0x10000000)").force_expand_help(true)
+                    hex("offset").set(settings.offset) % "Load offset (memory address; default 0x10000000)").force_expand_help(true) +
+                (option("--partition") % "Compare a numbered partition" &
+                    integer("partition").set(settings.save.partition) % "partition to compare").force_expand_help(true)
             ).min(0).doc_non_optional(true) % "Address options" +
             device_selection % "Target device selection"
         );
@@ -1076,6 +1079,8 @@ struct save_command : public cmd {
             option('v', "--verify").set(settings.save.verify) % "Verify the data was saved correctly" +
             (option("--family") % "Specify the family ID to save the file as" &
                 family_id("family_id").set(settings.family_id) % "family ID to save file as").force_expand_help(true) +
+            (option("--partition") % "Save from a numbered partition" &
+                integer("partition").set(settings.save.partition) % "partition to save").force_expand_help(true) +
             ( // note this parenthesis seems to help with error messages for say save --foo
                 file_selection % "File to save to" +
                 device_selection % "Source device selection"
@@ -2150,6 +2155,8 @@ struct memory_access {
     virtual bool is_device() { return false; }
 
     virtual uint32_t get_binary_start() = 0;
+    
+    virtual void clear_cache() {}
 
     uint32_t read_int(uint32_t addr, bool zero_fill = false) {
         assert(!(addr & 3u));
@@ -4939,12 +4946,30 @@ vector<range> get_coalesced_ranges(iostream_memory_access &file_access, model_t 
 
 bool save_command::execute(device_map &devices) {
     auto con = get_single_bootsel_device_connection(devices);
-    picoboot_memory_access raw_access(con);
+    std::shared_ptr<memory_access> raw_access_ptr = std::make_shared<picoboot_memory_access>(con);
+    auto used_access_ptr = raw_access_ptr;
 
     uint32_t end = 0;
     uint32_t binary_end = 0;
     binary_info_header hdr;
     uint32_t start = FLASH_START;
+
+    if (settings.save.partition >= 0) {
+        auto partitions = get_partitions(con);
+        if (!partitions) {
+            fail(ERROR_NOT_POSSIBLE, "There is no partition table on the device");
+        }
+        if (settings.save.partition >= partitions->size()) {
+            fail(ERROR_NOT_POSSIBLE, "There are only %d partitions on the device", partitions->size());
+        }
+        uint32_t part_start = (*partitions)[settings.save.partition].start;
+        uint32_t part_end = (*partitions)[settings.save.partition].end;
+        end = FLASH_START + (part_end - part_start); // set for --all below
+        printf("Saving from partition %d:\n", settings.save.partition);
+        printf("  %08x->%08x\n", part_start, part_end);
+        used_access_ptr = std::make_shared<partition_memory_access>(*raw_access_ptr, part_start);
+    }
+
     if (!settings.save.all) {
         if (settings.range_set) {
             if (get_file_type() == filetype::uf2) {
@@ -4961,8 +4986,8 @@ bool save_command::execute(device_map &devices) {
                 fail(ERROR_ARGS, "Save range is invalid/empty");
             }
         } else {
-            if (find_binary_info(raw_access, hdr)) {
-                auto access = remapped_memory_access(raw_access, hdr.reverse_copy_mapping);
+            if (find_binary_info(*used_access_ptr, hdr)) {
+                auto access = remapped_memory_access(*used_access_ptr, hdr.reverse_copy_mapping);
                 auto visitor = bi_visitor{};
                 visitor.id_and_int([&](int tag, uint32_t id, uint32_t value) {
                     if (tag != BINARY_INFO_TAG_RASPBERRY_PI)
@@ -4973,7 +4998,7 @@ bool save_command::execute(device_map &devices) {
             }
             end = binary_end;
             vector<uint8_t> bin;
-            std::unique_ptr<block> last_block = find_last_block(raw_access, bin);
+            std::unique_ptr<block> last_block = find_last_block(*used_access_ptr, bin);
             if (last_block != nullptr) {
                 uint32_t new_end = last_block->physical_addr + (last_block->to_words().size())*4;
                 DEBUG_LOG("Adjusting end to max of %x %x\n", end, new_end);
@@ -4984,14 +5009,14 @@ bool save_command::execute(device_map &devices) {
                      "Cannot determine the binary size, so cannot save the program only, try --all.");
             }
         }
-    } else {
-        end = FLASH_START + guess_flash_size(raw_access);
+    } else if (end == 0) {
+        end = FLASH_START + guess_flash_size(*raw_access_ptr);
         if (end <= FLASH_START) {
             fail(ERROR_NOT_POSSIBLE, "Cannot determine the flash size, so cannot save the entirety of flash, try --range.");
         }
     }
 
-    model_t model = raw_access.get_model();
+    model_t model = used_access_ptr->get_model();
     enum memory_type t1 = get_memory_type(start , model);
     enum memory_type t2 = get_memory_type(end, model);
     if (t1 != t2 || t1 == invalid || t1 == sram_unstriped) {
@@ -5024,7 +5049,7 @@ bool save_command::execute(device_map &devices) {
             block.flags = UF2_FLAG_FAMILY_ID_PRESENT;
             block.payload_size = PAGE_SIZE;
             block.num_blocks = (size + PAGE_SIZE - 1)/PAGE_SIZE;
-            block.file_size = settings.family_id ? settings.family_id : get_access_model(raw_access)->family_id();
+            block.file_size = settings.family_id ? settings.family_id : get_access_model(*used_access_ptr)->family_id();
             block.magic_end = UF2_MAGIC_END;
             writer256 = [&](FILE *out, const uint8_t *buffer, unsigned int size, unsigned int offset) {
                 static_assert(512 == sizeof(block), "");
@@ -5050,7 +5075,7 @@ bool save_command::execute(device_map &devices) {
                 for (uint32_t addr = start; addr < end; addr += chunk_size) {
                     bar.progress(addr-start, end-start);
                     uint32_t this_chunk_size = std::min(chunk_size, end - addr);
-                    raw_access.read_into_vector(addr, this_chunk_size, buf);
+                    used_access_ptr->read_into_vector(addr, this_chunk_size, buf);
                     uint32_t remaining_size = this_chunk_size;
                     while (remaining_size) {
                         uint32_t this_size = std::min(PAGE_SIZE, remaining_size);
@@ -5070,9 +5095,9 @@ bool save_command::execute(device_map &devices) {
     }
 
     if (settings.save.verify) {
-        raw_access.clear_cache();
+        raw_access_ptr->clear_cache();
         auto file_access = get_file_memory_access(0);
-        model_t model = raw_access.get_model();
+        model_t model = raw_access_ptr->get_model();
         auto ranges = get_coalesced_ranges(file_access, model);
         for (auto mem_range : ranges) {
             enum memory_type type = get_memory_type(mem_range.from, model);
@@ -5088,7 +5113,7 @@ bool save_command::execute(device_map &devices) {
                     // mean that the verification will fail if those holes are not filled with zeros
                     // on the device
                     file_access.read_into_vector(base, this_batch, file_buf, true);
-                    raw_access.read_into_vector(base, this_batch, device_buf);
+                    used_access_ptr->read_into_vector(base, this_batch, device_buf);
                     assert(file_buf.size() == device_buf.size());
                     for (unsigned int i = 0; i < this_batch; i++) {
                         if (file_buf[i] != device_buf[i]) {
@@ -7291,16 +7316,36 @@ bool bdev_format_command::execute(device_map &devices) {
 bool verify_command::execute(device_map &devices) {
     auto file_access = get_file_memory_access(0);
     auto con = get_single_bootsel_device_connection(devices);
-    picoboot_memory_access raw_access(con);
-    model_t model = raw_access.get_model();
+    std::shared_ptr<memory_access> raw_access_ptr = std::make_shared<picoboot_memory_access>(con);
+    auto used_access_ptr = raw_access_ptr;
+    model_t model = raw_access_ptr->get_model();
     if (settings.offset_set && get_file_type() != filetype::bin && model->chip() == rp2040) {
         fail(ERROR_ARGS, "Offset only valid for BIN files");
     }
+
+    if (settings.save.partition >= 0) {
+        auto partitions = get_partitions(con);
+        if (!partitions) {
+            fail(ERROR_NOT_POSSIBLE, "There is no partition table on the device");
+        }
+        if (settings.save.partition >= partitions->size()) {
+            fail(ERROR_NOT_POSSIBLE, "There are only %d partitions on the device", partitions->size());
+        }
+        uint32_t start = (*partitions)[settings.save.partition].start;
+        uint32_t end = (*partitions)[settings.save.partition].end;
+        printf("Verifying partition %d:\n", settings.save.partition);
+        printf("  %08x->%08x\n", start, end);
+        used_access_ptr = std::make_shared<partition_memory_access>(*raw_access_ptr, start);
+    }
+
     auto ranges = get_coalesced_ranges(file_access, model);
     if (settings.range_set) {
         range filter(settings.from, settings.to);
         for(auto& range : ranges) {
             range.intersect(filter);
+        }
+        for(auto& range : ranges) {
+            printf("From %08x -> %08x\n", range.from, range.to);
         }
     }
     ranges.erase(std::remove_if(ranges.begin(), ranges.end(), std::mem_fn(&range::empty)), ranges.end());
@@ -7326,7 +7371,7 @@ bool verify_command::execute(device_map &devices) {
                         // mean that the verification will fail if those holes are not filled with zeros
                         // on the device
                         file_access.read_into_vector(base, this_batch, file_buf, true);
-                        raw_access.read_into_vector(base, this_batch, device_buf);
+                        used_access_ptr->read_into_vector(base, this_batch, device_buf);
                         assert(file_buf.size() == device_buf.size());
                         for(unsigned int i=0;i<this_batch;i++) {
                             if (file_buf[i] != device_buf[i]) {
@@ -7352,7 +7397,7 @@ bool verify_command::execute(device_map &devices) {
                     vector<uint8_t> file_buf;
                     vector<uint8_t> device_buf;
                     file_access.read_into_vector(valid.from, valid.to - valid.from, file_buf);
-                    raw_access.read_into_vector(valid.from, valid.to - valid.from, device_buf);
+                    used_access_ptr->read_into_vector(valid.from, valid.to - valid.from, device_buf);
                     assert(file_buf.size() == device_buf.size());
                     for(unsigned int l=0;l<3;l++, display_from+=16) {
                         range this_range(display_from, display_from + 16);
