@@ -838,6 +838,14 @@ std::map<string, help_topic> help_topics {
     named_file_types_x(types, i)\
 )
 
+#define named_option_typed_file_selection_x(name, option, i, types)\
+(\
+    option & value(name).with_exclusion_filter([](const string &value) {\
+            return value.find_first_of('-') == 0;\
+        }).set(settings.filenames[i]) % "The file name" +\
+    named_file_types_x(types, i)\
+)
+
 #define option_untyped_file_selection_x(option, i)\
 (\
     option & value("filename").with_exclusion_filter([](const string &value) {\
@@ -1101,11 +1109,9 @@ struct save_command : public cmd {
             (
                 option('p', "--program") % "Save the installed program only. This is the default" |
                 option('a', "--all").doc_non_optional(true).set(settings.save.all) % "Save all of flash memory" |
-                (
-                    option('r', "--range").set(settings.range_set) % "Save a range of memory. Note that UF2s always store complete 256 byte-aligned blocks of 256 bytes, and the range is expanded accordingly" &
-                        hex("from").set(settings.from) % "The lower address bound in hex" &
-                        hex("to").set(settings.to) % "The upper address bound in hex"
-                ).min(0).doc_non_optional(true)
+                (option('r', "--range").synopsis_non_optional(true).set(settings.range_set) &
+                    hex("from").synopsis_non_optional(true).set(settings.from) &
+                    hex("to").synopsis_non_optional(true).set(settings.to)).synopsis_non_optional(true) % "Save a range of memory (address bounds in hex). Note that UF2s always store complete 256 byte-aligned blocks of 256 bytes, and the range is expanded accordingly."
             ).min(0).doc_non_optional(true).no_match_beats_error(false) % "Selection of data to save" +
             option('v', "--verify").set(settings.save.verify) % "Verify the data was saved correctly" +
             (option("--family") &
@@ -1161,15 +1167,11 @@ struct erase_command : public cmd {
         return (
             (
                 option('a', "--all") % "Erase all of flash memory. This is the default" |
-                (
-                    option('p', "--partition") % "Erase a partition" &
-                        integer("partition").set(settings.load.partition) % "Partition number to erase"
-                ).min(0).doc_non_optional(true) |
-                (
-                    option('r', "--range").set(settings.range_set) % "Erase a range of memory. Note that erases must be 4096 byte-aligned, so the range is expanded accordingly" &
-                        hex("from").set(settings.from) % "The lower address bound in hex" &
-                        hex("to").set(settings.to) % "The upper address bound in hex"
-                ).min(0).doc_non_optional(true)
+                (option('p', "--partition").synopsis_non_optional(true) &
+                    integer("partition").set(settings.load.partition)).synopsis_non_optional(true) % "Erase a partition" |
+                (option('r', "--range").synopsis_non_optional(true).set(settings.range_set) &
+                    hex("from").synopsis_non_optional(true).set(settings.from) &
+                    hex("to").synopsis_non_optional(true).set(settings.to)).synopsis_non_optional(true) % "Erase a range of memory (address bounds in hex). Note that erases must be 4096 byte-aligned, so the range is expanded accordingly."
             ).min(0).doc_non_optional(true).no_match_beats_error(false) % "Selection of data to erase" +
             ( // note this parenthesis seems to help with error messages for say erase --foo
                 device_selection % "Target device selection"
@@ -1330,11 +1332,8 @@ struct partition_create_command : public cmd {
                 (
                 #if HAS_MBEDTLS
                     // todo why doesn't this set settings.partition.sign?
-                    ((option("--sign").set(settings.partition.sign) & value("keyfile").with_exclusion_filter([](const string &value) {
-                            return value.find_first_of('-') == 0;
-                        }).set(settings.filenames[3])) % "The file name" +
-                    named_file_types_x("pem", 3)) % "Sign the partition table" + 
-                    (option("--no-hash").clear(settings.partition.hash) % "Don't hash the partition table") + 
+                    named_option_typed_file_selection_x("keyfile", option("--sign").set(settings.partition.sign), 3, "pem") % "Sign the partition table with a PEM key" +
+                    (option("--no-hash").clear(settings.partition.hash) % "Don't hash the partition table") +
                 #endif
                     (option("--singleton").set(settings.partition.singleton) % "Singleton partition table") +
                     (option("--no-btstack-flash-bank").set(settings.partition.no_btstack_flash_bank) % "Don't check for compatibility with BTStack flash bank")

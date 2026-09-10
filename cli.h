@@ -207,6 +207,10 @@ namespace cli {
             return _doc_non_optional;
         }
 
+        bool synopsis_non_optional() const {
+            return _synopsis_non_optional;
+        }
+
         bool force_expand_help() const {
             return _force_expand_help;
         }
@@ -237,6 +241,7 @@ namespace cli {
         int _min = 1;
         int _max = 1;
         bool _doc_non_optional = false;
+        bool _synopsis_non_optional = false;
         bool _force_expand_help = false;
         string _collapse_synopsys = "";
     };
@@ -279,6 +284,11 @@ namespace cli {
 
         D &doc_non_optional(bool v) {
             _doc_non_optional = v;
+            return *static_cast<D *>(this);
+        }
+
+        D &synopsis_non_optional(bool v) {
+            _synopsis_non_optional = v;
             return *static_cast<D *>(this);
         }
 
@@ -669,7 +679,7 @@ namespace cli {
         }
 
         static string decorate(const matchable &e, string s) {
-            if (e.is_optional() && !e.doc_non_optional()) {
+            if (e.is_optional() && !e.doc_non_optional() && !e.synopsis_non_optional()) {
                 return string("[") + s + "]";
             } else {
                 return s;

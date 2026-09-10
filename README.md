@@ -105,13 +105,13 @@ OPTIONS:
 The normal output is this format:
 ```text
 $ picotool version
-picotool v2.3.0 (Linux, GNU-12.2.0, Release)
+picotool v2.3.1 (Linux, GNU-12.2.0, Release)
 ```
 
 When built without libusb you get an additional message:
 ```text
 $ picotool version
-picotool v2.3.0 (Linux, GNU-12.2.0, Release)
+picotool v2.3.1 (Linux, GNU-12.2.0, Release)
 
 This version of picotool was compiled without USB support. Some commands are not available.
 ```
@@ -119,20 +119,20 @@ This version of picotool was compiled without USB support. Some commands are not
 The semantic output is:
 ```text
 $ picotool version -s
-2.3.0
+2.3.1
 ```
 
-When checking compatibility with a compatible version (e.g. 2.2.0 with version 2.3.0):
+When checking compatibility with a compatible version (e.g. 2.2.0 with picotool version 2.3.1):
 ```text
-$ picotool version -s 2.2.0
-2.3.0
+$ picotool version 2.2.0
+picotool v2.3.1 (Linux, GNU-12.2.0, Release)
 ```
 
-Or with an incompatible version (e.g. 2.4.0 with version 2.3.0), it will exit with error code `ERROR_INCOMPATIBLE` (-3):
+Or with an incompatible version (e.g. 2.3.1 with picotool version 2.2.0), it will exit with error code `ERROR_INCOMPATIBLE` (-3):
 ```text
-$ picotool version -s 2.4.0
-2.3.0
-ERROR: Version 2.4.0 not compatible with this software
+$ picotool version 2.3.1
+picotool v2.2.0 (Linux, GNU-12.2.0, Release)
+ERROR: Version 2.3.1 not compatible with this software
 
 ```
 
@@ -375,13 +375,10 @@ OPTIONS:
             Save the installed program only. This is the default
         -a, --all
             Save all of flash memory
-        -r, --range
-            Save a range of memory. Note that UF2s always store complete 256 byte-aligned
-            blocks of 256 bytes, and the range is expanded accordingly
-        <from>
-            The lower address bound in hex
-        <to>
-            The upper address bound in hex
+        -r, --range <from> <to>
+            Save a range of memory (address bounds in hex). Note that UF2s always store
+            complete 256 byte-aligned blocks of 256 bytes, and the range is expanded
+            accordingly.
     Other
         -v, --verify
             Verify the data was saved correctly
@@ -468,17 +465,11 @@ OPTIONS:
     Selection of data to erase
         -a, --all
             Erase all of flash memory. This is the default
-        -p, --partition
+        -p, --partition <partition>
             Erase a partition
-        <partition>
-            Partition number to erase
-        -r, --range
-            Erase a range of memory. Note that erases must be 4096 byte-aligned, so the range
-            is expanded accordingly
-        <from>
-            The lower address bound in hex
-        <to>
-            The upper address bound in hex
+        -r, --range <from> <to>
+            Erase a range of memory (address bounds in hex). Note that erases must be 4096
+            byte-aligned, so the range is expanded accordingly.
     Target device selection
         See "picotool help device-selection" for available options
 ```
@@ -703,8 +694,8 @@ PARTITION:
 SYNOPSIS:
     picotool partition info [-m <family_id>] [device-selection]
     picotool partition create [--quiet] [--verbose] <infile> <outfile> [-t <type>] [[-o
-                <offset>] [--family <family_id>]] [<bootloader>] [-t <type>] [[--sign
-                <keyfile>] [-t <type>] [--no-hash] [--singleton] [--no-btstack-flash-bank]]
+                <offset>] [--family <family_id>]] [<bootloader>] [-t <type>] [[--sign <keyfile>
+                [-t <type>]] [--no-hash] [--singleton] [--no-btstack-flash-bank]]
                 [[--abs-block] [<abs_block_loc>]]
 
 SUB COMMANDS:
@@ -761,8 +752,8 @@ PARTITION CREATE:
 
 SYNOPSIS:
     picotool partition create [--quiet] [--verbose] <infile> <outfile> [-t <type>] [[-o
-                <offset>] [--family <family_id>]] [<bootloader>] [-t <type>] [[--sign
-                <keyfile>] [-t <type>] [--no-hash] [--singleton] [--no-btstack-flash-bank]]
+                <offset>] [--family <family_id>]] [<bootloader>] [-t <type>] [[--sign <keyfile>
+                [-t <type>]] [--no-hash] [--singleton] [--no-btstack-flash-bank]]
                 [[--abs-block] [<abs_block_loc>]]
 
 OPTIONS:
@@ -788,10 +779,8 @@ OPTIONS:
         -t, --type <type>
             Specify file type (elf) explicitly, ignoring file extension
     Partition Table Options
-        --sign <keyfile>
-            The file name
-        -t, --type <type>
-            Specify file type (pem) explicitly, ignoring file extension
+        --sign <keyfile> [-t, --type <type>]
+            Sign the partition table with a PEM key
         --no-hash
             Don't hash the partition table
         --singleton
