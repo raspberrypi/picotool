@@ -236,7 +236,7 @@ auto bus_device_string = [](struct libusb_device *device, chip_t chip) {
 };
 #endif
 
-enum class filetype {bin, elf, uf2, pem, json};
+enum class filetype {bin, elf, uf2, pem, json, der};
 const string getFiletypeName(enum filetype type) 
 {
    switch (type) 
@@ -246,6 +246,7 @@ const string getFiletypeName(enum filetype type)
       case filetype::uf2: return "UF2";
       case filetype::pem: return "PEM";
       case filetype::json: return "JSON";
+      case filetype::der: return "DER";
       default: assert(false); return "ERROR_TYPE";
    }
 }
@@ -633,6 +634,7 @@ struct _settings {
         bool pin_xip_sram = false;
         bool set_tbyb = false;
         bool no_squash = false;
+        bool external_sign = false;
         uint16_t major_version = 0;
         uint16_t minor_version = 0;
         uint16_t rollback_version = 0;
@@ -1203,7 +1205,8 @@ struct seal_command : public cmd {
                 option("--sign").set(settings.seal.sign) % "Sign the file" +
                 option("--clear").set(settings.seal.clear_sram) % "Clear all of main SRAM on load" +
                 option("--pin-xip-sram").set(settings.seal.pin_xip_sram) % "Pin XIP SRAM on load" +
-                option("--no-squash").set(settings.seal.no_squash) % "Don't squash segments in the ELF file"
+                option("--no-squash").set(settings.seal.no_squash) % "Don't squash segments in the ELF file" +
+                option("--external-sign").set(settings.seal.external_sign) % "For use with external signing and `picotool reseal`"
             ).min(0).doc_non_optional(true) % "Configuration" +
             named_file_selection_x("infile", 0) % "File to load from" +
             (
@@ -1231,6 +1234,31 @@ struct seal_command : public cmd {
 
     string get_doc() const override {
         return "Add final metadata to a binary, optionally including a hash and/or signature.";
+    }
+};
+
+struct reseal_command : public cmd {
+    reseal_command() : cmd("reseal") {}
+    bool execute(device_map &devices) override;
+    virtual device_support get_device_support() override { return none; }
+
+    group get_cli() override {
+        return (
+            option("--quiet").set(settings.quiet) % "Don't print any output" +
+            option("--verbose").set(settings.verbose) % "Print verbose output" +
+            named_file_selection_x("infile", 0) % "File to re-seal" +
+            (
+                option('o', "--offset").set(settings.offset_set) % "Specify the load address for a BIN file" &
+                     hex("offset").set(settings.offset) % "Load offset (memory address; default 0x10000000)"
+            ).force_expand_help(true) % "BIN file options" +
+            named_untyped_file_selection_x("sigfile", 1) % "Signature file (.der)" +
+            named_untyped_file_selection_x("pubkey", 2) % "Public key file (.pem)" +
+            optional_untyped_file_selection_x("otp", 3) % "JSON file to save OTP to (will edit existing file if it exists)"
+        );
+    }
+
+    string get_doc() const override {
+        return "Replace the signature in the final metadata of a binary.";
     }
 };
 #endif
@@ -1806,6 +1834,7 @@ vector<std::shared_ptr<cmd>> commands {
     #if HAS_MBEDTLS
         std::shared_ptr<cmd>(new seal_command()),
         std::shared_ptr<cmd>(new encrypt_command()),
+        std::shared_ptr<cmd>(new reseal_command()),
     #endif
         std::shared_ptr<cmd>(new partition_command()),
         std::shared_ptr<cmd>(new uf2_command()),
@@ -3242,6 +3271,8 @@ enum filetype get_file_type_idx(uint8_t idx) {
             return filetype::pem;
         } else if (low.rfind(".json") == low.size() - 5) {
             return filetype::json;
+        } else if (low.rfind(".der") == low.size() - 4) {
+            return filetype::der;
         }
     } else if (!file_type.empty()) {
         low = lowercase(file_type);
@@ -3259,6 +3290,9 @@ enum filetype get_file_type_idx(uint8_t idx) {
         }
         if (low == "json") {
             return filetype::json;
+        }
+        if (low == "der") {
+            return filetype::der;
         }
         throw cli::parse_error("unsupported file type '" + low + "'");
     }
@@ -6119,6 +6153,115 @@ bool encrypt_command::execute(device_map &devices) {
     return false;
 }
 
+void output_otp_secure_boot(uint8_t idx, public_t public_key) {
+    message_digest_t pub_sha256;
+    sha256_buffer(public_key.bytes, sizeof(public_key.bytes), &pub_sha256);
+    DEBUG_LOG("PUBLIC KEY SHA256 ");
+    for(uint8_t i : pub_sha256.bytes) {
+        DEBUG_LOG("%02x", i);
+    }
+    DEBUG_LOG("\n");
+
+    if (get_file_type_idx(idx) != filetype::json) {
+        fail(ERROR_ARGS, "Can only output OTP json");
+    }
+    auto check_json_file = std::ifstream(settings.filenames[idx]);
+    json otp_json;
+    if (check_json_file.good()) {
+        otp_json = json::parse(check_json_file);
+        DEBUG_LOG("Appending to existing otp json\n");
+        check_json_file.close();
+    }
+    auto json_out = get_file_idx(ios::out, idx);
+
+    // Add otp bootkey rows
+    for (int i = 0; i < 32; ++i) {
+        otp_json["bootkey0"][i] = pub_sha256.bytes[i];
+    }
+
+    // Add otp fields to enable secure boot
+    otp_json["crit1"]["secure_boot_enable"] = 1;
+    otp_json["boot_flags1"]["key_valid"] = 1;
+
+    *json_out << std::setw(4) << otp_json << std::endl;
+    json_out->close();
+}
+
+bool reseal_command::execute(device_map &devices) {
+
+    if (get_file_type_idx(1) != filetype::der) {
+        fail(ERROR_ARGS, "Can only read der signatures");
+    }
+
+    if (get_file_type_idx(2) != filetype::pem) {
+        fail(ERROR_ARGS, "Can only read pem keys");
+    }
+
+    public_t public_key = {0};
+
+    read_keys(settings.filenames[2], &public_key, nullptr);
+
+    signature_t signature = {0};
+
+    auto sigfile = get_file_idx(ios::in|ios::binary, 1);
+    sigfile->exceptions(std::iostream::failbit | std::iostream::badbit);
+    sigfile->seekg(0, std::ios::end);
+    signature.der_len = sigfile->tellg();
+    sigfile->seekg(0, std::ios::beg);
+    sigfile->read((char*)signature.der, signature.der_len);
+    sigfile->close();
+    
+    if (!der_to_raw(&signature)) {
+        fail(ERROR_ARGS, "Signature was not in DER format");
+    }
+
+    auto file_access = get_file_memory_access(0, true);
+    set_model_from_metadata(file_access);
+    vector<uint8_t> bin;
+    std::unique_ptr<block> last_block = find_last_block(file_access, bin);
+    if (last_block == nullptr) {
+        fail(ERROR_NOT_POSSIBLE, "Last block not found");
+    }
+
+    // Replace signature in block
+    std::shared_ptr<signature_item> sig_item = last_block->get_item<signature_item>();
+    if (sig_item == nullptr) {
+        fail(ERROR_NOT_POSSIBLE, "Last block does not contain a signature item");
+    }
+    sig_item->public_key_bytes = std::vector<uint8_t>(public_key.bytes, public_key.bytes + sizeof(public_key.bytes));
+    sig_item->signature_bytes = std::vector<uint8_t>(signature.bytes, signature.bytes + sizeof(signature.bytes));
+
+    // Verify the signature
+    std::shared_ptr<hash_value_item> hash_item = last_block->get_item<hash_value_item>();
+    if (hash_item == nullptr) {
+        fail(ERROR_NOT_POSSIBLE, "Last block does not contain a hash value item");
+    }
+    message_digest_t sha256;
+    memcpy(sha256.bytes, hash_item->hash_bytes.data(), sizeof(sha256.bytes));
+    uint32_t err = verify_signature_secp256k1(&signature, &public_key, &sha256);
+    if (err) {
+        fail(ERROR_VERIFICATION_FAILED, "Signature verification failed");
+    }
+
+    // Write out modified block
+    std::vector<uint32_t> words = last_block->to_words();
+    file_access.write_vector(last_block->physical_addr, words);
+
+    // Write OTP JSON if requested
+    if (!settings.filenames[3].empty()) {
+        output_otp_secure_boot(3, public_key);
+    }
+
+    if (!settings.quiet) {
+        set_model_from_metadata(file_access);
+        fos << "Resealed File " << settings.filenames[0] << ":\n\n";
+        settings.info.show_basic = true;
+        info_guts(file_access, nullptr);
+    }
+
+    return false;
+}
+
 bool seal_command::execute(device_map &devices) {
     bool isElf = false;
     bool isBin = false;
@@ -6133,11 +6276,16 @@ bool seal_command::execute(device_map &devices) {
         fail(ERROR_ARGS, "Can only sign ELFs, BINs or UF2s");
     }
 
+    if (settings.seal.external_sign) {
+        settings.seal.sign = true;
+        settings.seal.hash = true;
+    }
+
     if (get_file_type_idx(1) != get_file_type()) {
         fail(ERROR_ARGS, "Can only sign to same file type");
     }
 
-    if (settings.seal.sign && settings.filenames[2].empty()) {
+    if (settings.seal.sign && settings.filenames[2].empty() && !settings.seal.external_sign) {
         fail(ERROR_ARGS, "missing key file for signing");
     }
 
@@ -6172,10 +6320,10 @@ bool seal_command::execute(device_map &devices) {
     }
 
 
-    private_t private_key = {};
-    public_t public_key = {};
+    private_t private_key = {0};
+    public_t public_key = {0};
 
-    if (settings.seal.sign) read_keys(settings.filenames[2], &public_key, &private_key);
+    if (settings.seal.sign && !settings.seal.external_sign) read_keys(settings.filenames[2], &public_key, &private_key);
 
     model_t model = get_model(0);
 
@@ -6236,40 +6384,8 @@ bool seal_command::execute(device_map &devices) {
         fail(ERROR_ARGS, "Must be ELF or BIN");
     }
 
-    if (settings.seal.sign) {
-        message_digest_t pub_sha256;
-        sha256_buffer(public_key.bytes, sizeof(public_key.bytes), &pub_sha256);
-        DEBUG_LOG("PUBLIC KEY SHA256 ");
-        for(uint8_t i : pub_sha256.bytes) {
-            DEBUG_LOG("%02x", i);
-        }
-        DEBUG_LOG("\n");
-
-        if (!settings.filenames[3].empty()) {
-            if (get_file_type_idx(3) != filetype::json) {
-                fail(ERROR_ARGS, "Can only output OTP json");
-            }
-            auto check_json_file = std::ifstream(settings.filenames[3]);
-            json otp_json;
-            if (check_json_file.good()) {
-                otp_json = json::parse(check_json_file);
-                DEBUG_LOG("Appending to existing otp json\n");
-                check_json_file.close();
-            }
-            auto json_out = get_file_idx(ios::out, 3);
-
-            // Add otp bootkey rows
-            for (int i = 0; i < 32; ++i) {
-                otp_json["bootkey0"][i] = pub_sha256.bytes[i];
-            }
-
-            // Add otp fields to enable secure boot
-            otp_json["crit1"]["secure_boot_enable"] = 1;
-            otp_json["boot_flags1"]["key_valid"] = 1;
-
-            *json_out << std::setw(4) << otp_json << std::endl;
-            json_out->close();
-        }
+    if (settings.seal.sign && !settings.filenames[3].empty()) {
+        output_otp_secure_boot(3, public_key);
     }
 
     if (!settings.quiet) {
@@ -6278,6 +6394,28 @@ bool seal_command::execute(device_map &devices) {
         fos << "Output File " << settings.filenames[1] << ":\n\n";
         settings.info.show_basic = true;
         info_guts(access, nullptr);
+    }
+
+    if (settings.seal.external_sign) {
+        auto access = get_file_memory_access(1);
+        set_model_from_metadata(access);
+        vector<uint8_t> bin;
+        std::unique_ptr<block> last_block = find_last_block(access, bin);
+        std::shared_ptr<hash_value_item> hash_value = last_block->get_item<hash_value_item>();
+        if(hash_value != nullptr) {
+            std::stringstream val;
+            for(uint8_t i : hash_value->hash_bytes) {
+                val << hex_string(i, 2, false, true);
+            }
+            if (settings.quiet) {
+                // Just print hash value
+                printf("%s\n", val.str().c_str());
+            } else {
+                fos.first_column(0);
+                fos.hanging_indent(0);
+                fos << "\nHash value for external signing: " << val.str() << "\n";
+            }
+        }
     }
 
     return false;

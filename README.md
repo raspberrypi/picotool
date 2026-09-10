@@ -29,12 +29,15 @@ SYNOPSIS:
     picotool erase -r <from> <to> [device-selection]
     picotool reboot [-a] [-u] [-g <partition>] [-c <cpu>] [device-selection]
     picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] [--pin-xip-sram]
-                [--no-squash] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] [<key>]
-                [<otp>] [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
+                [--no-squash] [--external-sign] <infile> [-t <type>] [-o <offset>] <outfile>
+                [-t <type>] [<key>] [<otp>] [--major <major>] [--minor <minor>] [--rollback
+                <rollback> [<rows>..]]
     picotool encrypt [--quiet] [--verbose] [--embed] [--fast-rosc] [--use-mbedtls]
                 [--otp-key-page <page>] [--hash] [--sign] [--no-clear] [--pin-xip-sram]
                 <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] <aes_key> <iv_salt>
                 [<signing_key>] [<otp>]
+    picotool reseal [--quiet] [--verbose] <infile> [-t <type>] [-o <offset>] <sigfile> <pubkey>
+                [<otp>]
     picotool partition info|create
     picotool uf2 convert|combine|info
     picotool otp get|set|load|white-label|permissions|dump|list
@@ -58,6 +61,7 @@ COMMANDS:
     reboot      Reboot the device
     seal        Add final metadata to a binary, optionally including a hash and/or signature.
     encrypt     Encrypt the program.
+    reseal      Replace the signature in the final metadata of a binary.
     partition   Commands related to RP2350 Partition Tables
     uf2         Commands related to UF2 creation and status
     otp         Commands related to the RP2350 OTP (One-Time-Programmable) Memory
@@ -71,7 +75,7 @@ Use "picotool help <cmd>" for more info
 Note commands that aren't acting on files require a device in BOOTSEL mode to be connected.
 
 ## Links to documentation for `picotool` commands
-[`info`](#info) [`config`](#config) [`load`](#load) [`save`](#save) [`verify`](#verify) [`erase`](#erase) [`reboot`](#reboot) [`seal`](#seal) [`encrypt`](#encrypt) [`partition`](#partition) [`uf2`](#uf2) [`otp`](#otp) [`coprodis`](#coprodis) [`link`](#link) [`bdev`](#bdev)
+[`info`](#info) [`config`](#config) [`load`](#load) [`save`](#save) [`verify`](#verify) [`erase`](#erase) [`reboot`](#reboot) [`seal`](#seal) [`encrypt`](#encrypt) [`reseal`](#reseal) [`partition`](#partition) [`uf2`](#uf2) [`otp`](#otp) [`coprodis`](#coprodis) [`link`](#link) [`bdev`](#bdev)
 
 ## Building & Installing
 
@@ -715,8 +719,9 @@ SEAL:
 
 SYNOPSIS:
     picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] [--pin-xip-sram]
-                [--no-squash] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] [<key>]
-                [<otp>] [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
+                [--no-squash] [--external-sign] <infile> [-t <type>] [-o <offset>] <outfile>
+                [-t <type>] [<key>] [<otp>] [--major <major>] [--minor <minor>] [--rollback
+                <rollback> [<rows>..]]
 
 OPTIONS:
         --quiet
@@ -744,6 +749,8 @@ OPTIONS:
             Pin XIP SRAM on load
         --no-squash
             Don't squash segments in the ELF file
+        --external-sign
+            For use with external signing and `picotool reseal`
     File to load from
         <infile>
             The file name
@@ -841,6 +848,88 @@ OPTIONS:
             The file name
         -t <type>
             Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
+```
+
+## reseal
+
+`reseal` allows you to modify the signature of a binary that has already been sealed with `seal`.
+
+This can be used for signing binaries without passing `picotool` the private key, for example with hardware security modules, or password-protected private keys. As with `seal`, your signing key must be for the _secp256k1_ curve, the public key must be in the PEM format, and the signature must be in the DER format.
+
+For an example, to generate a password-protected private key and corresponding public key, you could use the following commands:
+```text
+$ openssl ecparam -name secp256k1 -genkey -out private.pem
+$ openssl ec -aes256 -in private.pem -out private.enc.pem
+read EC key
+writing EC key
+Enter pass phrase for PEM:
+Verifying - Enter pass phrase for PEM:
+$ mv private.enc.pem private.pem
+$ openssl ec -in private.pem -out public.pem -pubout
+read EC key
+Enter pass phrase for private.pem:
+writing EC key
+```
+
+Then seal the binary and sign the hash (and verify the signature):
+```text
+$ picotool seal --external-sign hello_usb.uf2 hello_usb.signed.uf2 --quiet > hash.txt
+$ xxd -r -p hash.txt > hash.bin
+$ openssl pkeyutl -in hash.bin -inkey private.pem -out signature.der -pkeyopt digest:sha256
+Enter pass phrase for private.pem:
+$ openssl pkeyutl -in hash.bin -inkey public.pem -pubin -verify -sigfile signature.der -pkeyopt digest:sha256
+Signature Verified Successfully
+```
+
+Finally, reseal the binary with the new signature:
+```text
+$ picotool reseal hello_usb.signed.uf2 signature.der public.pem otp.json
+Resealed File hello_usb.signed.uf2:
+
+Program Information
+ name:          hello_usb
+ web site:      https://github.com/raspberrypi/pico-examples/tree/HEAD/hello_world/usb
+ features:      USB stdin / stdout
+ binary start:  0x10000000
+ binary end:    0x10005038
+ target chip:   RP2350
+ image type:    ARM Secure
+ hash:          verified
+ signature:     verified
+```
+
+This will produce the same output binary as `picotool seal --sign --hash ...` would for a non-password-protected key.
+
+```text
+$ picotool help reseal
+RESEAL:
+    Replace the signature in the final metadata of a binary.
+
+SYNOPSIS:
+    picotool reseal [--quiet] [--verbose] <infile> [-t <type>] [-o <offset>] <sigfile> <pubkey>
+                [<otp>]
+
+OPTIONS:
+        --quiet
+            Don't print any output
+        --verbose
+            Print verbose output
+        <sigfile>
+            Signature file (.der)
+        <pubkey>
+            Public key file (.pem)
+        <otp>
+            JSON file to save OTP to (will edit existing file if it exists)
+    File to re-seal
+        <infile>
+            The file name
+        -t <type>
+            Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
+    BIN file options
+        -o, --offset
+            Specify the load address for a BIN file
+        <offset>
+            Load offset (memory address; default 0x10000000)
 ```
 
 ## partition
