@@ -773,7 +773,7 @@ OPTIONS:
             Specify the load address for UF2 file output (memory address; default 0x10000000)
         --family <family_id>
             Specify the family id for UF2 file output (default absolute)
-    embed partition table into bootloader ELF
+    Embed partition table into bootloader ELF
         <bootloader>
             The file name
         -t, --type <type>
@@ -986,7 +986,7 @@ For the `list`, `set`, `get` and `load` commands, you can define your own OTP la
 ```text
 $ picotool help otp
 OTP:
-    Commands related to the RP2350 OTP (One-Time-Programmable) Memory.
+    Commands related to the RP2350 OTP (One-Time-Programmable) memory.
 
 SYNOPSIS:
     picotool otp get [-c <copies>] [-r] [-e] [-n] [-i <filename>] [device-selection] [-z]

@@ -1328,7 +1328,7 @@ struct partition_create_command : public cmd {
                     (option("--family") &
                         family_id("family_id").set(settings.family_id)) % "Specify the family id for UF2 file output (default absolute)"
                 ).min(0).force_expand_help(true) % "UF2 output options") +
-                optional_typed_file_selection_x("bootloader", 2, "elf") % "embed partition table into bootloader ELF" + 
+                optional_typed_file_selection_x("bootloader", 2, "elf") % "Embed partition table into bootloader ELF" + 
                 (
                 #if HAS_MBEDTLS
                     // todo why doesn't this set settings.partition.sign?
@@ -1596,7 +1596,7 @@ vector<std::shared_ptr<cmd>> otp_sub_commands {
 struct otp_command : public multi_cmd {
     otp_command() : multi_cmd("otp", otp_sub_commands) {}
     string get_doc() const override {
-        return "Commands related to the RP2350 OTP (One-Time-Programmable) Memory.";
+        return "Commands related to the RP2350 OTP (One-Time-Programmable) memory.";
     }
 };
 
