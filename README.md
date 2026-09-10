@@ -60,7 +60,7 @@ COMMANDS:
     encrypt     Encrypt the program.
     partition   Commands related to RP2350 Partition Tables.
     uf2         Commands related to UF2 creation and status.
-    otp         Commands related to the RP2350 OTP (One-Time-Programmable) Memory.
+    otp         Commands related to the RP2350 OTP (One-Time-Programmable) memory.
     coprodis    Post-process coprocessor instructions in disassembly files.
     link        Link multiple binaries into one block loop.
     bdev        Commands related to embedded block devices.
