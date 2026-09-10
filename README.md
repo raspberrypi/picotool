@@ -145,7 +145,7 @@ TARGET SELECTION:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
-        --only-force
+        --force-ignore-bootsel
             Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
@@ -268,7 +268,7 @@ TARGET SELECTION:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
-        --only-force
+        --force-ignore-bootsel
             Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
@@ -389,7 +389,7 @@ OPTIONS:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
-        --only-force
+        --force-ignore-bootsel
             Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
@@ -473,7 +473,7 @@ OPTIONS:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
-        --only-force
+        --force-ignore-bootsel
             Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
@@ -564,7 +564,7 @@ OPTIONS:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
-        --only-force
+        --force-ignore-bootsel
             Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
@@ -631,7 +631,7 @@ OPTIONS:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
-        --only-force
+        --force-ignore-bootsel
             Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
@@ -730,7 +730,7 @@ OPTIONS:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
-        --only-force
+        --force-ignore-bootsel
             Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
@@ -983,7 +983,7 @@ OPTIONS:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
-        --only-force
+        --force-ignore-bootsel
             Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
@@ -1264,7 +1264,7 @@ OPTIONS:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
-        --only-force
+        --force-ignore-bootsel
             Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
@@ -1386,7 +1386,7 @@ TARGET SELECTION:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
-        --only-force
+        --force-ignore-bootsel
             Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
@@ -1465,7 +1465,7 @@ TARGET SELECTION:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
-        --only-force
+        --force-ignore-bootsel
             Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
@@ -1531,7 +1531,7 @@ OPTIONS:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
-        --only-force
+        --force-ignore-bootsel
             Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
@@ -1592,7 +1592,7 @@ OPTIONS:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
-        --only-force
+        --force-ignore-bootsel
             Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
@@ -1695,7 +1695,7 @@ OPTIONS:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
-        --only-force
+        --force-ignore-bootsel
             Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
@@ -1777,7 +1777,7 @@ TARGET SELECTION:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
-        --only-force
+        --force-ignore-bootsel
             Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
@@ -1999,7 +1999,7 @@ OPTIONS:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
-        --only-force
+        --force-ignore-bootsel
             Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
@@ -2076,7 +2076,7 @@ OPTIONS:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
-        --only-force
+        --force-ignore-bootsel
             Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
@@ -2157,7 +2157,7 @@ OPTIONS:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
-        --only-force
+        --force-ignore-bootsel
             Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
@@ -2234,7 +2234,7 @@ OPTIONS:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
-        --only-force
+        --force-ignore-bootsel
             Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
@@ -2311,7 +2311,7 @@ OPTIONS:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
-        --only-force
+        --force-ignore-bootsel
             Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
@@ -2384,7 +2384,7 @@ OPTIONS:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
-        --only-force
+        --force-ignore-bootsel
             Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by

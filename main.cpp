@@ -717,7 +717,7 @@ auto device_selection =
         + option("--debugprobe").set(settings.target_debugprobe) % "Force a DebugProbe device using firmware version >2.3.1 to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode"
         + option('f', "--force").set(settings.force) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode" +
                 option('F', "--force-no-reboot").set(settings.force_no_reboot) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the USB drive mounted"
-        + option("--only-force").set(settings.only_force) % "Same as --force, but will ignore devices already in BOOTSEL mode"
+        + option("--force-ignore-bootsel").set(settings.only_force) % "Same as --force, but will ignore devices already in BOOTSEL mode"
         + (option("--bootsel-led") & integer("gpio").set(settings.led)) % 
         "Specify the GPIO for the BOOTSEL activity LED to flash (default "
     #if DEFAULT_BOOTSEL_LED < 0
@@ -10180,7 +10180,7 @@ static void print_device_info(device_map &devices, bool had_note=false, bool inc
                 " appears to already be in BOOTSEL mode, but --debugprobe was passed so this is only targetting DebugProbes not already in BOOTSEL mode.");
     } else if (settings.only_force) {
         printer(dr_vidpid_bootrom_ok,
-                " appears to already be in BOOTSEL mode, but --only-force was passed so this is only targetting devices not already in BOOTSEL mode.");
+                " appears to already be in BOOTSEL mode, but --force-ignore-bootsel was passed so this is only targetting devices not already in BOOTSEL mode.");
     } else if (include_bootsel) {
         printer(dr_vidpid_bootrom_ok,
                 " appears to be in BOOTSEL mode.");
