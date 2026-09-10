@@ -28,6 +28,7 @@ SYNOPSIS:
     picotool erase -p <partition> [device-selection]
     picotool erase -r <from> <to> [device-selection]
     picotool reboot [-a] [-u] [-g <partition>] [-c <cpu>] [device-selection]
+    picotool list 
     picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] [--pin-xip-sram]
                 [--no-squash] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] [<key>]
                 [<otp>] [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
@@ -56,6 +57,7 @@ COMMANDS:
     verify      Check that the device contents match those in the file.
     erase       Erase the program / memory stored in flash on the device.
     reboot      Reboot the device
+    list        List all connected RP-series devices
     seal        Add final metadata to a binary, optionally including a hash and/or signature.
     encrypt     Encrypt the program.
     partition   Commands related to RP2350 Partition Tables
@@ -71,7 +73,7 @@ Use "picotool help <cmd>" for more info
 Note commands that aren't acting on files require a device in BOOTSEL mode to be connected.
 
 ## Links to documentation for `picotool` commands
-[`info`](#info) [`config`](#config) [`load`](#load) [`save`](#save) [`verify`](#verify) [`erase`](#erase) [`reboot`](#reboot) [`seal`](#seal) [`encrypt`](#encrypt) [`partition`](#partition) [`uf2`](#uf2) [`otp`](#otp) [`coprodis`](#coprodis) [`link`](#link) [`bdev`](#bdev)
+[`info`](#info) [`config`](#config) [`load`](#load) [`save`](#save) [`verify`](#verify) [`erase`](#erase) [`reboot`](#reboot) [`list`](#list) [`seal`](#seal) [`encrypt`](#encrypt) [`partition`](#partition) [`uf2`](#uf2) [`otp`](#otp) [`coprodis`](#coprodis) [`link`](#link) [`bdev`](#bdev)
 
 ## Building & Installing
 
@@ -130,6 +132,10 @@ TARGET SELECTION:
         --rp2040
             Assume the device is an RP2040 - this is only required when using a custom vid/pid
             with an RP2040 on Windows, and is ignored on other operating systems
+        --debugprobe
+            Force a DebugProbe device using firmware version >2.3.1 to reset so the command can
+            be executed. After executing the command (unless the command itself is a 'reboot')
+            the device will be rebooted back to application mode
         -f, --force
             Force a device not in BOOTSEL mode but running compatible code to reset so the
             command can be executed. After executing the command (unless the command itself is
@@ -139,6 +145,8 @@ TARGET SELECTION:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
+        --force-ignore-bootsel
+            Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
             RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
@@ -247,6 +255,10 @@ TARGET SELECTION:
         --rp2040
             Assume the device is an RP2040 - this is only required when using a custom vid/pid
             with an RP2040 on Windows, and is ignored on other operating systems
+        --debugprobe
+            Force a DebugProbe device using firmware version >2.3.1 to reset so the command can
+            be executed. After executing the command (unless the command itself is a 'reboot')
+            the device will be rebooted back to application mode
         -f, --force
             Force a device not in BOOTSEL mode but running compatible code to reset so the
             command can be executed. After executing the command (unless the command itself is
@@ -256,6 +268,8 @@ TARGET SELECTION:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
+        --force-ignore-bootsel
+            Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
             RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
@@ -362,6 +376,10 @@ OPTIONS:
         --rp2040
             Assume the device is an RP2040 - this is only required when using a custom vid/pid
             with an RP2040 on Windows, and is ignored on other operating systems
+        --debugprobe
+            Force a DebugProbe device using firmware version >2.3.1 to reset so the command can
+            be executed. After executing the command (unless the command itself is a 'reboot')
+            the device will be rebooted back to application mode
         -f, --force
             Force a device not in BOOTSEL mode but running compatible code to reset so the
             command can be executed. After executing the command (unless the command itself is
@@ -371,6 +389,8 @@ OPTIONS:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
+        --force-ignore-bootsel
+            Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
             RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
@@ -440,6 +460,10 @@ OPTIONS:
         --rp2040
             Assume the device is an RP2040 - this is only required when using a custom vid/pid
             with an RP2040 on Windows, and is ignored on other operating systems
+        --debugprobe
+            Force a DebugProbe device using firmware version >2.3.1 to reset so the command can
+            be executed. After executing the command (unless the command itself is a 'reboot')
+            the device will be rebooted back to application mode
         -f, --force
             Force a device not in BOOTSEL mode but running compatible code to reset so the
             command can be executed. After executing the command (unless the command itself is
@@ -449,6 +473,8 @@ OPTIONS:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
+        --force-ignore-bootsel
+            Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
             RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
@@ -525,6 +551,10 @@ OPTIONS:
         --rp2040
             Assume the device is an RP2040 - this is only required when using a custom vid/pid
             with an RP2040 on Windows, and is ignored on other operating systems
+        --debugprobe
+            Force a DebugProbe device using firmware version >2.3.1 to reset so the command can
+            be executed. After executing the command (unless the command itself is a 'reboot')
+            the device will be rebooted back to application mode
         -f, --force
             Force a device not in BOOTSEL mode but running compatible code to reset so the
             command can be executed. After executing the command (unless the command itself is
@@ -534,6 +564,8 @@ OPTIONS:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
+        --force-ignore-bootsel
+            Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
             RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
@@ -586,6 +618,10 @@ OPTIONS:
         --rp2040
             Assume the device is an RP2040 - this is only required when using a custom vid/pid
             with an RP2040 on Windows, and is ignored on other operating systems
+        --debugprobe
+            Force a DebugProbe device using firmware version >2.3.1 to reset so the command can
+            be executed. After executing the command (unless the command itself is a 'reboot')
+            the device will be rebooted back to application mode
         -f, --force
             Force a device not in BOOTSEL mode but running compatible code to reset so the
             command can be executed. After executing the command (unless the command itself is
@@ -595,6 +631,8 @@ OPTIONS:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
+        --force-ignore-bootsel
+            Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
             RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
@@ -679,6 +717,10 @@ OPTIONS:
         --rp2040
             Assume the device is an RP2040 - this is only required when using a custom vid/pid
             with an RP2040 on Windows, and is ignored on other operating systems
+        --debugprobe
+            Force a DebugProbe device using firmware version >2.3.1 to reset so the command can
+            be executed. After executing the command (unless the command itself is a 'reboot')
+            the device will be rebooted back to application mode
         -f, --force
             Force a device not in BOOTSEL mode but running compatible code to reset so the
             command can be executed. After executing the command (unless the command itself is
@@ -688,12 +730,66 @@ OPTIONS:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
+        --force-ignore-bootsel
+            Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
             RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
             BOOTSEL mode
         --bootsel-led-active-low
             The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
+```
+
+## list
+
+`list` allows you to list all connected RP-series devices
+
+```text
+$ picotool help list
+LIST:
+    List all connected RP-series devices
+
+SYNOPSIS:
+    picotool list 
+```
+
+For example, with a DebugProbe and an RP2350 connected:
+
+```text
+$ picotool list
+Detected 2 RP-series devices:
+
+  RP2350 device at bus 1, address 31 appears to have a USB reset interface, so consider -f (or
+      -F) to force reboot in order to run the command.
+
+  RP2040 device at bus 1, address 32 appears to be a DebugProbe with a USB reset interface, so
+      consider --debugprobe to force reboot it in order to run the command.
+
+```
+
+Then after running `picotool reboot -f -u`:
+
+```text
+$ picotool list
+Detected 2 RP-series devices:
+
+  RP2350 device at bus 1, address 33 appears to be in BOOTSEL mode.
+
+  RP2040 device at bus 1, address 32 appears to be a DebugProbe with a USB reset interface, so
+      consider --debugprobe to force reboot it in order to run the command.
+
+```
+
+And also running `picotool reboot --debugprobe -u`:
+
+```text
+$ picotool list
+Detected 2 RP-series devices:
+
+  RP2040 device at bus 1, address 34 appears to be in BOOTSEL mode.
+
+  RP2350 device at bus 1, address 33 appears to be in BOOTSEL mode.
+
 ```
 
 ## seal
@@ -874,6 +970,10 @@ OPTIONS:
         --rp2040
             Assume the device is an RP2040 - this is only required when using a custom vid/pid
             with an RP2040 on Windows, and is ignored on other operating systems
+        --debugprobe
+            Force a DebugProbe device using firmware version >2.3.1 to reset so the command can
+            be executed. After executing the command (unless the command itself is a 'reboot')
+            the device will be rebooted back to application mode
         -f, --force
             Force a device not in BOOTSEL mode but running compatible code to reset so the
             command can be executed. After executing the command (unless the command itself is
@@ -883,6 +983,8 @@ OPTIONS:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
+        --force-ignore-bootsel
+            Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
             RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
@@ -1149,6 +1251,10 @@ OPTIONS:
         --rp2040
             Assume the device is an RP2040 - this is only required when using a custom vid/pid
             with an RP2040 on Windows, and is ignored on other operating systems
+        --debugprobe
+            Force a DebugProbe device using firmware version >2.3.1 to reset so the command can
+            be executed. After executing the command (unless the command itself is a 'reboot')
+            the device will be rebooted back to application mode
         -f, --force
             Force a device not in BOOTSEL mode but running compatible code to reset so the
             command can be executed. After executing the command (unless the command itself is
@@ -1158,6 +1264,8 @@ OPTIONS:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
+        --force-ignore-bootsel
+            Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
             RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
@@ -1265,6 +1373,10 @@ TARGET SELECTION:
         --rp2040
             Assume the device is an RP2040 - this is only required when using a custom vid/pid
             with an RP2040 on Windows, and is ignored on other operating systems
+        --debugprobe
+            Force a DebugProbe device using firmware version >2.3.1 to reset so the command can
+            be executed. After executing the command (unless the command itself is a 'reboot')
+            the device will be rebooted back to application mode
         -f, --force
             Force a device not in BOOTSEL mode but running compatible code to reset so the
             command can be executed. After executing the command (unless the command itself is
@@ -1274,6 +1386,8 @@ TARGET SELECTION:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
+        --force-ignore-bootsel
+            Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
             RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
@@ -1338,6 +1452,10 @@ TARGET SELECTION:
         --rp2040
             Assume the device is an RP2040 - this is only required when using a custom vid/pid
             with an RP2040 on Windows, and is ignored on other operating systems
+        --debugprobe
+            Force a DebugProbe device using firmware version >2.3.1 to reset so the command can
+            be executed. After executing the command (unless the command itself is a 'reboot')
+            the device will be rebooted back to application mode
         -f, --force
             Force a device not in BOOTSEL mode but running compatible code to reset so the
             command can be executed. After executing the command (unless the command itself is
@@ -1347,6 +1465,8 @@ TARGET SELECTION:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
+        --force-ignore-bootsel
+            Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
             RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
@@ -1398,6 +1518,10 @@ OPTIONS:
         --rp2040
             Assume the device is an RP2040 - this is only required when using a custom vid/pid
             with an RP2040 on Windows, and is ignored on other operating systems
+        --debugprobe
+            Force a DebugProbe device using firmware version >2.3.1 to reset so the command can
+            be executed. After executing the command (unless the command itself is a 'reboot')
+            the device will be rebooted back to application mode
         -f, --force
             Force a device not in BOOTSEL mode but running compatible code to reset so the
             command can be executed. After executing the command (unless the command itself is
@@ -1407,6 +1531,8 @@ OPTIONS:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
+        --force-ignore-bootsel
+            Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
             RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
@@ -1453,6 +1579,10 @@ OPTIONS:
         --rp2040
             Assume the device is an RP2040 - this is only required when using a custom vid/pid
             with an RP2040 on Windows, and is ignored on other operating systems
+        --debugprobe
+            Force a DebugProbe device using firmware version >2.3.1 to reset so the command can
+            be executed. After executing the command (unless the command itself is a 'reboot')
+            the device will be rebooted back to application mode
         -f, --force
             Force a device not in BOOTSEL mode but running compatible code to reset so the
             command can be executed. After executing the command (unless the command itself is
@@ -1462,6 +1592,8 @@ OPTIONS:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
+        --force-ignore-bootsel
+            Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
             RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
@@ -1550,6 +1682,10 @@ OPTIONS:
         --rp2040
             Assume the device is an RP2040 - this is only required when using a custom vid/pid
             with an RP2040 on Windows, and is ignored on other operating systems
+        --debugprobe
+            Force a DebugProbe device using firmware version >2.3.1 to reset so the command can
+            be executed. After executing the command (unless the command itself is a 'reboot')
+            the device will be rebooted back to application mode
         -f, --force
             Force a device not in BOOTSEL mode but running compatible code to reset so the
             command can be executed. After executing the command (unless the command itself is
@@ -1559,6 +1695,8 @@ OPTIONS:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
+        --force-ignore-bootsel
+            Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
             RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
@@ -1623,6 +1761,10 @@ TARGET SELECTION:
         --rp2040
             Assume the device is an RP2040 - this is only required when using a custom vid/pid
             with an RP2040 on Windows, and is ignored on other operating systems
+        --debugprobe
+            Force a DebugProbe device using firmware version >2.3.1 to reset so the command can
+            be executed. After executing the command (unless the command itself is a 'reboot')
+            the device will be rebooted back to application mode
         -f, --force
             Force a device not in BOOTSEL mode but running compatible code to reset so the
             command can be executed. After executing the command (unless the command itself is
@@ -1632,6 +1774,8 @@ TARGET SELECTION:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
+        --force-ignore-bootsel
+            Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
             RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
@@ -1839,6 +1983,10 @@ OPTIONS:
         --rp2040
             Assume the device is an RP2040 - this is only required when using a custom vid/pid
             with an RP2040 on Windows, and is ignored on other operating systems
+        --debugprobe
+            Force a DebugProbe device using firmware version >2.3.1 to reset so the command can
+            be executed. After executing the command (unless the command itself is a 'reboot')
+            the device will be rebooted back to application mode
         -f, --force
             Force a device not in BOOTSEL mode but running compatible code to reset so the
             command can be executed. After executing the command (unless the command itself is
@@ -1848,6 +1996,8 @@ OPTIONS:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
+        --force-ignore-bootsel
+            Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
             RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
@@ -1910,6 +2060,10 @@ OPTIONS:
         --rp2040
             Assume the device is an RP2040 - this is only required when using a custom vid/pid
             with an RP2040 on Windows, and is ignored on other operating systems
+        --debugprobe
+            Force a DebugProbe device using firmware version >2.3.1 to reset so the command can
+            be executed. After executing the command (unless the command itself is a 'reboot')
+            the device will be rebooted back to application mode
         -f, --force
             Force a device not in BOOTSEL mode but running compatible code to reset so the
             command can be executed. After executing the command (unless the command itself is
@@ -1919,6 +2073,8 @@ OPTIONS:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
+        --force-ignore-bootsel
+            Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
             RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
@@ -1985,6 +2141,10 @@ OPTIONS:
         --rp2040
             Assume the device is an RP2040 - this is only required when using a custom vid/pid
             with an RP2040 on Windows, and is ignored on other operating systems
+        --debugprobe
+            Force a DebugProbe device using firmware version >2.3.1 to reset so the command can
+            be executed. After executing the command (unless the command itself is a 'reboot')
+            the device will be rebooted back to application mode
         -f, --force
             Force a device not in BOOTSEL mode but running compatible code to reset so the
             command can be executed. After executing the command (unless the command itself is
@@ -1994,6 +2154,8 @@ OPTIONS:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
+        --force-ignore-bootsel
+            Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
             RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
@@ -2056,6 +2218,10 @@ OPTIONS:
         --rp2040
             Assume the device is an RP2040 - this is only required when using a custom vid/pid
             with an RP2040 on Windows, and is ignored on other operating systems
+        --debugprobe
+            Force a DebugProbe device using firmware version >2.3.1 to reset so the command can
+            be executed. After executing the command (unless the command itself is a 'reboot')
+            the device will be rebooted back to application mode
         -f, --force
             Force a device not in BOOTSEL mode but running compatible code to reset so the
             command can be executed. After executing the command (unless the command itself is
@@ -2065,6 +2231,8 @@ OPTIONS:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
+        --force-ignore-bootsel
+            Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
             RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
@@ -2127,6 +2295,10 @@ OPTIONS:
         --rp2040
             Assume the device is an RP2040 - this is only required when using a custom vid/pid
             with an RP2040 on Windows, and is ignored on other operating systems
+        --debugprobe
+            Force a DebugProbe device using firmware version >2.3.1 to reset so the command can
+            be executed. After executing the command (unless the command itself is a 'reboot')
+            the device will be rebooted back to application mode
         -f, --force
             Force a device not in BOOTSEL mode but running compatible code to reset so the
             command can be executed. After executing the command (unless the command itself is
@@ -2136,6 +2308,8 @@ OPTIONS:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
+        --force-ignore-bootsel
+            Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
             RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
@@ -2194,6 +2368,10 @@ OPTIONS:
         --rp2040
             Assume the device is an RP2040 - this is only required when using a custom vid/pid
             with an RP2040 on Windows, and is ignored on other operating systems
+        --debugprobe
+            Force a DebugProbe device using firmware version >2.3.1 to reset so the command can
+            be executed. After executing the command (unless the command itself is a 'reboot')
+            the device will be rebooted back to application mode
         -f, --force
             Force a device not in BOOTSEL mode but running compatible code to reset so the
             command can be executed. After executing the command (unless the command itself is
@@ -2203,6 +2381,8 @@ OPTIONS:
             command can be executed. After executing the command (unless the command itself is
             a 'reboot') the device will be left connected and accessible to picotool, but
             without the USB drive mounted
+        --force-ignore-bootsel
+            Same as --force, but will ignore devices already in BOOTSEL mode
         --bootsel-led <gpio>
             Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
             RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
