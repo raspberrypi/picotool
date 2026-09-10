@@ -36,6 +36,8 @@ static void dump_pubkey(const char *title, mbedtls_ecdsa_context *key)
 #define dump_pubkey(...) ((void)0)
 #endif
 
+#define assert_or_return(assertion, retval) assert(assertion); if (!(assertion)) return retval;
+
 void mb_sha256_buffer(const uint8_t *data, size_t len, message_digest_t *digest_out) {
     mbedtls_sha256(data, len, digest_out->bytes, 0);
 }
@@ -150,14 +152,14 @@ void raw_to_der(signature_t *sig) {
 }
 
 
-void der_to_raw(signature_t *sig) {
-    assert(sig->der[0] == 0x30);
-    assert(sig->der[2] == 0x02);
+bool der_to_raw(signature_t *sig) {
+    assert_or_return(sig->der[0] == 0x30, false);
+    assert_or_return(sig->der[2] == 0x02, false);
     uint8_t b2 = sig->der[3];
-    assert(sig->der[4 + b2] == 0x02);
+    assert_or_return(sig->der[4 + b2] == 0x02, false);
     uint8_t b3 = sig->der[5 + b2];
 
-    assert(sig->der_len == 6u + b2 + b3);
+    assert_or_return(sig->der_len == 6u + b2 + b3, false);
 
     unsigned char r[32];
     if (b2 == 33) {
@@ -182,6 +184,8 @@ void der_to_raw(signature_t *sig) {
     memset(sig->bytes, 0, sizeof(sig->bytes));
     memcpy(sig->bytes, r, sizeof(r));
     memcpy(sig->bytes + 32, s, sizeof(s));
+
+    return true;
 }
 
 
