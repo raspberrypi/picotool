@@ -418,21 +418,76 @@ namespace cli {
         }
     };
 
-    struct integer : public value_base<integer> {
-        explicit integer(string name) : value_base(std::move(name)) {}
+    // Number format policies for integer_base; they say how a value is parsed, and how
+    // values are worded/rendered in error messages
+    struct decimal_format {
+        static constexpr int64_t radix = 0; // 0 means work the base out from the 0x/0b prefix
+        static constexpr uint64_t value_mask = std::numeric_limits<uint64_t>::max();
+        static const char *name() { return "integer"; }
+        static const char *too_big_error() { return " is too big"; }
+        static string format(int64_t value) { return std::to_string(value); }
+    };
+
+    struct hex_format {
+        static constexpr int64_t radix = 16; // always base 16; an 0x prefix is optional
+        static constexpr uint64_t value_mask = 0xffffffffu; // 32 bit values only
+        static const char *name() { return "hex value"; }
+        static const char *too_big_error() { return " is not a valid 32 bit value"; }
+        static string format(int64_t value) {
+            std::stringstream ss;
+            ss << "0x" << std::hex << value;
+            return ss.str();
+        }
+    };
+
+    // Shared implementation for numeric values; D is the derived type (e.g. integer, hex),
+    // and FORMAT is one of the number format policies above
+    template<typename D, typename FORMAT = decimal_format>
+    struct integer_base : public value_base<D> {
+        explicit integer_base(string name) : value_base<D>(std::move(name)) {}
+
+        // comparisons against a limit which do the right thing whether T is signed or not
+        template<typename T>
+        static bool less_than(T value, int64_t limit) {
+            if (std::is_signed<T>()) return (int64_t)value < limit;
+            else return limit > 0 && (uint64_t)value < (uint64_t)limit;
+        }
+
+        template<typename T>
+        static bool greater_than(T value, int64_t limit) {
+            if (std::is_signed<T>()) return (int64_t)value > limit;
+            else return limit < 0 || (uint64_t)value > (uint64_t)limit;
+        }
+
+        // is the parsed value representable in the target type?
+        template<typename T>
+        static bool fits(uint64_t lvalue) {
+            if (std::is_signed<T>()) {
+                return (int64_t)lvalue >= (int64_t)std::numeric_limits<T>::min() &&
+                       (int64_t)lvalue <= (int64_t)std::numeric_limits<T>::max();
+            } else {
+                return lvalue <= (uint64_t)std::numeric_limits<T>::max();
+            }
+        }
 
         template<typename T>
         static std::string parse_string(std::string value, T& out) {
-            size_t pos = 0;
-            uint64_t lvalue = std::numeric_limits<uint64_t>::max();
-            int64_t base = 10;
-            if (value.find("0x") == 0) {
+            auto ovalue = value;
+            if (!std::is_signed<T>() && value.find('-') == 0) {
+                // stoull would silently wrap this round
+                return ovalue + " must not be negative";
+            }
+            int64_t base = FORMAT::radix;
+            if ((!base || base == 16) && value.find("0x") == 0) {
                 value = value.substr(2);
                 base = 16;
-            } else if (value.find("0b") == 0) {
+            } else if ((!base || base == 2) && value.find("0b") == 0) {
                 value = value.substr(2);
                 base = 2;
             }
+            if (!base) base = 10;
+            size_t pos = 0;
+            uint64_t lvalue = std::numeric_limits<uint64_t>::max();
             try {
                 if (std::is_signed<T>()) {
                     lvalue = std::stoll(value, &pos, base);
@@ -440,190 +495,111 @@ namespace cli {
                     lvalue = std::stoull(value, &pos, base);
                 }
                 if (pos != value.length()) {
-                    return "Garbage after integer value: " + value.substr(pos);
+                    return string("Garbage after ") + FORMAT::name() + ": " + value.substr(pos);
                 }
             } catch (std::invalid_argument&) {
-                return value + " is not a valid integer";
+                return ovalue + " is not a valid " + FORMAT::name();
             } catch (std::out_of_range&) {
-                return value + " is out of range";
+                return ovalue + " is out of range";
             }
-            if (lvalue != (int64_t)lvalue) {
-                return value + " is too big";
+            if ((lvalue & ~FORMAT::value_mask) || !fits<T>(lvalue)) {
+                return ovalue + FORMAT::too_big_error();
             }
-            out = (int64_t)lvalue;
+            out = (T)lvalue;
             return "";
         }
 
+        // the bounds to check a parsed value against; copied into the action lambda, as we
+        // cannot capture "this"
+        struct bounds {
+            int64_t min;
+            int64_t max;
+            bool has_max; // if not, the target type's own range is the only upper bound
+            int64_t invalid_bits;
+            string invalid_bits_error;
+            string nm;
+
+            template<typename T>
+            std::string check(T value) const {
+                if (less_than(value, min)) {
+                    return nm + " must be >= " + FORMAT::format(min);
+                }
+                if (has_max && greater_than(value, max)) {
+                    return nm + " must be <= " + FORMAT::format(max);
+                }
+                if ((uint64_t)value & (uint64_t)invalid_bits) {
+                    return nm + " " + invalid_bits_error;
+                }
+                return "";
+            }
+        };
+
         template<typename T>
-        integer &set(T &t) {
-            int64_t min = _min_value;
-            int64_t max = _max_value;
-            int64_t invalid_bits = _invalid_bits;
-            std::string invalid_bits_error = _invalid_bits_error;
-            string nm = "<" + name() + ">";
+        D &set(T &t) {
+            bounds b = get_bounds();
             // note we cannot capture "this"
-            on_action([&t, min, max, nm, invalid_bits, invalid_bits_error](const string& value) {
-                int64_t tmp = 0;
+            this->on_action([&t, b](const string& value) {
+                T tmp = 0;
                 std::string err = parse_string(value, tmp);
                 t = tmp;
                 if (!err.empty()) return err;
-                if (t < min) {
-                    return nm + " must be >= " + std::to_string(min);
-                }
-                if (t > max) {
-                    return nm + " must be <= " + std::to_string(max);
-                }
-                if (t & invalid_bits) {
-                    return nm + " " + invalid_bits_error;
-                }
-                return string("");
+                return b.check(tmp);
             });
-            return *this;
+            return *static_cast<D *>(this);
         }
 
         template<typename T>
-        integer &add_to(T &t) {
-            int64_t min = _min_value;
-            int64_t max = _max_value;
-            int64_t invalid_bits = _invalid_bits;
-            std::string invalid_bits_error = _invalid_bits_error;
-            string nm = "<" + name() + ">";
+        D &add_to(T &t) {
+            bounds b = get_bounds();
             // note we cannot capture "this"
-            on_action([&t, min, max, nm, invalid_bits, invalid_bits_error](const string& value) {
-                int64_t tmp = 0;
+            this->on_action([&t, b](const string& value) {
+                typename T::value_type tmp = 0;
                 std::string err = parse_string(value, tmp);
                 if (!err.empty()) return err;
-                if (tmp < min) {
-                    return nm + " must be >= " + std::to_string(min);
-                }
-                if (tmp > max) {
-                    return nm + " must be <= " + std::to_string(max);
-                }
-                if (tmp & invalid_bits) {
-                    return nm + " " + invalid_bits_error;
-                }
+                err = b.check(tmp);
+                if (!err.empty()) return err;
                 t.push_back(tmp);
                 return string("");
             });
-            return *this;
+            return *static_cast<D *>(this);
         }
 
-        integer& min_value(int64_t v) {
+        D& min_value(int64_t v) {
             _min_value = v;
-            return *this;
+            return *static_cast<D *>(this);
         }
 
-        integer& max_value(int64_t v) {
+        D& max_value(int64_t v) {
             _max_value = v;
-            return *this;
+            _has_max_value = true;
+            return *static_cast<D *>(this);
         }
 
-        integer& invalid_bits(int64_t bits, std::string error) {
+        D& invalid_bits(int64_t bits, std::string error) {
             _invalid_bits = bits;
             _invalid_bits_error = error;
-            return *this;
+            return *static_cast<D *>(this);
         }
 
         int64_t _min_value = 0;
         int64_t _max_value = std::numeric_limits<int64_t>::max();
+        bool _has_max_value = false;
         std::string _invalid_bits_error;
         int64_t _invalid_bits = 0;
+
+    private:
+        bounds get_bounds() const {
+            return bounds{_min_value, _max_value, _has_max_value, _invalid_bits,
+                          _invalid_bits_error, "<" + this->name() + ">"};
+        }
     };
 
-    struct hex : public value_base<hex> {
-        explicit hex(string name) : value_base(std::move(name)) {}
+    struct integer : public integer_base<integer> {
+        explicit integer(string name) : integer_base(std::move(name)) {}
+    };
 
-        template<typename T>
-        hex &set(T &t) {
-            unsigned int min = _min_value;
-            unsigned int max = _max_value;
-            string nm = "<" + name() + ">";
-            // note we cannot capture "this"
-            on_action([&t, min, max, nm](string value) {
-                auto ovalue = value;
-                if (value.find("0x") == 0) value = value.substr(2);
-                size_t pos = 0;
-                long lvalue = std::numeric_limits<long>::max();
-                try {
-                    lvalue = std::stoul(value, &pos, 16);
-                    if (pos != value.length()) {
-                        return "Garbage after hex value: " + value.substr(pos);
-                    }
-                } catch (std::invalid_argument&) {
-                    return ovalue + " is not a valid hex value";
-                } catch (std::out_of_range&) {
-                }
-                if (lvalue != (unsigned int)lvalue) {
-                    return value + " is not a valid 32 bit value";
-                }
-                t = (unsigned int)lvalue;
-                if (t < min) {
-                    std::stringstream ss;
-                    ss << nm << " must be >= 0x" << std::hex << std::to_string(min);
-                    return ss.str();
-                }
-                if (t > max) {
-                    std::stringstream ss;
-                    ss << nm << " must be M= 0x" << std::hex << std::to_string(min);
-                    return ss.str();
-                }
-                return string("");
-            });
-            return *this;
-        }
-
-        template<typename T>
-        hex &add_to(T &t) {
-            unsigned int min = _min_value;
-            unsigned int max = _max_value;
-            string nm = "<" + name() + ">";
-            // note we cannot capture "this"
-            on_action([&t, min, max, nm](string value) {
-                auto ovalue = value;
-                if (value.find("0x") == 0) value = value.substr(2);
-                size_t pos = 0;
-                long lvalue = std::numeric_limits<long>::max();
-                try {
-                    lvalue = std::stoul(value, &pos, 16);
-                    if (pos != value.length()) {
-                        return "Garbage after hex value: " + value.substr(pos);
-                    }
-                } catch (std::invalid_argument&) {
-                    return ovalue + " is not a valid hex value";
-                } catch (std::out_of_range&) {
-                }
-                if (lvalue != (unsigned int)lvalue) {
-                    return value + " is not a valid 32 bit value";
-                }
-                unsigned int tmp = (unsigned int)lvalue;
-                if (tmp < min) {
-                    std::stringstream ss;
-                    ss << nm << " must be >= 0x" << std::hex << std::to_string(min);
-                    return ss.str();
-                }
-                if (tmp > max) {
-                    std::stringstream ss;
-                    ss << nm << " must be <= 0x" << std::hex << std::to_string(max);
-                    return ss.str();
-                }
-                t.push_back(tmp);
-                return string("");
-            });
-            return *this;
-        }
-
-        hex& min_value(unsigned int v) {
-            _min_value = v;
-            return *this;
-        }
-
-        hex& max_value(unsigned int v) {
-            _max_value = v;
-            return *this;
-        }
-
-        unsigned int _min_value = 0;
-        unsigned int _max_value = std::numeric_limits<unsigned int>::max();
+    struct hex : public integer_base<hex, hex_format> {
+        explicit hex(string name) : integer_base(std::move(name)) {}
     };
 
     struct group : public matchable_derived<group> {
