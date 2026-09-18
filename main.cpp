@@ -4769,6 +4769,46 @@ bool info_command::execute(device_map &devices) {
                 fos << "File " << settings.filenames[0] << ":\n\n";
             }
             info_guts(access, nullptr);
+
+            vector<uint8_t> bin;
+            vector<int32_t> starts;
+            bool partition_in_file = false;
+            auto blocks = find_all_blocks(access, bin);
+            for (auto &block : blocks) {
+                auto partition_table = block->get_item<partition_table_item>();
+                if (partition_table == nullptr) {
+                    continue;
+                }
+
+                for (auto partition : partition_table->partitions) {
+                    starts.push_back(partition.first_sector * 4096);
+                    // check if partition contents is in file, if not set start to -1
+                    try {
+                        uint8_t buffer[32] = {};
+                        access.read(access.get_model()->flash_start() + starts.back(), buffer, sizeof(buffer), false);
+                        partition_in_file = true;
+                    } catch (not_mapped_exception &) {
+                        starts.back() = -1;
+                    }
+                }
+                break;
+            }
+
+            if (partition_in_file) { // at least one partition is in the file
+                for (unsigned int i=0; i < starts.size(); i++) {
+                    int32_t start = starts[i];
+                    if (start > 0) {
+                        fos.first_column(0); fos.hanging_indent(0);
+                        fos << "\nPartition " << i << "\n";
+                        fos.first_column(1);
+                        partition_memory_access part_access(access, (uint32_t)start);
+                        info_guts(part_access, nullptr);
+                    } else {
+                        fos.first_column(0); fos.hanging_indent(0);
+                        fos << "\nPartition " << i << " not present in file\n";
+                    }
+                }
+            }
         }
         return false;
     }
