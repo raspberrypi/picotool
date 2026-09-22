@@ -747,8 +747,8 @@ void remove_non_generic_load_map_entries(block *new_block, model_t model) {
     load_map->entries.erase(
         std::remove_if(load_map->entries.begin(), load_map->entries.end(), 
             [&model](const load_map_item::entry& entry) {
-                bool ignored;
-                return !detect_generic_load_map_entry(entry, model, ignored);
+                bool unused_variable = false;
+                return !detect_generic_load_map_entry(entry, model, unused_variable);
             }
         ), load_map->entries.end()
     );
