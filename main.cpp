@@ -9471,6 +9471,7 @@ bool otp_load_command::execute(device_map &devices) {
 
     // Write PEM key as ECC data
     if (get_file_type() == filetype::pem) {
+    #if HAS_MBEDTLS
         settings.otp.ecc = true;
         if (settings.otp.raw) fail(ERROR_ARGS, "Cannot write PEM file with --raw");
 
@@ -9482,6 +9483,9 @@ bool otp_load_command::execute(device_map &devices) {
         key_bytes->write((char*)private_key.bytes, sizeof(private_key.bytes));
 
         file = key_bytes;
+    #else
+        fail(ERROR_ARGS, "Cannot read PEM keys with no mbedtls\n");
+    #endif
     }
 
     otp_cmd.wRow = settings.otp.row;
