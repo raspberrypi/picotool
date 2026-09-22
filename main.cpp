@@ -1451,7 +1451,7 @@ struct otp_load_command : public cmd {
                         (option('s', "--start_row") & integer("row").set(settings.otp.row)) % "Start row to load at (note use 0x for hex)" +
                         (option('i', "--include") & value("filename").add_to(settings.otp.extra_files)).min(0).max(1) % "Include extra otp definition" // todo more than 1
                 ).min(0).doc_non_optional(true) % "Row options" +
-                named_typed_file_selection_x("filename", 0, "json | bin") % "File to load row(s) from" +
+                named_typed_file_selection_x("filename", 0, "json | bin | pem") % "File to load row(s) from" +
                 device_selection % "Target device selection"
         );
     }
@@ -9447,7 +9447,7 @@ bool otp_load_command::execute(device_map &devices) {
     auto model = raw_access.get_model();
     // todo pre-check page lock
     struct picoboot_otp_cmd otp_cmd;
-    std::shared_ptr<std::fstream> file = get_file(ios::in|ios::binary);
+    std::shared_ptr<std::iostream> file = get_file(ios::in|ios::binary);
     if (get_file_type() == filetype::json) {
         hack_init_otp_regs();
         json otp_json = json::parse(*file);
@@ -9468,6 +9468,22 @@ bool otp_load_command::execute(device_map &devices) {
         // Return now, don't do rest of function
         return false;
     }
+
+    // Write PEM key as ECC data
+    if (get_file_type() == filetype::pem) {
+        settings.otp.ecc = true;
+        if (settings.otp.raw) fail(ERROR_ARGS, "Cannot write PEM file with --raw");
+
+        private_t private_key = {};
+        public_t public_key = {};
+        read_keys(settings.filenames[0], &public_key, &private_key);
+
+        auto key_bytes = std::make_shared<std::stringstream>();
+        key_bytes->write((char*)private_key.bytes, sizeof(private_key.bytes));
+
+        file = key_bytes;
+    }
+
     otp_cmd.wRow = settings.otp.row;
     otp_cmd.bEcc = settings_select_ecc();
     unsigned int row_size = otp_cmd.bEcc ? 2 : 4;
