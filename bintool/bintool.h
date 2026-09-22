@@ -25,6 +25,7 @@ typedef enum verified_t {
 
 // Elfs
 std::unique_ptr<block> find_first_block(elf_file *elf);
+std::vector<std::unique_ptr<block>> get_all_blocks(elf_file *elf, std::unique_ptr<block> &first_block);
 block place_new_block(elf_file *elf, std::unique_ptr<block> &first_block, model_t model, bool set_others_ignored=false);
 #if HAS_MBEDTLS
     int hash_andor_sign(elf_file *elf, block *new_block, const public_t public_key, const private_t private_key, model_t model, bool hash_value, bool sign, bool clear_sram = false, bool pin_xip_sram = false);

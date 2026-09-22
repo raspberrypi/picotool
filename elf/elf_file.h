@@ -46,8 +46,9 @@ public:
     const elf32_ph_entry* segment_from_physical_address(uint32_t paddr);
     const elf32_ph_entry* segment_from_virtual_address(uint32_t vaddr);
     const elf32_ph_entry* segment_from_section(const elf32_sh_entry &sh);
+    bool physical_address_range_is_occupied(uint32_t paddr, uint32_t psize);
     void dump(void) const;
-    void store_squashed(model_t model);
+    void store_squashed(model_t model, const std::vector<uint32_t> &pinned_addresses = {});
 
     void move_all(int dist);
     void remove_ph_holes(void);
