@@ -1383,7 +1383,7 @@ OPTIONS:
         <filename>
             The file name
         -t <type>
-            Specify file type (json | bin) explicitly, ignoring file extension
+            Specify file type (json | bin | pem) explicitly, ignoring file extension
     Target device selection
         --bus <bus>
             Filter devices by USB bus number
