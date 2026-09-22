@@ -3173,6 +3173,7 @@ protected:
     }
 };
 
+#if HAS_LIBUSB
 int guess_flash_size(memory_access &access) {
     assert(access.is_device());
     try {
@@ -3203,6 +3204,7 @@ int guess_flash_size(memory_access &access) {
         }
     }
 }
+#endif
 
 // returns true if string is a hex string, and fills array with the values
 bool string_to_hex_array(const string& str, uint8_t *array, size_t size, const string& error_msg) {
