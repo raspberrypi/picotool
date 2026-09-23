@@ -420,7 +420,7 @@ namespace cli {
 
     // Number format policies for integer_base; they say how a value is parsed, and how
     // values are worded/rendered in error messages
-    struct decimal_format {
+    struct integer_format {
         static constexpr int64_t radix = 0; // 0 means work the base out from the 0x/0b prefix
         static constexpr uint64_t value_mask = std::numeric_limits<uint64_t>::max();
         static const char *name() { return "integer"; }
@@ -442,7 +442,7 @@ namespace cli {
 
     // Shared implementation for numeric values; D is the derived type (e.g. integer, hex),
     // and FORMAT is one of the number format policies above
-    template<typename D, typename FORMAT = decimal_format>
+    template<typename D, typename FORMAT = integer_format>
     struct integer_base : public value_base<D> {
         explicit integer_base(string name) : value_base<D>(std::move(name)) {}
 
