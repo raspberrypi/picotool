@@ -414,43 +414,31 @@ using cli::integer;
 using cli::hex;
 using cli::value;
 
-// todo can we derive from hex?
-struct family_id : public cli::value_base<family_id> {
-    explicit family_id(string name) : value_base(std::move(name)) {}
+// a family ID is either one of the known family names, or a plain hex value
+struct family_id : public cli::integer_base<family_id, cli::hex_format> {
+    explicit family_id(string name) : integer_base(std::move(name)) {}
 
     template<typename T>
     family_id &set(T &t) {
-        string nm = "<" + name() + ">";
         // note we cannot capture "this"
-        on_action([&t, nm](string value) {
+        on_action([&t](string value) {
             std::transform(value.begin(), value.end(), value.begin(),
                 [](unsigned char c){ return std::tolower(c); });
             std::replace( value.begin(), value.end(), '_', '-');
             auto family_id = family_name_to_id.find(value);
             if (family_id != family_name_to_id.end()) {
                 t = family_id->second;
-            } else if (value.find("0x") == 0) {
-                value = value.substr(2);
-                size_t pos = 0;
-                long lvalue = std::numeric_limits<long>::max();
-                try {
-                    lvalue = std::stoul(value, &pos, 16);
-                    if (pos != value.length()) {
-                        return "Garbage after hex value: " + value.substr(pos);
-                    }
-                } catch (std::invalid_argument &) {
-                    return value + " is not a valid hex value";
-                } catch (std::out_of_range &) {
-                }
-                if (lvalue != (unsigned int) lvalue) {
-                    return value + " is not a valid 32 bit value";
-                }
-                t = (unsigned int) lvalue;
-            } else {
-                return value + " is not a valid family ID"
-                + "\n\nValid family IDs are: " + cli::join(family_names, ", ") + ", or hex strings starting with 0x";
+                return string("");
             }
-            return string("");
+            if (value.find("0x") == 0) {
+                unsigned int tmp = 0;
+                string err = parse_string(value, tmp);
+                if (!err.empty()) return err;
+                t = tmp;
+                return string("");
+            }
+            return value + " is not a valid family ID"
+            + "\n\nValid family IDs are: " + cli::join(family_names, ", ") + ", or hex strings starting with 0x";
         });
         return *this;
     }
@@ -3258,27 +3246,38 @@ protected:
     }
 };
 
-uint32_t guess_flash_size(memory_access &access) {
+#if HAS_LIBUSB
+int guess_flash_size(memory_access &access) {
     assert(access.is_device());
-    // Check that flash is not erased (TODO should check for second stage)
-    auto first_two_pages = access.read_vector<uint8_t>(FLASH_START, 2 * PAGE_SIZE);
-    bool all_match = std::equal(first_two_pages.begin(),
-                                first_two_pages.begin() + PAGE_SIZE,
-                                first_two_pages.begin() + PAGE_SIZE);
-    if (all_match) {
-        return 0;
-    }
+    try {
+        // Check that flash is not erased (TODO should check for second stage)
+        auto first_two_pages = access.read_vector<uint8_t>(FLASH_START, 2 * PAGE_SIZE);
+        bool all_match = std::equal(first_two_pages.begin(),
+                                    first_two_pages.begin() + PAGE_SIZE,
+                                    first_two_pages.begin() + PAGE_SIZE);
+        if (all_match) {
+            return 0;
+        }
 
-    // Read at decreasing power-of-two addresses until we don't see the boot pages again
-    const int min_size = 16 * PAGE_SIZE;
-    const int max_size = 8 * 1024 * 1024;
-    int size;
-    for (size = max_size; size >= min_size; size >>= 1) {
-        auto new_pages = access.read_vector<uint8_t>(FLASH_START + size, 2 * PAGE_SIZE);
-        if (!std::equal(first_two_pages.begin(), first_two_pages.end(), new_pages.begin())) break;
+        // Read at decreasing power-of-two addresses until we don't see the boot pages again
+        const int min_size = 16 * PAGE_SIZE;
+        const int max_size = 8 * 1024 * 1024;
+        int size;
+        for (size = max_size; size >= min_size; size >>= 1) {
+            auto new_pages = access.read_vector<uint8_t>(FLASH_START + size, 2 * PAGE_SIZE);
+            if (!std::equal(first_two_pages.begin(), first_two_pages.end(), new_pages.begin())) break;
+        }
+        return size * 2;
+    } catch (picoboot::command_failure &e) {
+        if (e.get_code() == PICOBOOT_NOT_PERMITTED) {
+            // unable to guess flash size due to permission failure
+            return ERROR_NOT_POSSIBLE;
+        } else {
+            throw;
+        }
     }
-    return size * 2;
 }
+#endif
 
 // returns true if string is a hex string, and fills array with the values
 bool string_to_hex_array(const string& str, uint8_t *array, size_t size, const string& error_msg) {
@@ -4323,22 +4322,18 @@ void info_guts(memory_access &raw_access, void *con, bool no_pt_loaded=false) {
                 select_group(device_info);
             }
 
-            try {
-                int32_t size_guess = guess_flash_size(raw_access);
-                if (size_guess > 0) {
-                    info_pair("flash size", std::to_string(size_guess/1024) + "K");
-                    if (model->chip() == rp2040) {
-                        uint64_t flash_id = 0;
-                        con->flash_id(flash_id);
-                        info_pair("flash id", hex_string(flash_id, 16, true, true));
-                    }
+            int size_guess = guess_flash_size(raw_access);
+            if (size_guess < 0) {
+                info_pair("flash size", "not determined due to access permissions");
+            } else if (size_guess > 0) {
+                info_pair("flash size", std::to_string(size_guess/1024) + "K");
+                if (model->chip() == rp2040) {
+                    uint64_t flash_id = 0;
+                    con->flash_id(flash_id);
+                    info_pair("flash id", hex_string(flash_id, 16, true, true));
                 }
-            } catch (picoboot::command_failure &e) {
-                if (e.get_code() == PICOBOOT_NOT_PERMITTED) {
-                    info_pair("flash size", "not determined due to access permissions");
-                } else {
-                    throw;
-                }
+            } else {
+                info_pair("flash size", "not determined due to erased start of flash");
             }
 
             // not sure how interesting this is given the chip revision which is correlated
@@ -5081,8 +5076,10 @@ bool save_command::execute(device_map &devices) {
             }
         }
     } else {
-        end = FLASH_START + guess_flash_size(raw_access);
-        if (end <= FLASH_START) {
+        int size_guess = guess_flash_size(raw_access);
+        if (size_guess > 0) {
+            end = FLASH_START + size_guess;
+        } else {
             fail(ERROR_NOT_POSSIBLE, "Cannot determine the flash size, so cannot save the entirety of flash, try --range.");
         }
     }
@@ -5257,8 +5254,10 @@ bool erase_command::execute(device_map &devices) {
             fail(ERROR_ARGS, "Erase range is invalid/empty");
         }
     } else {
-        end = FLASH_START + guess_flash_size(raw_access);
-        if (end <= FLASH_START) {
+        int size_guess = guess_flash_size(raw_access);
+        if (size_guess > 0) {
+            end = FLASH_START + size_guess;
+        } else {
             fail(ERROR_NOT_POSSIBLE, "Cannot determine the flash size, so cannot erase the entirety of flash, try --range.");
         }
     }
@@ -5370,10 +5369,10 @@ bool load_guts(picoboot::connection con, iostream_memory_access &file_access) {
         uint32_t flash_data_size = flash_max - flash_min;
         assert(flash_min >= FLASH_START);
         uint32_t flash_start_offset = flash_min - FLASH_START;
-        uint32_t size_guess = guess_flash_size(raw_access);
+        int size_guess = guess_flash_size(raw_access);
         if (size_guess > 0) {
             // Skip check when targeting PSRAM, which is anything above 0x11000000
-            if (flash_start_offset < FLASH_END_RP2040 && (flash_start_offset + flash_data_size) > size_guess) {
+            if (flash_min < FLASH_END_RP2040 && (flash_start_offset + flash_data_size) > size_guess) {
                 if (flash_start_offset) {
                     fail(ERROR_NOT_POSSIBLE, "File size 0x%x starting at 0x%x is too big to fit in flash size 0x%x", flash_data_size, flash_start_offset, size_guess);
                 } else {
