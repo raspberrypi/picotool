@@ -414,43 +414,31 @@ using cli::integer;
 using cli::hex;
 using cli::value;
 
-// todo can we derive from hex?
-struct family_id : public cli::value_base<family_id> {
-    explicit family_id(string name) : value_base(std::move(name)) {}
+// a family ID is either one of the known family names, or a plain hex value
+struct family_id : public cli::integer_base<family_id, cli::hex_format> {
+    explicit family_id(string name) : integer_base(std::move(name)) {}
 
     template<typename T>
     family_id &set(T &t) {
-        string nm = "<" + name() + ">";
         // note we cannot capture "this"
-        on_action([&t, nm](string value) {
+        on_action([&t](string value) {
             std::transform(value.begin(), value.end(), value.begin(),
                 [](unsigned char c){ return std::tolower(c); });
             std::replace( value.begin(), value.end(), '_', '-');
             auto family_id = family_name_to_id.find(value);
             if (family_id != family_name_to_id.end()) {
                 t = family_id->second;
-            } else if (value.find("0x") == 0) {
-                value = value.substr(2);
-                size_t pos = 0;
-                long lvalue = std::numeric_limits<long>::max();
-                try {
-                    lvalue = std::stoul(value, &pos, 16);
-                    if (pos != value.length()) {
-                        return "Garbage after hex value: " + value.substr(pos);
-                    }
-                } catch (std::invalid_argument &) {
-                    return value + " is not a valid hex value";
-                } catch (std::out_of_range &) {
-                }
-                if (lvalue != (unsigned int) lvalue) {
-                    return value + " is not a valid 32 bit value";
-                }
-                t = (unsigned int) lvalue;
-            } else {
-                return value + " is not a valid family ID"
-                + "\n\nValid family IDs are: " + cli::join(family_names, ", ") + ", or hex strings starting with 0x";
+                return string("");
             }
-            return string("");
+            if (value.find("0x") == 0) {
+                unsigned int tmp = 0;
+                string err = parse_string(value, tmp);
+                if (!err.empty()) return err;
+                t = tmp;
+                return string("");
+            }
+            return value + " is not a valid family ID"
+            + "\n\nValid family IDs are: " + cli::join(family_names, ", ") + ", or hex strings starting with 0x";
         });
         return *this;
     }
