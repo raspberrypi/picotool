@@ -34,8 +34,8 @@ SYNOPSIS:
                 <rollback> [<rows>..]]
     picotool encrypt [--quiet] [--verbose] [--embed] [--fast-rosc] [--use-mbedtls]
                 [--otp-key-page <page>] [--hash] [--sign] [--no-clear] [--pin-xip-sram]
-                <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] <aes_key> <iv_salt>
-                [<signing_key>] [<otp>]
+                [--external-sign] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>]
+                <aes_key> <iv_salt> [<signing_key>] [<otp>]
     picotool reseal [--quiet] [--verbose] <infile> [-t <type>] [-o <offset>] <sigfile> <pubkey>
                 [<otp>]
     picotool partition info|create
@@ -798,8 +798,8 @@ ENCRYPT:
 SYNOPSIS:
     picotool encrypt [--quiet] [--verbose] [--embed] [--fast-rosc] [--use-mbedtls]
                 [--otp-key-page <page>] [--hash] [--sign] [--no-clear] [--pin-xip-sram]
-                <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] <aes_key> <iv_salt>
-                [<signing_key>] [<otp>]
+                [--external-sign] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>]
+                <aes_key> <iv_salt> [<signing_key>] [<otp>]
 
 OPTIONS:
         --quiet
@@ -833,6 +833,8 @@ OPTIONS:
             Don't clear all of main SRAM on load
         --pin-xip-sram
             Pin XIP SRAM on load
+        --external-sign
+            For use with external signing and `picotool reseal`
     File to load from
         <infile>
             The file name

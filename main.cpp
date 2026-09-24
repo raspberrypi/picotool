@@ -1171,7 +1171,8 @@ struct encrypt_command : public cmd {
                 option("--hash").set(settings.seal.hash) % "Hash the encrypted file" +
                 option("--sign").set(settings.seal.sign) % "Sign the encrypted file" +
                 option("--no-clear").set(settings.encrypt.no_clear_sram) % "Don't clear all of main SRAM on load" +
-                option("--pin-xip-sram").set(settings.seal.pin_xip_sram) % "Pin XIP SRAM on load"
+                option("--pin-xip-sram").set(settings.seal.pin_xip_sram) % "Pin XIP SRAM on load" +
+                option("--external-sign").set(settings.seal.external_sign) % "For use with external signing and `picotool reseal`"
             ).min(0).doc_non_optional(true) % "Signing Configuration" +
             named_file_selection_x("infile", 0) % "File to load from" +
             (
@@ -5696,6 +5697,11 @@ bool encrypt_command::execute(device_map &devices) {
     // Set settings.seal.clear_sram to opposite of settings.encrypt.no_clear_sram
     settings.seal.clear_sram = !settings.encrypt.no_clear_sram;
 
+    if (settings.seal.external_sign) {
+        settings.seal.sign = true;
+        settings.seal.hash = true;
+    }
+
     aes_key_t aes_key;
     aes_key_share_t aes_key_share;
     std::vector<uint8_t> iv_salt;
@@ -5732,11 +5738,11 @@ bool encrypt_command::execute(device_map &devices) {
         fail(ERROR_ARGS, "Can only read IV OTP salt from BIN file");
     }
 
-    if (settings.seal.sign && settings.filenames[4].empty()) {
+    if (settings.seal.sign && settings.filenames[4].empty() && !settings.seal.external_sign) {
         fail(ERROR_ARGS, "missing key file for signing after encryption");
     }
 
-    if (!settings.filenames[4].empty() && get_file_type_idx(4) != filetype::pem) {
+    if (!settings.filenames[4].empty() && get_file_type_idx(4) != filetype::pem && !settings.seal.external_sign) {
         fail(ERROR_ARGS, "Can only read pem keys");
     }
 
@@ -5841,10 +5847,10 @@ bool encrypt_command::execute(device_map &devices) {
                          ^ aes_key_share.words[i*4 + 3];
     }
 
-    private_t private_key = {};
-    public_t public_key = {};
+    private_t private_key = {0};
+    public_t public_key = {0};
 
-    if (settings.seal.sign) read_keys(settings.filenames[4], &public_key, &private_key);
+    if (settings.seal.sign && !settings.seal.external_sign) read_keys(settings.filenames[4], &public_key, &private_key);
 
     // Read IV Salt
     if (ivFromFile) {
@@ -6148,6 +6154,28 @@ bool encrypt_command::execute(device_map &devices) {
 
         *json_out << std::setw(4) << otp_json << std::endl;
         json_out->close();
+    }
+
+    if (settings.seal.external_sign) {
+        auto access = get_file_memory_access(1);
+        set_model_from_metadata(access);
+        vector<uint8_t> bin;
+        std::unique_ptr<block> last_block = find_last_block(access, bin);
+        std::shared_ptr<hash_value_item> hash_value = last_block->get_item<hash_value_item>();
+        if(hash_value != nullptr) {
+            std::stringstream val;
+            for(uint8_t i : hash_value->hash_bytes) {
+                val << hex_string(i, 2, false, true);
+            }
+            if (settings.quiet) {
+                // Just print hash value
+                printf("%s\n", val.str().c_str());
+            } else {
+                fos.first_column(0);
+                fos.hanging_indent(0);
+                fos << "\nHash value for external signing: " << val.str() << "\n";
+            }
+        }
     }
 
     return false;
