@@ -1182,7 +1182,7 @@ struct encrypt_command : public cmd {
             named_file_selection_x("outfile", 1) % "File to save to" +
             named_untyped_file_selection_x("aes_key", 2) % "AES Key Share or AES Key" +
             named_untyped_file_selection_x("iv_salt", 3) % "IV Salt" +
-            optional_untyped_file_selection_x("signing_key", 4) % "Signing Key file (.pem)" +
+            optional_untyped_file_selection_x("signing_key", 4) % "Signing Key file (.pem), or output file to write hash for external signing (.bin)" +
             optional_untyped_file_selection_x("otp", 5) % "JSON file to save OTP to (will edit existing file if it exists)"
         );
     }
@@ -1215,7 +1215,7 @@ struct seal_command : public cmd {
                      hex("offset").set(settings.offset) % "Load offset (memory address; default 0x10000000)"
             ).force_expand_help(true) % "BIN file options" +
             named_file_selection_x("outfile", 1) % "File to save to" +
-            optional_untyped_file_selection_x("key", 2) % "Key file (.pem)" +
+            optional_untyped_file_selection_x("key", 2) % "Key file (.pem), or output file to write hash for external signing (.bin)" +
             optional_untyped_file_selection_x("otp", 3) % "JSON file to save OTP to (will edit existing file if it exists)" +
             (
                 option("--major") &
@@ -5742,8 +5742,14 @@ bool encrypt_command::execute(device_map &devices) {
         fail(ERROR_ARGS, "missing key file for signing after encryption");
     }
 
-    if (!settings.filenames[4].empty() && get_file_type_idx(4) != filetype::pem && !settings.seal.external_sign) {
-        fail(ERROR_ARGS, "Can only read pem keys");
+    if (settings.seal.external_sign) {
+        if (!settings.filenames[4].empty() && get_file_type_idx(4) != filetype::bin) {
+            fail(ERROR_ARGS, "Can only output hash to bin files");
+        }
+    } else {
+        if (!settings.filenames[4].empty() && get_file_type_idx(4) != filetype::pem) {
+            fail(ERROR_ARGS, "Can only read pem keys");
+        }
     }
 
     if (keyFromFile) {
@@ -6163,6 +6169,11 @@ bool encrypt_command::execute(device_map &devices) {
         std::unique_ptr<block> last_block = find_last_block(access, bin);
         std::shared_ptr<hash_value_item> hash_value = last_block->get_item<hash_value_item>();
         if(hash_value != nullptr) {
+            if (!settings.filenames[4].empty()) {
+                auto hash_out = get_file_idx(ios::out|ios::binary, 4);
+                hash_out->write((const char *)hash_value->hash_bytes.data(), hash_value->hash_bytes.size());
+                hash_out->close();
+            }
             std::stringstream val;
             for(uint8_t i : hash_value->hash_bytes) {
                 val << hex_string(i, 2, false, true);
@@ -6317,8 +6328,14 @@ bool seal_command::execute(device_map &devices) {
         fail(ERROR_ARGS, "missing key file for signing");
     }
 
-    if (!settings.filenames[2].empty() && get_file_type_idx(2) != filetype::pem) {
-        fail(ERROR_ARGS, "Can only read pem keys");
+    if (settings.seal.external_sign) {
+        if (!settings.filenames[2].empty() && get_file_type_idx(2) != filetype::bin) {
+            fail(ERROR_ARGS, "Can only output hash to bin files");
+        }
+    } else {
+        if (!settings.filenames[2].empty() && get_file_type_idx(2) != filetype::pem) {
+            fail(ERROR_ARGS, "Can only read pem keys");
+        }
     }
 
     if (settings.seal.rollback_version) {
@@ -6431,6 +6448,11 @@ bool seal_command::execute(device_map &devices) {
         std::unique_ptr<block> last_block = find_last_block(access, bin);
         std::shared_ptr<hash_value_item> hash_value = last_block->get_item<hash_value_item>();
         if(hash_value != nullptr) {
+            if (!settings.filenames[2].empty()) {
+                auto hash_out = get_file_idx(ios::out|ios::binary, 2);
+                hash_out->write((const char *)hash_value->hash_bytes.data(), hash_value->hash_bytes.size());
+                hash_out->close();
+            }
             std::stringstream val;
             for(uint8_t i : hash_value->hash_bytes) {
                 val << hex_string(i, 2, false, true);

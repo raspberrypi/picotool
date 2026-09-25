@@ -729,7 +729,7 @@ OPTIONS:
         --verbose
             Print verbose output
         <key>
-            Key file (.pem)
+            Key file (.pem), or output file to write hash for external signing (.bin)
         <otp>
             JSON file to save OTP to (will edit existing file if it exists)
         --major <major>
@@ -821,7 +821,7 @@ OPTIONS:
         <iv_salt>
             IV Salt
         <signing_key>
-            Signing Key file (.pem)
+            Signing Key file (.pem), or output file to write hash for external signing (.bin)
         <otp>
             JSON file to save OTP to (will edit existing file if it exists)
     Signing Configuration
@@ -856,7 +856,7 @@ OPTIONS:
 
 `reseal` allows you to modify the signature of a binary that has already been sealed with `seal`.
 
-This can be used for signing binaries without passing `picotool` the private key, for example with hardware security modules, or password-protected private keys. As with `seal`, your signing key must be for the _secp256k1_ curve, the public key must be in the PEM format, and the signature must be in the DER format.
+This can be used for signing binaries without passing the private key to `picotool`, for example when using hardware security modules, or password-protected private keys. As with `seal`, your signing key must be for the _secp256k1_ curve, the public key must be in the PEM format, and the signature must be in the DER format.
 
 For an example, to generate a password-protected private key and corresponding public key, you could use the following commands:
 ```text
@@ -873,12 +873,39 @@ Enter pass phrase for private.pem:
 writing EC key
 ```
 
-Then seal the binary and sign the hash (and verify the signature):
+Then seal the binary and generate the hash:
 ```text
-$ picotool seal --external-sign hello_usb.uf2 hello_usb.signed.uf2 --quiet > hash.txt
-$ xxd -r -p hash.txt > hash.bin
+$ picotool seal --external-sign hello_usb.uf2 hello_usb.signed.uf2 hash.bin
+Output File hello_usb.signed.uf2:
+
+Program Information
+ name:          hello_usb
+ web site:      https://github.com/raspberrypi/pico-examples/tree/HEAD/hello_world/usb
+ features:      USB stdin / stdout
+ binary start:  0x10000000
+ binary end:    0x10005038
+ target chip:   RP2350
+ image type:    ARM Secure
+ hash:          verified
+ signature:     incorrect
+
+Hash value for external signing: A67C4F275FBD1078072D8D1913F8D6B664444F867F4428A7AE51A586BCB33324
+```
+
+Then use OpenSSL to sign the hash, and verify the signature:
+```text
 $ openssl pkeyutl -in hash.bin -inkey private.pem -out signature.der -pkeyopt digest:sha256
 Enter pass phrase for private.pem:
+$ openssl pkeyutl -in hash.bin -inkey public.pem -pubin -verify -sigfile signature.der -pkeyopt digest:sha256
+Signature Verified Successfully
+```
+
+Alternatively using `pkcs11-tool` with a hardware security module:
+```text
+$ pkcs11-tool --sign --id 1 --mechanism ECDSA --input-file hash.bin --output-file signature.der --signature-format openssl
+Please enter User PIN:
+$ pkcs11-tool --read-object --type pubkey --id 1 --output-file public.der
+$ openssl pkey -pubin -inform DER -in public.der -out public.pem
 $ openssl pkeyutl -in hash.bin -inkey public.pem -pubin -verify -sigfile signature.der -pkeyopt digest:sha256
 Signature Verified Successfully
 ```
