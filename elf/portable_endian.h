@@ -61,7 +61,7 @@
 #endif
 
 #elif defined(__WINDOWS__)
-
+#	define NOMINMAX
 #	include <winsock2.h>
 #	ifdef __GNUC__
 #		include <sys/param.h>
