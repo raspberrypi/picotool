@@ -5686,6 +5686,78 @@ vector<uint8_t> sign_guts_bin(iostream_memory_access in, private_t private_key, 
     return sig_data;
 }
 
+void output_otp_secure_boot(uint8_t idx, public_t public_key) {
+    message_digest_t pub_sha256;
+    sha256_buffer(public_key.bytes, sizeof(public_key.bytes), &pub_sha256);
+    DEBUG_LOG("PUBLIC KEY SHA256 ");
+    for(uint8_t i : pub_sha256.bytes) {
+        DEBUG_LOG("%02x", i);
+    }
+    DEBUG_LOG("\n");
+
+    if (get_file_type_idx(idx) != filetype::json) {
+        fail(ERROR_ARGS, "Can only output OTP json");
+    }
+    auto check_json_file = std::ifstream(settings.filenames[idx]);
+    json otp_json;
+    if (check_json_file.good()) {
+        otp_json = json::parse(check_json_file);
+        DEBUG_LOG("Appending to existing otp json\n");
+        check_json_file.close();
+    }
+
+    // Check which bootkeys are already populated
+    int key_idx;
+    for (key_idx = 0; key_idx < 4; key_idx++) {
+        std::stringstream ss;
+        ss << "bootkey" << key_idx;
+        bool key_used = otp_json.contains(ss.str());
+        if (key_used) {
+            bool key_match = true;
+            for (int i = 0; i < 32; ++i) {
+                if (otp_json[ss.str()][i] != pub_sha256.bytes[i]) {
+                    key_match = false;
+                    break;
+                }
+            }
+            if (key_match) {
+                // Key already in file, so use same key
+                printf("Key already in file at index %d\n", key_idx);
+                break;
+            }
+        } else {
+            // Key not used yet
+            printf("Found unused key index %d\n", key_idx);
+            break;
+        }
+        
+    }
+
+    std::stringstream bootkey;
+    bootkey << "bootkey" << key_idx;
+
+    // Add otp bootkey rows
+    for (int i = 0; i < 32; ++i) {
+        otp_json[bootkey.str()][i] = pub_sha256.bytes[i];
+    }
+
+    // Add otp fields to enable secure boot
+    otp_json["crit1"]["secure_boot_enable"] = 1;
+
+    // Add key to key_valid
+    uint8_t key_valid = 1 << key_idx;
+    if (otp_json.contains("boot_flags1")) {
+        if (otp_json["boot_flags1"].contains("key_valid")) {
+            key_valid |= (uint8_t)otp_json["boot_flags1"]["key_valid"];
+        }
+    }
+    otp_json["boot_flags1"]["key_valid"] = key_valid;
+
+    auto json_out = get_file_idx(ios::out, idx);
+    *json_out << std::setw(4) << otp_json << std::endl;
+    json_out->close();
+}
+
 bool encrypt_command::execute(device_map &devices) {
     bool isElf = false;
     bool isBin = false;
@@ -6038,6 +6110,7 @@ bool encrypt_command::execute(device_map &devices) {
         if (get_file_type_idx(5) != filetype::json) {
             fail(ERROR_ARGS, "Can only output OTP json");
         }
+        output_otp_secure_boot(5, public_key);
         auto check_json_file = std::ifstream(settings.filenames[5]);
         json otp_json;
         if (check_json_file.good()) {
@@ -6190,40 +6263,6 @@ bool encrypt_command::execute(device_map &devices) {
     }
 
     return false;
-}
-
-void output_otp_secure_boot(uint8_t idx, public_t public_key) {
-    message_digest_t pub_sha256;
-    sha256_buffer(public_key.bytes, sizeof(public_key.bytes), &pub_sha256);
-    DEBUG_LOG("PUBLIC KEY SHA256 ");
-    for(uint8_t i : pub_sha256.bytes) {
-        DEBUG_LOG("%02x", i);
-    }
-    DEBUG_LOG("\n");
-
-    if (get_file_type_idx(idx) != filetype::json) {
-        fail(ERROR_ARGS, "Can only output OTP json");
-    }
-    auto check_json_file = std::ifstream(settings.filenames[idx]);
-    json otp_json;
-    if (check_json_file.good()) {
-        otp_json = json::parse(check_json_file);
-        DEBUG_LOG("Appending to existing otp json\n");
-        check_json_file.close();
-    }
-    auto json_out = get_file_idx(ios::out, idx);
-
-    // Add otp bootkey rows
-    for (int i = 0; i < 32; ++i) {
-        otp_json["bootkey0"][i] = pub_sha256.bytes[i];
-    }
-
-    // Add otp fields to enable secure boot
-    otp_json["crit1"]["secure_boot_enable"] = 1;
-    otp_json["boot_flags1"]["key_valid"] = 1;
-
-    *json_out << std::setw(4) << otp_json << std::endl;
-    json_out->close();
 }
 
 bool reseal_command::execute(device_map &devices) {
