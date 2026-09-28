@@ -11,9 +11,6 @@
 #include "picoboot_connection_cxx.h"
 
 #ifdef _WIN32
-#undef min
-#undef max
-
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 

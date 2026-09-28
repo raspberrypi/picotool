@@ -23,11 +23,7 @@
 
 #include "portable_endian.h"
 
-// tsk namespace is polluted on windows
 #ifdef _WIN32
-#undef min
-#undef max
-
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 

@@ -11,6 +11,9 @@
 
 #include <assert.h>
 #if HAS_LIBUSB
+#ifdef _WIN32
+#define NOMINMAX
+#endif
 #include <libusb.h>
 #endif
 #include "boot/picoboot.h"
