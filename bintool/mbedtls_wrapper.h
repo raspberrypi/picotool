@@ -9,6 +9,7 @@ extern "C" {
 #include <stdint.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <stdbool.h>
 
 #include <mbedtls/sha256.h>
 #include <mbedtls/ecdsa.h>
@@ -77,6 +78,8 @@ uint32_t mb_verify_signature_secp256k1(
         signature_t signature[1],
         const public_t public_key[1],
         const message_digest_t digest[1]);
+
+bool der_to_raw(signature_t *sig);
 
 #define sha256_buffer mb_sha256_buffer
 #define aes256_buffer mb_aes256_buffer

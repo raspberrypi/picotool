@@ -36,6 +36,8 @@ static void dump_pubkey(const char *title, mbedtls_ecdsa_context *key)
 #define dump_pubkey(...) ((void)0)
 #endif
 
+#define assert_or_return(assertion, retval) assert(assertion); if (!(assertion)) return retval;
+
 void mb_sha256_buffer(const uint8_t *data, size_t len, message_digest_t *digest_out) {
     mbedtls_sha256(data, len, digest_out->bytes, 0);
 }
@@ -98,92 +100,71 @@ void mb_aes256_buffer(const uint8_t *data, size_t len, uint8_t *data_out, const 
 #endif
 }
 
+// Write a 32-byte big-endian unsigned value as a minimal DER INTEGER, returning the number of bytes written
+static size_t write_der_integer(uint8_t *out, const uint8_t *in) {
+    // Strip leading zeros, but always keep at least one byte
+    size_t skip = 0;
+    while (skip < 31 && in[skip] == 0) {
+        skip++;
+    }
+    // Pad with a zero byte if the top bit is set, so it isn't read as negative
+    size_t pad = (in[skip] & 0x80) ? 1 : 0;
+    size_t len = 32 - skip + pad;
+
+    out[0] = 0x02;
+    out[1] = (uint8_t)len;
+    out[2] = 0;
+    memcpy(out + 2 + pad, in + skip, 32 - skip);
+    return 2 + len;
+}
+
+// Read a DER INTEGER of up to 32 bytes (plus optional zero padding byte) into a 32-byte big-endian value
+static bool read_der_integer(const uint8_t *in, size_t avail, uint8_t *out, size_t *consumed) {
+    if (avail < 2 || in[0] != 0x02) return false;
+    size_t len = in[1];
+    if (len == 0 || len > 33 || 2 + len > avail) return false;
+    *consumed = 2 + len;
+
+    const uint8_t *p = in + 2;
+    if (len == 33) {
+        // Only valid if the extra byte is zero padding
+        if (p[0] != 0) return false;
+        p++;
+        len--;
+    }
+    memset(out, 0, 32);
+    memcpy(out + (32 - len), p, len);
+    return true;
+}
+
 void raw_to_der(signature_t *sig) {
-    // todo make this der - currently ber
-    unsigned char r[33];
-    r[0] = 0;
-    memcpy(r+1, sig->bytes, 32);
-    unsigned char s[33];
-    s[0] = 0;
-    memcpy(s+1, sig->bytes + 32, 32);
+    size_t len = write_der_integer(sig->der + 2, sig->bytes);
+    len += write_der_integer(sig->der + 2 + len, sig->bytes + 32);
 
-    int8_t r_len_dec = 0;
-    if (r[1] & 0x80) {
-        // Needs padding
-        r_len_dec = -1;
-    } else {
-        for (int i=1; i < 32; i++) {
-            if (r[i] != 0) {
-                break;
-            }
-            r_len_dec++;
-        }
-    }
-
-    int8_t s_len_dec = 0;
-    if (s[1] & 0x80) {
-        // Needs padding
-        s_len_dec = -1;
-    } else {
-        for (int i=1; i < 32; i++) {
-            if (s[i] != 0) {
-                break;
-            }
-            s_len_dec++;
-        }
-    }
-
-    // Write it out
+    // Max length is 2 * 35 = 70, so short-form length is always sufficient
     sig->der[0] = 0x30;
-    sig->der[1] = 68 - r_len_dec - s_len_dec;
-    sig->der[2] = 0x02;
-    sig->der[3] = 32 - r_len_dec;
-    uint8_t b2 = sig->der[3];
-    memcpy(sig->der + 4, r + 1 + r_len_dec, b2);
-    sig->der[4 + b2] = 0x02;
-    sig->der[5 + b2] = 32 - s_len_dec;
-    uint8_t b3 = sig->der[5 + b2];
-    memcpy(sig->der + 6 + b2, s + 1 + s_len_dec, b3);
-
-
-    sig->der_len = 6 + b2 + b3;
+    sig->der[1] = (uint8_t)len;
+    sig->der_len = 2 + len;
 }
 
 
-void der_to_raw(signature_t *sig) {
-    assert(sig->der[0] == 0x30);
-    assert(sig->der[2] == 0x02);
-    uint8_t b2 = sig->der[3];
-    assert(sig->der[4 + b2] == 0x02);
-    uint8_t b3 = sig->der[5 + b2];
+bool der_to_raw(signature_t *sig) {
+    if (sig->der_len < 2 || sig->der_len > sizeof(sig->der)) return false;
+    // SEQUENCE, with short-form length covering the rest of the buffer
+    if (sig->der[0] != 0x30 || sig->der[1] & 0x80 || sig->der[1] != sig->der_len - 2) return false;
 
-    assert(sig->der_len == 6u + b2 + b3);
+    uint8_t r[32];
+    uint8_t s[32];
+    size_t r_len, s_len;
+    if (!read_der_integer(sig->der + 2, sig->der_len - 2, r, &r_len)) return false;
+    if (!read_der_integer(sig->der + 2 + r_len, sig->der_len - 2 - r_len, s, &s_len)) return false;
+    if (2 + r_len + s_len != sig->der_len) return false;
 
-    unsigned char r[32];
-    if (b2 == 33) {
-        memcpy(r, sig->der + 4 + 1, 32);
-    } else if (b2 == 32) {
-        memcpy(r, sig->der + 4, 32);
-    } else {
-        memset(r, 0, sizeof(r));
-        memcpy(r + (32 - b2), sig->der + 4, (32 - b2));
-    }
-
-    unsigned char s[32];
-    if (b3 == 33) {
-        memcpy(s, sig->der + 6 + b2 + 1, 32);
-    } else if (b3 == 32) {
-        memcpy(s, sig->der + 6 + b2, 32);
-    } else {
-        memset(s, 0, sizeof(r));
-        memcpy(s + (32 - b3), sig->der + 6 + b2, (32 - b3));
-    }
-
-    memset(sig->bytes, 0, sizeof(sig->bytes));
     memcpy(sig->bytes, r, sizeof(r));
     memcpy(sig->bytes + 32, s, sizeof(s));
-}
 
+    return true;
+}
 
 void mb_sign_sha256(const uint8_t *entropy, size_t entropy_size, const message_digest_t *m, const public_t *p, const private_t *d, signature_t *out) {
     int ret = 1;
