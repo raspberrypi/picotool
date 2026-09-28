@@ -73,8 +73,8 @@ static std::string chip_name(chip_t chip) {
 // looking at the bootrom), however "stock" versions can be created from family IDs for example
 class model_info {
 public:
-    model_info(chip_t chip, std::string name, uint32_t rom_end, std::set<picoboot_cmd_id> picoboot_cmds = {}) : _chip(chip), _name(std::move(name)),
-        _rom_end(rom_end), _picoboot_cmds(std::move(picoboot_cmds)) {}
+    model_info(chip_t chip, std::string name, uint32_t rom_end, std::set<picoboot_cmd_id> picoboot_cmds = {}, std::set<uint32_t> supported_family_ids = {}) : _chip(chip), _name(std::move(name)),
+        _rom_end(rom_end), _picoboot_cmds(std::move(picoboot_cmds)), _supported_family_ids(std::move(supported_family_ids)) {}
     chip_t chip() const { return _chip; }
     chip_revision_t chip_revision() const { return _chip_revision; }
     void set_chip_revision(chip_revision_t revision) { _chip_revision = revision; }
@@ -87,6 +87,10 @@ public:
             return rom;
         }
         return invalid;
+    }
+
+    virtual bool supports_family_id(uint32_t family_id) const {
+        return _supported_family_ids.find(family_id) != _supported_family_ids.end();
     }
 
     virtual bool supports_picoboot_cmd(picoboot_cmd_id cmd) const {
@@ -132,6 +136,7 @@ private:
     chip_revision_t _chip_revision;
     uint32_t _rom_end;
     std::set<picoboot_cmd_id> _picoboot_cmds;
+    std::set<uint32_t> _supported_family_ids;
     chip_t _chip;
     uint32_t _family_id;
 };
@@ -146,7 +151,7 @@ public:
 
 class model_rp : public model_info {
 protected:
-    model_rp(chip_t chip, std::string name, uint32_t rom_end, std::set<picoboot_cmd_id> picoboot_cmds = {}) : model_info(chip, std::move(name), rom_end, std::move(picoboot_cmds)) {}
+    model_rp(chip_t chip, std::string name, uint32_t rom_end, std::set<picoboot_cmd_id> picoboot_cmds = {}, std::set<uint32_t> supported_family_ids = {}) : model_info(chip, std::move(name), rom_end, std::move(picoboot_cmds), std::move(supported_family_ids)) {}
 
 public:
     enum memory_type get_memory_type(uint32_t addr) override {
@@ -175,7 +180,7 @@ public:
 class model_rp_generic : public model_rp {
 public:
     // allow large memory regions for generic model
-    model_rp_generic() : model_rp(unknown, chip_name(unknown), 0x100, {}) {}
+    model_rp_generic() : model_rp(unknown, chip_name(unknown), 0x100) {}
 
     uint32_t xip_sram_start() override {
         return std::min({XIP_SRAM_START_RP2040, XIP_SRAM_START_RP2350});
@@ -210,6 +215,8 @@ public:
                 PC_ENTER_CMD_XIP,
                 PC_EXEC,
                 PC_VECTORIZE_FLASH,
+            }, {
+                RP2040_FAMILY_ID,
             }) {
                 set_family_id(RP2040_FAMILY_ID);
             }
@@ -276,6 +283,12 @@ public:
         PC_GET_INFO,
         PC_OTP_READ,
         PC_OTP_WRITE,
+    }, {
+        ABSOLUTE_FAMILY_ID,
+        DATA_FAMILY_ID,
+        RP2350_ARM_S_FAMILY_ID,
+        RP2350_RISCV_FAMILY_ID,
+        RP2350_ARM_NS_FAMILY_ID,
     }) {}
 
     bool supports_partition_table() override { return true; }

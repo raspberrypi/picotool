@@ -315,7 +315,7 @@ SYNOPSIS:
 OPTIONS:
     Load options
         --ignore-partitions
-            When writing flash data, ignore the partition table and write to absolute space
+            Ignore the partition table, and ignore family ID compatibility
         --family <family_id>
             Specify the family ID of the file to load
         -p, --partition <partition>
