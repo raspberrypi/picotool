@@ -1182,7 +1182,7 @@ struct encrypt_command : public cmd {
             named_file_selection_x("outfile", 1) % "File to save to" +
             named_untyped_file_selection_x("aes_key", 2) % "AES Key Share or AES Key" +
             named_untyped_file_selection_x("iv_salt", 3) % "IV Salt" +
-            optional_untyped_file_selection_x("signing_key", 4) % "Signing Key file (.pem), or output file to write hash for external signing (.bin)" +
+            optional_untyped_file_selection_x("signing_key_or_hash", 4) % "Signing Key file (.pem), or output file to write hash for external signing (.bin)" +
             optional_untyped_file_selection_x("otp", 5) % "JSON file to save OTP to (will edit existing file if it exists)"
         );
     }
@@ -1215,7 +1215,7 @@ struct seal_command : public cmd {
                      hex("offset").set(settings.offset) % "Load offset (memory address; default 0x10000000)"
             ).force_expand_help(true) % "BIN file options" +
             named_file_selection_x("outfile", 1) % "File to save to" +
-            optional_untyped_file_selection_x("key", 2) % "Key file (.pem), or output file to write hash for external signing (.bin)" +
+            optional_untyped_file_selection_x("key_or_hash", 2) % "Key file (.pem), or output file to write hash for external signing (.bin)" +
             optional_untyped_file_selection_x("otp", 3) % "JSON file to save OTP to (will edit existing file if it exists)" +
             (
                 option("--major") &
@@ -1253,7 +1253,7 @@ struct reseal_command : public cmd {
                      hex("offset").set(settings.offset) % "Load offset (memory address; default 0x10000000)"
             ).force_expand_help(true) % "BIN file options" +
             named_untyped_file_selection_x("sigfile", 1) % "Signature file (.der)" +
-            named_untyped_file_selection_x("pubkey", 2) % "Public key file (.pem)" +
+            named_typed_file_selection_x("pubkey", 2, "pem | der") % "Public key file (.pem/.der)" +
             optional_untyped_file_selection_x("otp", 3) % "JSON file to save OTP to (will edit existing file if it exists)"
         );
     }
@@ -6271,8 +6271,8 @@ bool reseal_command::execute(device_map &devices) {
         fail(ERROR_ARGS, "Can only read der signatures");
     }
 
-    if (get_file_type_idx(2) != filetype::pem) {
-        fail(ERROR_ARGS, "Can only read pem keys");
+    if (get_file_type_idx(2) != filetype::pem && get_file_type_idx(2) != filetype::der) {
+        fail(ERROR_ARGS, "Can only read PEM or DER keys");
     }
 
     public_t public_key = {0};
@@ -6492,14 +6492,11 @@ bool seal_command::execute(device_map &devices) {
                 hash_out->write((const char *)hash_value->hash_bytes.data(), hash_value->hash_bytes.size());
                 hash_out->close();
             }
-            std::stringstream val;
-            for(uint8_t i : hash_value->hash_bytes) {
-                val << hex_string(i, 2, false, true);
-            }
-            if (settings.quiet) {
-                // Just print hash value
-                printf("%s\n", val.str().c_str());
-            } else {
+            if (!settings.quiet) {
+                std::stringstream val;
+                for(uint8_t i : hash_value->hash_bytes) {
+                    val << hex_string(i, 2, false, true);
+                }
                 fos.first_column(0);
                 fos.hanging_indent(0);
                 fos << "\nHash value for external signing: " << val.str() << "\n";

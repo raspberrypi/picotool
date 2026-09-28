@@ -74,34 +74,6 @@ int read_keys(const std::string &filename, public_t *public_key, private_t *priv
 }
 #endif
 
-#define OTP_KEY_YAML_HEADER \
-"include:\n" \
-"  - otp/tc_images/base_chipinfo.yml\n" \
-"data:\n" \
-"  - crit1_secure_boot_enable: [crit, 1]\n" \
-"  - crit0_riscv_disable: [crit, 1]\n" \
-"  - crit0_arm_disable: [crit, 0]\n" \
-"  - BOOT_FLAGS0_SECURE_PARTITION_TABLE: [rbit3, 0]\n" \
-"  - BOOT_FLAGS0_DISABLE_AUTO_SWITCH_ARCH: [rbit3, 1]\n" \
-"  # - boot_temp_chicken_bit_opt_in_faster_sigcheck_rosc_div: [rbit3, 1]\n" \
-"  - boot_flags1_key_valid: [rbit3, 0b0001]\n" \
-
-
-#if HAS_MBEDTLS
-void write_otp_key_yaml(const std::string &filename, message_digest_t pub_sha256) {
-    std::ofstream out(filename, std::ios::out | std::ios::trunc);
-    out.exceptions(std::fstream::failbit | std::fstream::badbit);
-    out << std::string(OTP_KEY_YAML_HEADER);
-
-    // Print public key hash again in the format it is expected to appear in OTP
-    for (int i = 0; i < 16; ++i) {
-        char row[128];
-        snprintf(row, sizeof(row), "  - bootkey0_%-2d: [ecc, 0x%02x%02x]\n", i, pub_sha256.bytes[2 * i + 1], pub_sha256.bytes[2 * i]);
-        out << std::string(row);        
-    }
-}
-#endif
-
 
 std::unique_ptr<block> find_first_block(elf_file *elf) {
     std::unique_ptr<block> first_block;

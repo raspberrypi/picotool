@@ -30,14 +30,14 @@ SYNOPSIS:
     picotool reboot [-a] [-u] [-g <partition>] [-c <cpu>] [device-selection]
     picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] [--pin-xip-sram]
                 [--no-squash] [--external-sign] <infile> [-t <type>] [-o <offset>] <outfile>
-                [-t <type>] [<key>] [<otp>] [--major <major>] [--minor <minor>] [--rollback
-                <rollback> [<rows>..]]
+                [-t <type>] [<key_or_hash>] [<otp>] [--major <major>] [--minor <minor>]
+                [--rollback <rollback> [<rows>..]]
     picotool encrypt [--quiet] [--verbose] [--embed] [--fast-rosc] [--use-mbedtls]
                 [--otp-key-page <page>] [--hash] [--sign] [--no-clear] [--pin-xip-sram]
                 [--external-sign] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>]
-                <aes_key> <iv_salt> [<signing_key>] [<otp>]
+                <aes_key> <iv_salt> [<signing_key_or_hash>] [<otp>]
     picotool reseal [--quiet] [--verbose] <infile> [-t <type>] [-o <offset>] <sigfile> <pubkey>
-                [<otp>]
+                [-t <type>] [<otp>]
     picotool partition info|create
     picotool uf2 convert|combine|info
     picotool otp get|set|load|white-label|permissions|dump|list
@@ -720,15 +720,15 @@ SEAL:
 SYNOPSIS:
     picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] [--pin-xip-sram]
                 [--no-squash] [--external-sign] <infile> [-t <type>] [-o <offset>] <outfile>
-                [-t <type>] [<key>] [<otp>] [--major <major>] [--minor <minor>] [--rollback
-                <rollback> [<rows>..]]
+                [-t <type>] [<key_or_hash>] [<otp>] [--major <major>] [--minor <minor>]
+                [--rollback <rollback> [<rows>..]]
 
 OPTIONS:
         --quiet
             Don't print any output
         --verbose
             Print verbose output
-        <key>
+        <key_or_hash>
             Key file (.pem), or output file to write hash for external signing (.bin)
         <otp>
             JSON file to save OTP to (will edit existing file if it exists)
@@ -799,7 +799,7 @@ SYNOPSIS:
     picotool encrypt [--quiet] [--verbose] [--embed] [--fast-rosc] [--use-mbedtls]
                 [--otp-key-page <page>] [--hash] [--sign] [--no-clear] [--pin-xip-sram]
                 [--external-sign] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>]
-                <aes_key> <iv_salt> [<signing_key>] [<otp>]
+                <aes_key> <iv_salt> [<signing_key_or_hash>] [<otp>]
 
 OPTIONS:
         --quiet
@@ -820,7 +820,7 @@ OPTIONS:
             AES Key Share or AES Key
         <iv_salt>
             IV Salt
-        <signing_key>
+        <signing_key_or_hash>
             Signing Key file (.pem), or output file to write hash for external signing (.bin)
         <otp>
             JSON file to save OTP to (will edit existing file if it exists)
@@ -900,17 +900,18 @@ $ openssl pkeyutl -in hash.bin -inkey public.pem -pubin -verify -sigfile signatu
 Signature Verified Successfully
 ```
 
-Alternatively using `pkcs11-tool` with a hardware security module:
+Alternatively using `pkcs11-tool` with a hardware security module to sign the hash, verify the signature, and export the public key:
 ```text
 $ pkcs11-tool --sign --id 1 --mechanism ECDSA --input-file hash.bin --output-file signature.der --signature-format openssl
 Please enter User PIN:
+Using signature algorithm ECDSA
+$ pkcs11-tool --verify --id 1 --mechanism ECDSA --input-file hash.bin --signature-file signature.der --signature-format openssl
+Using signature algorithm ECDSA
+Signature is valid
 $ pkcs11-tool --read-object --type pubkey --id 1 --output-file public.der
-$ openssl pkey -pubin -inform DER -in public.der -out public.pem
-$ openssl pkeyutl -in hash.bin -inkey public.pem -pubin -verify -sigfile signature.der -pkeyopt digest:sha256
-Signature Verified Successfully
 ```
 
-Finally, reseal the binary with the new signature:
+Finally, reseal the binary with the new signature (use `public.der` for the `pkcs11-tool` variant):
 ```text
 $ picotool reseal hello_usb.signed.uf2 signature.der public.pem otp.json
 Resealed File hello_usb.signed.uf2:
@@ -936,7 +937,7 @@ RESEAL:
 
 SYNOPSIS:
     picotool reseal [--quiet] [--verbose] <infile> [-t <type>] [-o <offset>] <sigfile> <pubkey>
-                [<otp>]
+                [-t <type>] [<otp>]
 
 OPTIONS:
         --quiet
@@ -945,8 +946,6 @@ OPTIONS:
             Print verbose output
         <sigfile>
             Signature file (.der)
-        <pubkey>
-            Public key file (.pem)
         <otp>
             JSON file to save OTP to (will edit existing file if it exists)
     File to re-seal
@@ -959,6 +958,11 @@ OPTIONS:
             Specify the load address for a BIN file
         <offset>
             Load offset (memory address; default 0x10000000)
+    Public key file (.pem/.der)
+        <pubkey>
+            The file name
+        -t <type>
+            Specify file type (pem | der) explicitly, ignoring file extension
 ```
 
 ## partition
