@@ -236,7 +236,7 @@ auto bus_device_string = [](struct libusb_device *device, chip_t chip) {
 };
 #endif
 
-enum class filetype {bin, elf, uf2, pem, json, der};
+enum class filetype {bin, elf, uf2, pem, json, der, pubkey};
 const string getFiletypeName(enum filetype type) 
 {
    switch (type) 
@@ -247,6 +247,7 @@ const string getFiletypeName(enum filetype type)
       case filetype::pem: return "PEM";
       case filetype::json: return "JSON";
       case filetype::der: return "DER";
+      case filetype::pubkey: return "PUBKEY";
       default: assert(false); return "ERROR_TYPE";
    }
 }
@@ -3358,6 +3359,8 @@ enum filetype get_file_type_idx(uint8_t idx) {
             return filetype::json;
         } else if (low.rfind(".der") == low.size() - 4) {
             return filetype::der;
+        } else if (low.rfind(".pubkey") == low.size() - 7) {
+            return filetype::pubkey;
         }
     } else if (!file_type.empty()) {
         low = lowercase(file_type);
@@ -3378,6 +3381,9 @@ enum filetype get_file_type_idx(uint8_t idx) {
         }
         if (low == "der") {
             return filetype::der;
+        }
+        if (low == "pubkey") {
+            return filetype::pubkey;
         }
         throw cli::parse_error("unsupported file type '" + low + "'");
     }
@@ -5806,12 +5812,12 @@ void output_otp_secure_boot(uint8_t idx, public_t public_key) {
             }
             if (key_match) {
                 // Key already in file, so use same key
-                printf("Key already in file at index %d\n", key_idx);
+                DEBUG_LOG("Key already in file at index %d\n", key_idx);
                 break;
             }
         } else {
             // Key not used yet
-            printf("Found unused key index %d\n", key_idx);
+            DEBUG_LOG("Found unused key index %d\n", key_idx);
             break;
         }
         
@@ -6355,7 +6361,11 @@ bool reseal_command::execute(device_map &devices) {
         fail(ERROR_ARGS, "Can only read der signatures");
     }
 
-    if (get_file_type_idx(2) != filetype::pem && get_file_type_idx(2) != filetype::der) {
+    // pubkey is a special extension used by the SDK, to indicate a PEM or DER file
+    if (!(get_file_type_idx(2) == filetype::pem ||
+        get_file_type_idx(2) != filetype::der ||
+        get_file_type_idx(2) != filetype::pubkey
+    )) {
         fail(ERROR_ARGS, "Can only read PEM or DER keys");
     }
 
