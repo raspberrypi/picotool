@@ -29,8 +29,9 @@ SYNOPSIS:
     picotool erase -r <from> <to> [device-selection]
     picotool reboot [-a] [-u] [-g <partition>] [-c <cpu>] [device-selection]
     picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] [--pin-xip-sram]
-                [--no-squash] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] [<key>]
-                [<otp>] [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
+                [--no-squash] [--no-ignore-others] <infile> [-t <type>] [-o <offset>] <outfile>
+                [-t <type>] [<key>] [<otp>] [--major <major>] [--minor <minor>] [--rollback
+                <rollback> [<rows>..]]
     picotool encrypt [--quiet] [--verbose] [--embed] [--fast-rosc] [--use-mbedtls]
                 [--otp-key-page <page>] [--hash] [--sign] [--no-clear] [--pin-xip-sram]
                 <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] <aes_key> <iv_salt>
@@ -41,6 +42,7 @@ SYNOPSIS:
     picotool coprodis [--quiet] [--verbose] <infile> <outfile>
     picotool link [--quiet] [--verbose] <outfile> [-t <type>] <infile1> [-t <type>] <infile2>
                 [-t <type>] [<infile3>] [-t <type>] [-p <pad>]
+    picotool tbyb [--quiet] [--verbose] [--clear] <file> [-t <type>] [--block-num <index>]
     picotool bdev ls|mkdir|cp|rm|cat|format
 
 COMMANDS:
@@ -63,6 +65,7 @@ COMMANDS:
     otp         Commands related to the RP2350 OTP (One-Time-Programmable) Memory
     coprodis    Post-process coprocessor instructions in disassembly files.
     link        Link multiple binaries into one block loop.
+    tbyb        Set TBYB bit on the best block in binary
     bdev        Commands related to embedded block devices
 
 Use "picotool help <cmd>" for more info
@@ -71,7 +74,7 @@ Use "picotool help <cmd>" for more info
 Note commands that aren't acting on files require a device in BOOTSEL mode to be connected.
 
 ## Links to documentation for `picotool` commands
-[`info`](#info) [`config`](#config) [`load`](#load) [`save`](#save) [`verify`](#verify) [`erase`](#erase) [`reboot`](#reboot) [`seal`](#seal) [`encrypt`](#encrypt) [`partition`](#partition) [`uf2`](#uf2) [`otp`](#otp) [`coprodis`](#coprodis) [`link`](#link) [`bdev`](#bdev)
+[`info`](#info) [`config`](#config) [`load`](#load) [`save`](#save) [`verify`](#verify) [`erase`](#erase) [`reboot`](#reboot) [`seal`](#seal) [`encrypt`](#encrypt) [`partition`](#partition) [`uf2`](#uf2) [`otp`](#otp) [`coprodis`](#coprodis) [`link`](#link) [`tbyb`](#tbyb) [`bdev`](#bdev)
 
 ## Building & Installing
 
@@ -715,8 +718,9 @@ SEAL:
 
 SYNOPSIS:
     picotool seal [--quiet] [--verbose] [--hash] [--sign] [--clear] [--pin-xip-sram]
-                [--no-squash] <infile> [-t <type>] [-o <offset>] <outfile> [-t <type>] [<key>]
-                [<otp>] [--major <major>] [--minor <minor>] [--rollback <rollback> [<rows>..]]
+                [--no-squash] [--no-ignore-others] <infile> [-t <type>] [-o <offset>] <outfile>
+                [-t <type>] [<key>] [<otp>] [--major <major>] [--minor <minor>] [--rollback
+                <rollback> [<rows>..]]
 
 OPTIONS:
         --quiet
@@ -744,6 +748,8 @@ OPTIONS:
             Pin XIP SRAM on load
         --no-squash
             Don't squash segments in the ELF file
+        --no-ignore-others
+            Don't mark other blocks in the ELF file as ignored
     File to load from
         <infile>
             The file name
@@ -1743,6 +1749,36 @@ OPTIONS:
         <infile3>
             The file name
 ```
+
+## tbyb
+
+This command is used to set/clear the Try-Before-You-Buy bit in a binary. By default it will automatically pick which metadata block to operate on, but you can specify `--block-num` to operate on a specifc block (numbered from 1, matching the output of `picotool info -m`).
+
+```text
+$ picotool help tbyb
+TBYB:
+    Set TBYB bit on the best block in binary
+
+SYNOPSIS:
+    picotool tbyb [--quiet] [--verbose] [--clear] <file> [-t <type>] [--block-num <index>]
+
+OPTIONS:
+        --quiet
+            Don't print any output
+        --verbose
+            Print verbose output
+        --clear
+            Clear the TBYB bit instead
+        --block-num <index>
+            Explicitly specify which block to modify, indexed from 1 (matching the `picotol
+            info -m` output)
+    File to modify
+        <file>
+            The file name
+        -t <type>
+            Specify file type (uf2 | elf | bin) explicitly, ignoring file extension
+```
+
 
 ## bdev
 

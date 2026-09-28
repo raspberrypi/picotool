@@ -633,6 +633,7 @@ struct _settings {
         bool pin_xip_sram = false;
         bool set_tbyb = false;
         bool no_squash = false;
+        bool ignore_others = true;
         uint16_t major_version = 0;
         uint16_t minor_version = 0;
         uint16_t rollback_version = 0;
@@ -651,6 +652,11 @@ struct _settings {
     struct {
         uint32_t align = 0x1000;
     } link;
+
+    struct {
+        bool clear = false;
+        int block_num = -1;
+    } tbyb;
 
     struct {
         bool all = false;
@@ -1203,7 +1209,8 @@ struct seal_command : public cmd {
                 option("--sign").set(settings.seal.sign) % "Sign the file" +
                 option("--clear").set(settings.seal.clear_sram) % "Clear all of main SRAM on load" +
                 option("--pin-xip-sram").set(settings.seal.pin_xip_sram) % "Pin XIP SRAM on load" +
-                option("--no-squash").set(settings.seal.no_squash) % "Don't squash segments in the ELF file"
+                option("--no-squash").set(settings.seal.no_squash) % "Don't squash segments in the ELF file" +
+                option("--no-ignore-others").clear(settings.seal.ignore_others) % "Don't mark other blocks in the ELF file as ignored"
             ).min(0).doc_non_optional(true) % "Configuration" +
             named_file_selection_x("infile", 0) % "File to load from" +
             (
@@ -1254,6 +1261,26 @@ struct link_command : public cmd {
 
     string get_doc() const override {
         return "Link multiple binaries into one block loop.";
+    }
+};
+
+struct tbyb_command : public cmd {
+    tbyb_command() : cmd("tbyb") {}
+    bool execute(device_map &devices) override;
+    virtual device_support get_device_support() override { return none; }
+
+    group get_cli() override {
+        return (
+            option("--quiet").set(settings.quiet) % "Don't print any output" +
+            option("--verbose").set(settings.verbose) % "Print verbose output" +
+            option("--clear").set(settings.tbyb.clear) % "Clear the TBYB bit instead" +
+            named_file_selection_x("file", 0) % "File to modify" +
+            (option("--block-num") & integer("index").set(settings.tbyb.block_num).min(1)) % "Explicitly specify which block to modify, indexed from 1 (matching the `picotol info -m` output)"
+        );
+    }
+
+    string get_doc() const override {
+        return "Set TBYB bit on the best block in binary";
     }
 };
 
@@ -1812,6 +1839,7 @@ vector<std::shared_ptr<cmd>> commands {
         std::shared_ptr<cmd>(new otp_command()),
         std::shared_ptr<cmd>(new coprodis_command()),
         std::shared_ptr<cmd>(new link_command()),
+        std::shared_ptr<cmd>(new tbyb_command()),
     #if HAS_LIBUSB
         std::shared_ptr<cmd>(new bdev_command()),
     #endif
@@ -3566,7 +3594,9 @@ std::vector<std::unique_ptr<block>> find_all_blocks(memory_access &raw_access, v
             DEBUG_LOG("Now reading from %x size %x\n", offset, size);
             bin = raw_access.read_vector<uint8_t>(offset, size, true);
         };
-        return get_all_blocks(bin, raw_access.get_binary_start(), first_block, more_cb);
+        auto all_blocks = get_all_blocks(bin, raw_access.get_binary_start(), first_block, more_cb);
+        all_blocks.insert(all_blocks.begin(), std::move(first_block));
+        return all_blocks;
     }
 
     return std::vector<std::unique_ptr<block>>();
@@ -5500,7 +5530,7 @@ void sign_guts_elf(elf_file* elf, private_t private_key, public_t public_key, mo
     }
 
     // Workaround RP2350-E13, which means when using rollback versions, all other blocks must be set as ignored
-    block new_block = place_new_block(elf, first_block, model, settings.seal.rollback_version);
+    block new_block = place_new_block(elf, first_block, model, settings.seal.rollback_version || settings.seal.ignore_others);
 
     if (settings.seal.set_tbyb) {
         // Set the TBYB bit on the image_type_item
@@ -5593,7 +5623,7 @@ vector<uint8_t> sign_guts_bin(iostream_memory_access in, private_t private_key, 
     }
 
     // Workaround RP2350-E13, which means when using rollback versions, all other blocks must be set as ignored
-    block new_block = place_new_block(bin, bin_start, first_block, model, settings.seal.rollback_version);
+    block new_block = place_new_block(bin, bin_start, first_block, model, settings.seal.rollback_version || settings.seal.ignore_others);
 
     if (settings.seal.major_version || settings.seal.minor_version || settings.seal.rollback_version) {
         std::shared_ptr<version_item> version = new_block.get_item<version_item>();
@@ -6283,6 +6313,45 @@ bool seal_command::execute(device_map &devices) {
     return false;
 }
 #endif
+
+bool tbyb_command::execute(device_map &devices) {
+    auto access = get_file_memory_access(0, true);
+
+    vector<uint8_t> bin;
+    std::unique_ptr<block> selected_block;
+    if (settings.tbyb.block_num >= 0) {
+        auto blocks = find_all_blocks(access, bin);
+        auto num_blocks = blocks.size();
+        if (settings.tbyb.block_num > num_blocks) {
+            fail(ERROR_ARGS, "Only %d blocks in the binary, but block number %d was specified\n", num_blocks, settings.tbyb.block_num);
+        }
+        selected_block = std::move(blocks[settings.tbyb.block_num - 1]);
+    } else {
+        selected_block = find_best_block(access, bin);
+    }
+
+    if (selected_block) {
+        DEBUG_LOG("Checking block at %x\n", selected_block->physical_addr);
+        // Image Def
+        auto image_def = selected_block->get_item<image_type_item>();
+        if (image_def != nullptr) {
+            DEBUG_LOG("Image def found with TBYB %d\n", image_def->tbyb());
+            if (settings.tbyb.clear) {
+                image_def->flags &= ~PICOBIN_IMAGE_TYPE_EXE_TBYB_BITS;
+            } else {
+                image_def->flags |= PICOBIN_IMAGE_TYPE_EXE_TBYB_BITS;
+            }
+            assert(image_def->tbyb());
+            std::vector<uint32_t> words = selected_block->to_words();
+            access.write_vector(selected_block->physical_addr, words);
+            fos <<  "set TBYB bit for block at " << hex_string(selected_block->physical_addr) << " to " << image_def->tbyb() << "\n";
+        } else if (settings.tbyb.block_num >= 0) {
+            fail(ERROR_ARGS, "No image def found in block number %d (address %08x)", settings.tbyb.block_num, selected_block->physical_addr);
+        }
+    }
+
+    return false;
+}
 
 bool link_command::execute(device_map &devices) {
     if (get_file_type() != filetype::bin) {
