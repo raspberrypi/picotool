@@ -6363,8 +6363,8 @@ bool reseal_command::execute(device_map &devices) {
 
     // pubkey is a special extension used by the SDK, to indicate a PEM or DER file
     if (!(get_file_type_idx(2) == filetype::pem ||
-        get_file_type_idx(2) != filetype::der ||
-        get_file_type_idx(2) != filetype::pubkey
+        get_file_type_idx(2) == filetype::der ||
+        get_file_type_idx(2) == filetype::pubkey
     )) {
         fail(ERROR_ARGS, "Can only read PEM or DER keys");
     }
