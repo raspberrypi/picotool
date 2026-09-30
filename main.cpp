@@ -106,6 +106,12 @@ static __forceinline int __builtin_ctz(unsigned x) {
 #ifndef BLOCK_DEVICE_DEFAULT_PARTITION_ID
 #define BLOCK_DEVICE_DEFAULT_PARTITION_ID 0x626C6F636B646576
 #endif
+#ifndef FFS_DATA_PARTITION_ID
+#define FFS_DATA_PARTITION_ID 0x746d656673665f6f
+#endif
+#ifndef CYW43_FIRMWARE_PARTITION_ID
+#define CYW43_FIRMWARE_PARTITION_ID 0x776966696669726d
+#endif
 // ------
 
 using std::string;
@@ -1679,7 +1685,8 @@ struct provision_connect_command : public cmd {
     string get_doc() const override {
         return "Provision the device for Raspberry Pi Connect, by running a provisioning binary on it from RAM. "
                "Secrets are only written into the binary in RAM, never to flash. When done the device flashes its LED "
-               "(slowly on success, quickly on failure) and reboots to BOOTSEL; output is on its USB and UART consoles";
+               "(slowly on success, quickly on failure) and reboots to BOOTSEL; output is on its USB and UART consoles. "
+               "The device must have a partition table with an FFS partition, and a WiFi firmware partition containing the firmware";
     }
 };
 
@@ -10113,6 +10120,48 @@ bool provision_connect_command::execute(device_map &devices) {
 #endif
 
     auto con = get_single_picoboot_cmd_compatible_device_connection("provision connect", devices, {PC_REBOOT2});
+
+    // The binary runs from RAM, but keeps its state in the FFS partition, and
+    // loads the wireless chip's firmware from its partition(s)
+    // The wireless chip is only started for the network operations, or to flash its LED
+    bool uses_wireless = p.create_identity || p.identity_exchange || !p.auth_key.empty() || p.signin ||
+                         p.led == provision_unset || p.led < 0;
+    auto partitions = get_partitions(con);
+    if (!partitions) {
+        fail(ERROR_NOT_POSSIBLE, "The device has no partition table - it needs an FFS partition%s",
+             uses_wireless ? " and a WiFi firmware partition" : "");
+    }
+    auto has_partition = [&](uint64_t id) {
+        return std::any_of(partitions->begin(), partitions->end(), [id](const partition_details &pd) {
+            return pd.has_id && pd.id == id;
+        });
+    };
+    if (!has_partition(FFS_DATA_PARTITION_ID)) {
+        fail(ERROR_NOT_POSSIBLE, "The device's partition table has no FFS partition (id 0x%016" PRIx64 ")", (uint64_t)FFS_DATA_PARTITION_ID);
+    }
+    if (uses_wireless && !has_partition(CYW43_FIRMWARE_PARTITION_ID)) {
+        fail(ERROR_NOT_POSSIBLE, "The device's partition table has no WiFi firmware partition (id 0x%016" PRIx64 ")", (uint64_t)CYW43_FIRMWARE_PARTITION_ID);
+    }
+    if (uses_wireless) {
+        // The firmware is stored as an image with a block loop, which the
+        // bootrom verifies - so one of the (A/B) partitions must have a valid one
+        picoboot_memory_access raw_access(con);
+        bool has_firmware = false;
+        for (auto &pd : *partitions) {
+            if (!pd.has_id || pd.id != CYW43_FIRMWARE_PARTITION_ID) continue;
+            partition_memory_access part_access(raw_access, pd.start);
+            vector<uint8_t> bin;
+            try {
+                has_firmware = !find_all_blocks(part_access, bin).empty();
+            } catch (failure_error &) {
+                // the block loop is not valid
+            }
+            if (has_firmware) break;
+        }
+        if (!has_firmware) {
+            fail(ERROR_NOT_POSSIBLE, "None of the device's WiFi firmware partitions contain firmware (a valid block loop)");
+        }
+    }
 
     auto tmp = std::make_shared<std::stringstream>();
     auto file = get_rpi_connect_provision();

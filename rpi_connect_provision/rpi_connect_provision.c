@@ -92,6 +92,8 @@
 
 // Device-code signin: how often to poll for the token, and for how long
 #define SIGNIN_POLL_MS      3000
+// How often to repeat the code and URL, for a console connected after the start
+#define SIGNIN_REPRINT_MS   15000
 #define SIGNIN_TIMEOUT_MS   (15 * 60 * 1000)
 
 bi_decl(bi_program_feature_group(0x1111, 0x2222, "provision"));
@@ -307,26 +309,29 @@ static int signin(void) {
         return -1;
     }
 
-    printf("User code: %s\n", codes->user_code);
-    printf("Visit %s in your browser and enter the user code\n", codes->verification_uri_complete);
-
     int rc = -1;
     absolute_time_t timeout = make_timeout_time_ms(SIGNIN_TIMEOUT_MS);
+    absolute_time_t next_print = get_absolute_time();
     while (!time_reached(timeout)) {
+        if (time_reached(next_print)) {
+            printf("Visit %s in your browser and enter the user code %s (%lld minutes left)\n",
+                   codes->verification_uri_complete, codes->user_code,
+                   (absolute_time_diff_us(get_absolute_time(), timeout) / 60000000) + 1);
+            stdio_flush();
+            next_print = make_timeout_time_ms(SIGNIN_REPRINT_MS);
+        }
         char *new_token = rpi_connect_retrieve_token_with_device_code(
             client_id, codes->device_code, serial_number);
         if (new_token) {
-            printf("\nAccess token received\n");
+            printf("Access token received\n");
             rc = store_token(new_token);
             free(new_token);
             break;
         }
-        printf(".");
-        stdio_flush();
         sleep_ms(SIGNIN_POLL_MS);
     }
     if (rc && time_reached(timeout)) {
-        printf("\nTimed out waiting for signin\n");
+        printf("Timed out waiting for signin\n");
     }
     rpi_connect_signin_cleanup(codes);
     return rc;
