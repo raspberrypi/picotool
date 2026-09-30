@@ -15,6 +15,13 @@ picotool_binary_data_header(
 
 # TODO: Make it possible to build the prebuilt from source.
 picotool_binary_data_header(
+    name = "rpi_connect_provision_elf",
+    src = "//rpi_connect_provision:rpi_connect_provision_prebuilt",
+    out = "rpi_connect_provision_elf.h",
+)
+
+# TODO: Make it possible to build the prebuilt from source.
+picotool_binary_data_header(
     name = "enc_bootloader_elf",
     src = "//enc_bootloader:enc_bootloader_prebuilt",
     out = "enc_bootloader_elf.h",
@@ -66,6 +73,19 @@ cc_library(
 )
 
 cc_library(
+    name = "rpi_connect_provision",
+    srcs = ["get_rpi_connect_provision.cpp"],
+    hdrs = [
+        "get_rpi_connect_provision.h",
+        "rpi_connect_provision_elf.h",
+    ],
+    deps = [
+        "//bazel:data_locs",
+        "//lib/whereami",
+    ],
+)
+
+cc_library(
     name = "enc_bootloader",
     srcs = ["get_enc_bootloader.cpp"],
     hdrs = [
@@ -100,6 +120,7 @@ cc_binary(
         "cli.h",
         "clipp/clipp.h",
         "get_enc_bootloader.cpp",
+        "get_rpi_connect_provision.cpp",
         "get_xip_ram_perms.cpp",
         "main.cpp",
         "otp.cpp",
@@ -139,6 +160,7 @@ cc_binary(
     }),
     deps = [
         ":enc_bootloader",
+        ":rpi_connect_provision",
         ":xip_ram_perms",
         "//bazel:data_locs",
         "//bintool",

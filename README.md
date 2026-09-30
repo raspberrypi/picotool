@@ -2263,7 +2263,8 @@ PROVISION CONNECT:
     Provision the device for Raspberry Pi Connect, by running a provisioning binary on it from
     RAM. Secrets are only written into the binary in RAM, never to flash. When done the device
     flashes its LED (slowly on success, quickly on failure) and reboots to BOOTSEL; output is
-    on its USB and UART consoles
+    on its USB and UART consoles. The device must have a partition table with an FFS partition,
+    and a WiFi firmware partition containing the firmware
 
 SYNOPSIS:
     picotool provision connect [--create-identity] [--identity-exchange] [--auth-key <key>]
