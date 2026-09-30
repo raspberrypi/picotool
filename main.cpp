@@ -715,6 +715,7 @@ struct _settings {
     } bdev;
 
     struct {
+        string board;
         bool create_identity = false;
         bool identity_exchange = false;
         bool signin = false;
@@ -1661,18 +1662,19 @@ struct provision_connect_command : public cmd {
                     (option("--wifi-password") & value("password").set(p.wifi_password)) % "WiFi password"
                 ).min(0).doc_non_optional(true) % "WiFi Credentials" +
                 (
-                    (option("--uart") & integer("uart").min_value(-1).max_value(1).set(p.uart)) % "UART for console output, or -1 for none (default 0)" +
-                    (option("--uart-tx") & integer("pin").min_value(-1).max_value(47).set(p.uart_tx)) % "UART TX pin (default 0)" +
-                    (option("--uart-rx") & integer("pin").min_value(-1).max_value(47).set(p.uart_rx)) % "UART RX pin (default 1)" +
-                    (option("--uart-baud") & integer("baud").min_value(1).set(p.uart_baud)) % "UART baud rate (default 115200)" +
-                    (option("--led") & integer("pin").min_value(-1).max_value(47).set(p.led)) % "LED pin to flash when done, or -1 for the wireless chip's LED (default -1)" +
-                    (option("--wl-reg-on") & integer("pin").min_value(0).max_value(47).set(p.wl_reg_on)) % "Wireless chip power pin (default 23)" +
-                    (option("--wl-data-out") & integer("pin").min_value(0).max_value(47).set(p.wl_data_out)) % "Wireless chip SPI data out pin (default 24)" +
-                    (option("--wl-data-in") & integer("pin").min_value(0).max_value(47).set(p.wl_data_in)) % "Wireless chip SPI data in pin (default 24)" +
-                    (option("--wl-host-wake") & integer("pin").min_value(0).max_value(47).set(p.wl_host_wake)) % "Wireless chip host wake pin (default 24)" +
-                    (option("--wl-clock") & integer("pin").min_value(0).max_value(47).set(p.wl_clock)) % "Wireless chip SPI clock pin (default 29)" +
-                    (option("--wl-cs") & integer("pin").min_value(0).max_value(47).set(p.wl_cs)) % "Wireless chip SPI chip select pin (default 25)"
-                ).min(0).doc_non_optional(true) % "Board Configuration (defaults are for a Pico 2 W)" +
+                    (option("--board") & value("name").set(p.board)) % "SDK board to use the default pins from" +
+                    (option("--uart") & integer("uart").min_value(-1).max_value(1).set(p.uart)) % "UART for console output, or -1 for none" +
+                    (option("--uart-tx") & integer("pin").min_value(-1).max_value(47).set(p.uart_tx)) % "UART TX pin" +
+                    (option("--uart-rx") & integer("pin").min_value(-1).max_value(47).set(p.uart_rx)) % "UART RX pin" +
+                    (option("--uart-baud") & integer("baud").min_value(1).set(p.uart_baud)) % "UART baud rate" +
+                    (option("--led") & integer("pin").min_value(-1).max_value(47).set(p.led)) % "LED pin to flash when done, or -1 for the wireless chip's LED" +
+                    (option("--wl-reg-on") & integer("pin").min_value(0).max_value(47).set(p.wl_reg_on)) % "Wireless chip power pin" +
+                    (option("--wl-data-out") & integer("pin").min_value(0).max_value(47).set(p.wl_data_out)) % "Wireless chip SPI data out pin" +
+                    (option("--wl-data-in") & integer("pin").min_value(0).max_value(47).set(p.wl_data_in)) % "Wireless chip SPI data in pin" +
+                    (option("--wl-host-wake") & integer("pin").min_value(0).max_value(47).set(p.wl_host_wake)) % "Wireless chip host wake pin" +
+                    (option("--wl-clock") & integer("pin").min_value(0).max_value(47).set(p.wl_clock)) % "Wireless chip SPI clock pin" +
+                    (option("--wl-cs") & integer("pin").min_value(0).max_value(47).set(p.wl_cs)) % "Wireless chip SPI chip select pin"
+                ).min(0).doc_non_optional(true) % "Board Configuration (defaults are for a Pico 2 W, unless --board is given)" +
                 (
                     option("--hash").set(settings.seal.hash) % "Hash the executable" +
                     option("--sign").set(settings.seal.sign) % "Sign the executable" +
@@ -10077,8 +10079,37 @@ bool otp_permissions_command::execute(device_map &devices) {
     return true;
 }
 
+// Pin defaults of the SDK's RP2350 boards with a wireless chip, generated from their board headers
+struct provision_board {
+    const char *name;
+    int uart, uart_tx, uart_rx, uart_baud, led;
+    int wl_reg_on, wl_data_out, wl_data_in, wl_host_wake, wl_clock, wl_cs;
+};
+static const provision_board provision_boards[] = {
+#include "provision_boards.h"
+};
+
 bool provision_connect_command::execute(device_map &devices) {
     auto &p = settings.provision;
+
+    if (!p.board.empty()) {
+        auto board = std::find_if(std::begin(provision_boards), std::end(provision_boards),
+                                  [&](const provision_board &b) { return p.board == b.name; });
+        if (board == std::end(provision_boards)) {
+            string names;
+            for (auto &b : provision_boards) names += string("\n    ") + b.name;
+            fail(ERROR_ARGS, "Unknown board '%s' - the SDK boards with a wireless chip are:%s", p.board.c_str(), names.c_str());
+        }
+        // Options given explicitly override the board's pins
+        for (auto &i : std::vector<std::pair<int *, int>>{
+                {&p.uart, board->uart}, {&p.uart_tx, board->uart_tx}, {&p.uart_rx, board->uart_rx},
+                {&p.uart_baud, board->uart_baud}, {&p.led, board->led},
+                {&p.wl_reg_on, board->wl_reg_on}, {&p.wl_data_out, board->wl_data_out},
+                {&p.wl_data_in, board->wl_data_in}, {&p.wl_host_wake, board->wl_host_wake},
+                {&p.wl_clock, board->wl_clock}, {&p.wl_cs, board->wl_cs}}) {
+            if (*i.first == provision_unset) *i.first = i.second;
+        }
+    }
 
     const char *operation = nullptr;
     int num_operations = 0;

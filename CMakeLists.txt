@@ -189,6 +189,33 @@ if (NOT PICOTOOL_NO_LIBUSB)
         set_property(TARGET otp_header_parse PROPERTY IMPORTED_LOCATION ${CMAKE_BINARY_DIR}/otp_header_parser/otp_header_parse)
     endif()
 
+    # Board pin defaults for provision connect --board, from the SDK board headers
+    ExternalProject_Add(board_header_parser
+            PREFIX board_header_parser
+            SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/board_header_parser
+            BINARY_DIR ${CMAKE_BINARY_DIR}/board_header_parser
+            BUILD_ALWAYS 1
+            DOWNLOAD_COMMAND ""
+            INSTALL_COMMAND ""
+            )
+
+    add_executable(board_header_parse IMPORTED)
+    add_dependencies(board_header_parse board_header_parser)
+    if (is_multi_config)
+        set_property(TARGET board_header_parse PROPERTY IMPORTED_LOCATION ${CMAKE_BINARY_DIR}/board_header_parser/${tmp_config}/board_header_parse)
+    else()
+        set_property(TARGET board_header_parse PROPERTY IMPORTED_LOCATION ${CMAKE_BINARY_DIR}/board_header_parser/board_header_parse)
+    endif()
+
+    file(GLOB BOARD_HEADERS CONFIGURE_DEPENDS ${PICO_SDK_PATH}/src/boards/include/boards/*.h)
+    set(PROVISION_BOARDS_H ${CMAKE_CURRENT_BINARY_DIR}/provision_boards.h)
+    add_custom_target(generate_provision_boards DEPENDS ${PROVISION_BOARDS_H})
+    add_custom_command(OUTPUT ${PROVISION_BOARDS_H}
+            COMMENT "Generating ${PROVISION_BOARDS_H}"
+            DEPENDS ${CMAKE_CURRENT_LIST_DIR}/board_header_parser/board_header_parse.cpp ${BOARD_HEADERS}
+            COMMAND board_header_parse ${PROVISION_BOARDS_H} ${BOARD_HEADERS}
+            )
+
     if (PICOTOOL_CODE_OTP)
         set(GENERATED_H ${CMAKE_CURRENT_BINARY_DIR}/otp_contents.h)
         add_custom_target(generate_otp_header DEPENDS ${GENERATED_H})
@@ -316,7 +343,7 @@ add_executable(picotool
 add_dependencies(picotool embedded_data_no_libusb)
 if (NOT PICOTOOL_NO_LIBUSB)
     target_sources(picotool PRIVATE get_xip_ram_perms.cpp get_rpi_connect_provision.cpp)
-    add_dependencies(picotool generate_otp_header embedded_data)
+    add_dependencies(picotool generate_otp_header generate_provision_boards embedded_data)
 endif()
 set(PROJECT_VERSION 2.3.2-develop)
 set(PICOTOOL_VERSION 2.3.2-develop)

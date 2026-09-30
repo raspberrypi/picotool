@@ -2270,10 +2270,11 @@ SYNOPSIS:
     picotool provision connect [--create-identity] [--identity-exchange] [--auth-key <key>]
                 [--signin] [--token <token>] [--clear] [--wifi-only] [--org-token <token>]
                 [--description <text>] [--device-name <name>] [--client-id <uuid>] [--wifi-ssid
-                <ssid>] [--wifi-password <password>] [--uart <uart>] [--uart-tx <pin>]
-                [--uart-rx <pin>] [--uart-baud <baud>] [--led <pin>] [--wl-reg-on <pin>]
-                [--wl-data-out <pin>] [--wl-data-in <pin>] [--wl-host-wake <pin>] [--wl-clock
-                <pin>] [--wl-cs <pin>] [--hash] [--sign] [<key>] [device-selection]
+                <ssid>] [--wifi-password <password>] [--board <name>] [--uart <uart>]
+                [--uart-tx <pin>] [--uart-rx <pin>] [--uart-baud <baud>] [--led <pin>]
+                [--wl-reg-on <pin>] [--wl-data-out <pin>] [--wl-data-in <pin>] [--wl-host-wake
+                <pin>] [--wl-clock <pin>] [--wl-cs <pin>] [--hash] [--sign] [<key>]
+                [device-selection]
 
 OPTIONS:
     Operation (exactly one)
@@ -2308,29 +2309,31 @@ OPTIONS:
             WiFi network to store on the device before the operation (requires --wifi-password)
         --wifi-password <password>
             WiFi password
-    Board Configuration (defaults are for a Pico 2 W)
+    Board Configuration (defaults are for a Pico 2 W, unless --board is given)
+        --board <name>
+            SDK board to use the default pins from
         --uart <uart>
-            UART for console output, or -1 for none (default 0)
+            UART for console output, or -1 for none
         --uart-tx <pin>
-            UART TX pin (default 0)
+            UART TX pin
         --uart-rx <pin>
-            UART RX pin (default 1)
+            UART RX pin
         --uart-baud <baud>
-            UART baud rate (default 115200)
+            UART baud rate
         --led <pin>
-            LED pin to flash when done, or -1 for the wireless chip's LED (default -1)
+            LED pin to flash when done, or -1 for the wireless chip's LED
         --wl-reg-on <pin>
-            Wireless chip power pin (default 23)
+            Wireless chip power pin
         --wl-data-out <pin>
-            Wireless chip SPI data out pin (default 24)
+            Wireless chip SPI data out pin
         --wl-data-in <pin>
-            Wireless chip SPI data in pin (default 24)
+            Wireless chip SPI data in pin
         --wl-host-wake <pin>
-            Wireless chip host wake pin (default 24)
+            Wireless chip host wake pin
         --wl-clock <pin>
-            Wireless chip SPI clock pin (default 29)
+            Wireless chip SPI clock pin
         --wl-cs <pin>
-            Wireless chip SPI chip select pin (default 25)
+            Wireless chip SPI chip select pin
     Signing Configuration
         --hash
             Hash the executable

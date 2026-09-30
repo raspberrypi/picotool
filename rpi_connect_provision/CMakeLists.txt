@@ -95,6 +95,15 @@ if (NOT USE_PRECOMPILED)
 
     pico_set_binary_type(rpi_connect_provision no_flash)
 
+    # Strip the ELF, as it is embedded in picotool - keeping an unstripped copy for debugging
+    if (CMAKE_STRIP)
+        add_custom_command(TARGET rpi_connect_provision POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:rpi_connect_provision> ${CMAKE_CURRENT_BINARY_DIR}/rpi_connect_provision_unstripped.elf
+            COMMAND ${CMAKE_STRIP} --strip-all $<TARGET_FILE:rpi_connect_provision>
+            COMMENT "Stripping rpi_connect_provision.elf"
+            VERBATIM)
+    endif()
+
     install(FILES ${CMAKE_CURRENT_BINARY_DIR}/rpi_connect_provision.elf DESTINATION ${CMAKE_CURRENT_LIST_DIR})
 else()
     project(rpi_connect_provision C CXX ASM)

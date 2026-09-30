@@ -1,6 +1,6 @@
 load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
-load("//bazel:defs.bzl", "otp_header_parse", "picotool_binary_data_header")
+load("//bazel:defs.bzl", "otp_header_parse", "picotool_binary_data_header", "provision_boards_header")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -99,6 +99,13 @@ cc_library(
     ],
 )
 
+# Any board target carries all the SDK board headers
+provision_boards_header(
+    name = "provision_boards",
+    board = "@pico-sdk//src/boards:pico2_w",
+    out = "provision_boards.h",
+)
+
 filegroup(
     name = "data_locs_header",
     srcs = ["data_locs.h"],
@@ -125,6 +132,7 @@ cc_binary(
         "main.cpp",
         "otp.cpp",
         "otp.h",
+        "provision_boards.h",
     ] + select({
         # MSVC can't handle long strings, so use this manually generated
         # header instead.
