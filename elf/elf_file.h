@@ -64,6 +64,7 @@ private:
     void read_ph(void);
     void read_sh(void);
     void read_sh_data(void);
+    bool in_bounds(uint32_t offset, uint32_t length) const;
     void read_bytes(unsigned offset, unsigned length, void *dest);
     uint32_t append_section_name(const std::string &sh_name_str);
     void flatten(void);

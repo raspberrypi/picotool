@@ -188,8 +188,12 @@ int rp_determine_binary_type(const elf32_header &eh, const std::vector<elf32_ph_
     return ERROR_INCOMPATIBLE;
 }
 
+bool elf_file::in_bounds(uint32_t offset, uint32_t length) const {
+    return offset <= elf_bytes.size() && length <= elf_bytes.size() - offset;
+}
+
 void elf_file::read_bytes(unsigned offset, unsigned length, void *dest) {
-    if (offset + length > elf_bytes.size()) {
+    if (!in_bounds(offset, length)) {
         fail(ERROR_FORMAT, "ELF File Read from 0x%x with size 0x%x exceeds the file size 0x%zx", offset, length, elf_bytes.size());
     }
     memcpy(dest, &elf_bytes[offset], length);
@@ -356,11 +360,13 @@ const std::string elf_file::section_name(uint32_t sh_name) const {
     if (!eh.sh_str_index || eh.sh_str_index > eh.sh_num || eh.sh_str_index >= sh_data.size())
         return "";
 
-    if (sh_name > sh_data[eh.sh_str_index].size())
+    const auto &strings = sh_data[eh.sh_str_index];
+    if (sh_name >= strings.size())
         return "";
 
-    const char * str =(const char *) &sh_data[eh.sh_str_index][0];
-    return &str[sh_name];
+    // Don't assume the string table is null terminated
+    const char * str = (const char *) &strings[sh_name];
+    return std::string(str, strnlen(str, strings.size() - sh_name));
 }
 
 const elf32_sh_entry* elf_file::get_section(const std::string &sh_name) {
@@ -381,11 +387,14 @@ uint32_t elf_file::get_symbol(const std::string &sym_name) {
     auto data = content(*sym_tab);
     auto strings = content(*str_tab);
     const char * str =(const char *) strings.data();
-    for (unsigned int i=0; i < sym_tab->size / sizeof(elf32_sym_entry); i++) {
+    for (unsigned int i=0; i < data.size() / sizeof(elf32_sym_entry); i++) {
         elf32_sym_entry sym;
         memcpy(&sym, data.data() + i*sizeof(elf32_sym_entry), sizeof(elf32_sym_entry));
         sym_he(sym);    // swap to Host for processing
-        if (&str[sym.name] == sym_name) {
+        if (sym.name >= strings.size()) {
+            continue;
+        }
+        if (std::string(&str[sym.name], strnlen(&str[sym.name], strings.size() - sym.name)) == sym_name) {
             return sym.value;
         }
     }
@@ -491,12 +500,21 @@ uint32_t elf_file::highest_section_offset(void) const {
 
 std::vector<uint8_t> elf_file::content(const elf32_ph_entry &ph) const {
     std::vector<uint8_t> content;
+    if (!in_bounds(ph.offset, ph.filez)) {
+        fail(ERROR_FORMAT, "ELF segment at offset 0x%x with size 0x%x exceeds the file size 0x%zx", ph.offset, ph.filez, elf_bytes.size());
+    }
     std::copy(elf_bytes.begin() + ph.offset, elf_bytes.begin() + ph.offset + ph.filez, std::back_inserter(content));
     return content;
 }
 
 std::vector<uint8_t> elf_file::content(const elf32_sh_entry &sh) const {
     std::vector<uint8_t> content;
+    if (sh.type == SHT_NOBITS) {
+        return content; // occupies no space in the file
+    }
+    if (!in_bounds(sh.offset, sh.size)) {
+        fail(ERROR_FORMAT, "ELF section at offset 0x%x with size 0x%x exceeds the file size 0x%zx", sh.offset, sh.size, elf_bytes.size());
+    }
     std::copy(elf_bytes.begin() + sh.offset, elf_bytes.begin() + sh.offset + sh.size, std::back_inserter(content));
     return content;
 }
@@ -504,6 +522,9 @@ std::vector<uint8_t> elf_file::content(const elf32_sh_entry &sh) const {
 void elf_file::content(const elf32_ph_entry &ph, const std::vector<uint8_t> &content) {
     if (!editable) return;
     assert(content.size() <= ph.filez);
+    if (!in_bounds(ph.offset, ph.filez)) {
+        fail(ERROR_FORMAT, "ELF segment at offset 0x%x with size 0x%x exceeds the file size 0x%zx", ph.offset, ph.filez, elf_bytes.size());
+    }
     if (verbose) printf("Update segment content offset %x content size %zx physical size %x\n", ph.offset, content.size(), ph.filez);
     memcpy(&elf_bytes[ph.offset], &content[0], std::min(content.size(), (size_t) ph.filez));
     read_sh_data(); // Extract the sections after modifying the content
@@ -512,6 +533,9 @@ void elf_file::content(const elf32_ph_entry &ph, const std::vector<uint8_t> &con
 void elf_file::content(const elf32_sh_entry &sh, const std::vector<uint8_t> &content) {
     if (!editable) return;
     assert(content.size() <= sh.size);
+    if (sh.type == SHT_NOBITS || !in_bounds(sh.offset, sh.size)) {
+        fail(ERROR_FORMAT, "ELF section at offset 0x%x with size 0x%x cannot be written", sh.offset, sh.size);
+    }
     if (verbose) printf("Update section content offset %x content size %zx section size %x\n", sh.offset, content.size(), sh.size);
     memcpy(&elf_bytes[sh.offset], &content[0], std::min(content.size(), (size_t) sh.size));
     read_sh_data();  // Extract the sections after modifying the content
