@@ -65,7 +65,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: raspberrypi/pico-sdk
-          ref: develop
+          ref: rpi-connect-preview
           path: pico-sdk
           submodules: ${{ matrix.mbedtls && 'recursive' || 'false' }}
 
@@ -119,7 +119,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: raspberrypi/pico-sdk
-          ref: develop
+          ref: rpi-connect-preview
           path: pico-sdk
           submodules: 'recursive'
       - name: Build and Install
@@ -131,7 +131,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: raspberrypi/pico-examples
-          ref: develop
+          ref: rpi-connect-preview
           path: pico-examples
       - name: Build Pico Examples
         run: |
