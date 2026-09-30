@@ -64,8 +64,10 @@ if (NOT DEFINED USE_PRECOMPILED)
 endif()
 
 
+# BUILD_BYPRODUCTS lists the files the project produces, so rules that depend
+# on them are re-run when they change (depending on the target only orders it)
 function(add_embedded_data_project TARGET)
-    cmake_parse_arguments(PARSE_ARGV 1 OPTS "" "PREFIX;SOURCE_DIR;BINARY_DIR" "CMAKE_ARGS")
+    cmake_parse_arguments(PARSE_ARGV 1 OPTS "" "PREFIX;SOURCE_DIR;BINARY_DIR" "CMAKE_ARGS;BUILD_BYPRODUCTS")
 
     if (USE_PRECOMPILED)
         ExternalProject_Add(${TARGET}
@@ -73,6 +75,7 @@ function(add_embedded_data_project TARGET)
             SOURCE_DIR ${OPTS_SOURCE_DIR}
             BINARY_DIR ${OPTS_BINARY_DIR}
             CMAKE_ARGS ${OPTS_CMAKE_ARGS}
+            BUILD_BYPRODUCTS ${OPTS_BUILD_BYPRODUCTS}
             INSTALL_COMMAND ""
             BUILD_ALWAYS 1
         )
@@ -82,6 +85,7 @@ function(add_embedded_data_project TARGET)
             SOURCE_DIR ${OPTS_SOURCE_DIR}
             BINARY_DIR ${OPTS_BINARY_DIR}
             CMAKE_ARGS ${OPTS_CMAKE_ARGS}
+            BUILD_BYPRODUCTS ${OPTS_BUILD_BYPRODUCTS}
             BUILD_ALWAYS 1
         )
     endif()
@@ -89,6 +93,7 @@ endfunction()
 
 
 # compile enc_bootloader.elf
+set(ENC_BOOTLOADER_ELF ${CMAKE_BINARY_DIR}/enc_bootloader/enc_bootloader.elf)
 add_embedded_data_project(enc_bootloader
         PREFIX enc_bootloader
         SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/enc_bootloader
@@ -99,11 +104,11 @@ add_embedded_data_project(enc_bootloader
             "-DUSE_PRECOMPILED:BOOL=${USE_PRECOMPILED}"
             "-DUSE_MBEDTLS=0"
             "-DPICO_DEBUG_INFO_IN_RELEASE=OFF"
+        BUILD_BYPRODUCTS ${ENC_BOOTLOADER_ELF}
         )
 
-set(ENC_BOOTLOADER_ELF ${CMAKE_BINARY_DIR}/enc_bootloader/enc_bootloader.elf)
-
 if (TARGET mbedtls)
+    set(ENC_BOOTLOADER_MBEDTLS_ELF ${CMAKE_BINARY_DIR}/enc_bootloader_mbedtls/enc_bootloader.elf)
     add_embedded_data_project(enc_bootloader_mbedtls
             PREFIX enc_bootloader_mbedtls
             SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/enc_bootloader
@@ -114,13 +119,13 @@ if (TARGET mbedtls)
                 "-DUSE_PRECOMPILED:BOOL=${USE_PRECOMPILED}"
                 "-DUSE_MBEDTLS=1"
                 "-DPICO_DEBUG_INFO_IN_RELEASE=OFF"
+            BUILD_BYPRODUCTS ${ENC_BOOTLOADER_MBEDTLS_ELF}
             )
-
-    set(ENC_BOOTLOADER_MBEDTLS_ELF ${CMAKE_BINARY_DIR}/enc_bootloader_mbedtls/enc_bootloader.elf)
 endif()
 
 if (NOT PICOTOOL_NO_LIBUSB)
     # compile xip_ram_perms.elf
+    set(XIP_RAM_PERMS_ELF ${CMAKE_BINARY_DIR}/xip_ram_perms/xip_ram_perms.elf)
     add_embedded_data_project(xip_ram_perms
             PREFIX xip_ram_perms
             SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/xip_ram_perms
@@ -130,11 +135,25 @@ if (NOT PICOTOOL_NO_LIBUSB)
                 "-DPICO_SDK_PATH:FILEPATH=${PICO_SDK_PATH}"
                 "-DUSE_PRECOMPILED:BOOL=${USE_PRECOMPILED}"
                 "-DPICO_DEBUG_INFO_IN_RELEASE=OFF"
+            BUILD_BYPRODUCTS ${XIP_RAM_PERMS_ELF}
             )
 
-    set(XIP_RAM_PERMS_ELF ${CMAKE_BINARY_DIR}/xip_ram_perms/xip_ram_perms.elf)
+    # compile rpi_connect_provision.elf
+    set(RPI_CONNECT_PROVISION_ELF ${CMAKE_BINARY_DIR}/rpi_connect_provision/rpi_connect_provision.elf)
+    add_embedded_data_project(rpi_connect_provision
+            PREFIX rpi_connect_provision
+            SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/rpi_connect_provision
+            BINARY_DIR ${CMAKE_BINARY_DIR}/rpi_connect_provision
+            CMAKE_ARGS
+                "-DCMAKE_MAKE_PROGRAM:FILEPATH=${CMAKE_MAKE_PROGRAM}"
+                "-DPICO_SDK_PATH:FILEPATH=${PICO_SDK_PATH}"
+                "-DUSE_PRECOMPILED:BOOL=${USE_PRECOMPILED}"
+                "-DPICO_DEBUG_INFO_IN_RELEASE=OFF"
+            BUILD_BYPRODUCTS ${RPI_CONNECT_PROVISION_ELF}
+            )
 
     # compile flash_id
+    set(FLASH_ID_BIN ${CMAKE_BINARY_DIR}/picoboot_flash_id/flash_id.bin)
     add_embedded_data_project(flash_id
             PREFIX picoboot_flash_id
             SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/picoboot_flash_id
@@ -144,9 +163,8 @@ if (NOT PICOTOOL_NO_LIBUSB)
                 "-DPICO_SDK_PATH:FILEPATH=${PICO_SDK_PATH}"
                 "-DUSE_PRECOMPILED:BOOL=${USE_PRECOMPILED}"
                 "-DPICO_DEBUG_INFO_IN_RELEASE=OFF"
+            BUILD_BYPRODUCTS ${FLASH_ID_BIN}
             )
-
-    set(FLASH_ID_BIN ${CMAKE_BINARY_DIR}/picoboot_flash_id/flash_id.bin)
 
     # We want to generate headers from WELCOME.HTM etc.
     ExternalProject_Add(otp_header_parser
@@ -219,13 +237,22 @@ endif()
 
 add_custom_target(embedded_data DEPENDS
         ${CMAKE_CURRENT_BINARY_DIR}/xip_ram_perms_elf.h
+        ${CMAKE_CURRENT_BINARY_DIR}/rpi_connect_provision_elf.h
         ${CMAKE_CURRENT_BINARY_DIR}/flash_id_bin.h)
+add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/rpi_connect_provision_elf.h
+        COMMAND ${CMAKE_COMMAND}
+            -D BINARY_FILE=${RPI_CONNECT_PROVISION_ELF}
+            -D OUTPUT_NAME=rpi_connect_provision_elf
+            -P ${CMAKE_CURRENT_LIST_DIR}/cmake/binh.cmake
+        DEPENDS rpi_connect_provision ${RPI_CONNECT_PROVISION_ELF}
+        COMMENT "Configuring rpi_connect_provision_elf.h"
+        VERBATIM)
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/xip_ram_perms_elf.h
         COMMAND ${CMAKE_COMMAND}
             -D BINARY_FILE=${XIP_RAM_PERMS_ELF}
             -D OUTPUT_NAME=xip_ram_perms_elf
             -P ${CMAKE_CURRENT_LIST_DIR}/cmake/binh.cmake
-        DEPENDS xip_ram_perms
+        DEPENDS xip_ram_perms ${XIP_RAM_PERMS_ELF}
         COMMENT "Configuring xip_ram_perms_elf.h"
         VERBATIM)
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/enc_bootloader_elf.h
@@ -233,7 +260,7 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/enc_bootloader_elf.h
             -D BINARY_FILE=${ENC_BOOTLOADER_ELF}
             -D OUTPUT_NAME=enc_bootloader_elf
             -P ${CMAKE_CURRENT_LIST_DIR}/cmake/binh.cmake
-        DEPENDS enc_bootloader
+        DEPENDS enc_bootloader ${ENC_BOOTLOADER_ELF}
         COMMENT "Configuring enc_bootloader_elf.h"
         VERBATIM)
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/enc_bootloader_mbedtls_elf.h
@@ -241,7 +268,7 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/enc_bootloader_mbedtls_elf
             -D BINARY_FILE=${ENC_BOOTLOADER_MBEDTLS_ELF}
             -D OUTPUT_NAME=enc_bootloader_mbedtls_elf
             -P ${CMAKE_CURRENT_LIST_DIR}/cmake/binh.cmake
-        DEPENDS enc_bootloader_mbedtls
+        DEPENDS enc_bootloader_mbedtls ${ENC_BOOTLOADER_MBEDTLS_ELF}
         COMMENT "Configuring enc_bootloader_mbedtls_elf.h"
         VERBATIM)
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/flash_id_bin.h
@@ -249,7 +276,7 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/flash_id_bin.h
             -D BINARY_FILE=${FLASH_ID_BIN}
             -D OUTPUT_NAME=flash_id_bin
             -P ${CMAKE_CURRENT_LIST_DIR}/cmake/binh.cmake
-        DEPENDS flash_id
+        DEPENDS flash_id ${FLASH_ID_BIN}
         COMMENT "Configuring flash_id_bin.h"
         VERBATIM)
 
@@ -288,7 +315,7 @@ add_executable(picotool
     main.cpp)
 add_dependencies(picotool embedded_data_no_libusb)
 if (NOT PICOTOOL_NO_LIBUSB)
-    target_sources(picotool PRIVATE get_xip_ram_perms.cpp)
+    target_sources(picotool PRIVATE get_xip_ram_perms.cpp get_rpi_connect_provision.cpp)
     add_dependencies(picotool generate_otp_header embedded_data)
 endif()
 set(PROJECT_VERSION 2.3.2-develop)
@@ -420,6 +447,12 @@ if (NOT PICOTOOL_NO_LIBUSB)
     #Install xip_ram_perms.elf
     install(FILES
         ${XIP_RAM_PERMS_ELF}
+        DESTINATION ${INSTALL_DATADIR}
+    )
+
+    #Install rpi_connect_provision.elf
+    install(FILES
+        ${RPI_CONNECT_PROVISION_ELF}
         DESTINATION ${INSTALL_DATADIR}
     )
 endif()

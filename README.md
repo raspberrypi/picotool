@@ -44,6 +44,7 @@ SYNOPSIS:
                 [-t <type>] [<infile3>] [-t <type>] [-p <pad>]
     picotool tbyb [--quiet] [--verbose] [--clear] <file> [-t <type>] [--block-num <index>]
     picotool bdev ls|mkdir|cp|rm|cat|format
+    picotool provision connect
 
 COMMANDS:
     help        Show general help or help for a specific command
@@ -67,6 +68,7 @@ COMMANDS:
     link        Link multiple binaries into one block loop.
     tbyb        Set TBYB bit on the best block in binary
     bdev        Commands related to embedded block devices
+    provision   Commands related to provisioning devices
 
 Use "picotool help <cmd>" for more info
 ```
@@ -74,7 +76,7 @@ Use "picotool help <cmd>" for more info
 Note commands that aren't acting on files require a device in BOOTSEL mode to be connected.
 
 ## Links to documentation for `picotool` commands
-[`info`](#info) [`config`](#config) [`load`](#load) [`save`](#save) [`verify`](#verify) [`erase`](#erase) [`reboot`](#reboot) [`seal`](#seal) [`encrypt`](#encrypt) [`partition`](#partition) [`uf2`](#uf2) [`otp`](#otp) [`coprodis`](#coprodis) [`link`](#link) [`tbyb`](#tbyb) [`bdev`](#bdev)
+[`info`](#info) [`config`](#config) [`load`](#load) [`save`](#save) [`verify`](#verify) [`erase`](#erase) [`reboot`](#reboot) [`seal`](#seal) [`encrypt`](#encrypt) [`partition`](#partition) [`uf2`](#uf2) [`otp`](#otp) [`coprodis`](#coprodis) [`link`](#link) [`tbyb`](#tbyb) [`bdev`](#bdev) [`provision`](#provision)
 
 ## Building & Installing
 
@@ -2246,6 +2248,126 @@ OPTIONS:
         --bootsel-led-active-low
             The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
 ```
+
+## provision
+
+Support for running provisioning programs in SRAM on devices
+
+### connect
+
+Provision a device for use with Raspberry Pi Connect.
+
+```text
+$ picotool help provision connect
+PROVISION CONNECT:
+    Provision the device for Raspberry Pi Connect, by running a provisioning binary on it from
+    RAM. Secrets are only written into the binary in RAM, never to flash. When done the device
+    flashes its LED (slowly on success, quickly on failure) and reboots to BOOTSEL; output is
+    on its USB and UART consoles
+
+SYNOPSIS:
+    picotool provision connect [--create-identity] [--identity-exchange] [--auth-key <key>]
+                [--signin] [--token <token>] [--clear] [--wifi-only] [--org-token <token>]
+                [--description <text>] [--device-name <name>] [--client-id <uuid>] [--wifi-ssid
+                <ssid>] [--wifi-password <password>] [--uart <uart>] [--uart-tx <pin>]
+                [--uart-rx <pin>] [--uart-baud <baud>] [--led <pin>] [--wl-reg-on <pin>]
+                [--wl-data-out <pin>] [--wl-data-in <pin>] [--wl-host-wake <pin>] [--wl-clock
+                <pin>] [--wl-cs <pin>] [--hash] [--sign] [<key>] [device-selection]
+
+OPTIONS:
+    Operation (exactly one)
+        --create-identity
+            Register the device's OTP identity key with an organisation (requires --org-token),
+            and clear any stored access token so the new identity is used
+        --identity-exchange
+            Exchange the registered OTP identity for an access token, and store it on the
+            device
+        --auth-key <key>
+            Exchange a provisioning auth key for an access token, and store it on the device
+        --signin
+            Sign in with a code shown on the device's console, and store the access token on
+            the device
+        --token <token>
+            Store the given access token on the device
+        --clear
+            Clear the stored access token and any deployment state
+        --wifi-only
+            Only store the WiFi credentials (requires --wifi-ssid)
+    Operation Options
+        --org-token <token>
+            Organisation token, for --create-identity
+        --description <text>
+            Description of the device identity, for --create-identity
+        --device-name <name>
+            Device name (default pico-<board id>)
+        --client-id <uuid>
+            Raspberry Pi Connect client ID (default the SDK's)
+    WiFi Credentials
+        --wifi-ssid <ssid>
+            WiFi network to store on the device before the operation (requires --wifi-password)
+        --wifi-password <password>
+            WiFi password
+    Board Configuration (defaults are for a Pico 2 W)
+        --uart <uart>
+            UART for console output, or -1 for none (default 0)
+        --uart-tx <pin>
+            UART TX pin (default 0)
+        --uart-rx <pin>
+            UART RX pin (default 1)
+        --uart-baud <baud>
+            UART baud rate (default 115200)
+        --led <pin>
+            LED pin to flash when done, or -1 for the wireless chip's LED (default -1)
+        --wl-reg-on <pin>
+            Wireless chip power pin (default 23)
+        --wl-data-out <pin>
+            Wireless chip SPI data out pin (default 24)
+        --wl-data-in <pin>
+            Wireless chip SPI data in pin (default 24)
+        --wl-host-wake <pin>
+            Wireless chip host wake pin (default 24)
+        --wl-clock <pin>
+            Wireless chip SPI clock pin (default 29)
+        --wl-cs <pin>
+            Wireless chip SPI chip select pin (default 25)
+    Signing Configuration
+        --hash
+            Hash the executable
+        --sign
+            Sign the executable
+        <key>
+            Key file (.pem)
+    Target device selection
+        --bus <bus>
+            Filter devices by USB bus number
+        --address <addr>
+            Filter devices by USB device address
+        --vid <vid>
+            Filter by vendor id
+        --pid <pid>
+            Filter by product id
+        --ser <ser>
+            Filter by serial number
+        --rp2040
+            Assume the device is an RP2040 - this is only required when using a custom vid/pid
+            with an RP2040 on Windows, and is ignored on other operating systems
+        -f, --force
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be rebooted back to application mode
+        -F, --force-no-reboot
+            Force a device not in BOOTSEL mode but running compatible code to reset so the
+            command can be executed. After executing the command (unless the command itself is
+            a 'reboot') the device will be left connected and accessible to picotool, but
+            without the USB drive mounted
+        --bootsel-led <gpio>
+            Specify the GPIO for the BOOTSEL activity LED to flash (default none, ignored by
+            RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to
+            BOOTSEL mode
+        --bootsel-led-active-low
+            The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)
+```
+
 
 ## Binary Information
 

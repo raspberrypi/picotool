@@ -38,6 +38,7 @@
 #if HAS_LIBUSB
     #include "picoboot_connection_cxx.h"
     #include "get_xip_ram_perms.h"
+    #include "get_rpi_connect_provision.h"
     #include "lfs.h"
     #include "ff.h"
     #include "diskio.h"
@@ -550,6 +551,9 @@ private:
 #define DEFAULT_BOOTSEL_LED -1
 #endif
 
+// provision integer settings left at this are not configured, keeping the binary's defaults
+constexpr int provision_unset = std::numeric_limits<int>::min();
+
 struct _settings {
     std::array<std::string, 6> filenames;
     std::array<std::string, 6> file_types;
@@ -703,6 +707,33 @@ struct _settings {
         bool force_formattable = false;
         bool force_writeable = false;
     } bdev;
+
+    struct {
+        bool create_identity = false;
+        bool identity_exchange = false;
+        bool signin = false;
+        bool clear = false;
+        bool wifi_only = false;
+        string auth_key;
+        string token;
+        string org_token;
+        string description;
+        string device_name;
+        string client_id;
+        string wifi_ssid;
+        string wifi_password;
+        int uart = provision_unset;
+        int uart_tx = provision_unset;
+        int uart_rx = provision_unset;
+        int uart_baud = provision_unset;
+        int led = provision_unset;
+        int wl_reg_on = provision_unset;
+        int wl_data_out = provision_unset;
+        int wl_data_in = provision_unset;
+        int wl_host_wake = provision_unset;
+        int wl_clock = provision_unset;
+        int wl_cs = provision_unset;
+    } provision;
 };
 _settings settings;
 std::shared_ptr<cmd> selected_cmd;
@@ -1595,6 +1626,76 @@ struct otp_command : public multi_cmd {
 };
 
 #if HAS_LIBUSB
+struct provision_connect_command : public cmd {
+    provision_connect_command() : cmd("connect") {}
+    virtual bool requires_rp2350() const override { return true; }
+
+    bool execute(device_map& devices) override;
+
+    group get_cli() override {
+        auto &p = settings.provision;
+        return (
+                (
+                    option("--create-identity").set(p.create_identity) % "Register the device's OTP identity key with an organisation (requires --org-token), and clear any stored access token so the new identity is used" +
+                    option("--identity-exchange").set(p.identity_exchange) % "Exchange the registered OTP identity for an access token, and store it on the device" +
+                    (option("--auth-key") & value("key").set(p.auth_key)) % "Exchange a provisioning auth key for an access token, and store it on the device" +
+                    option("--signin").set(p.signin) % "Sign in with a code shown on the device's console, and store the access token on the device" +
+                    (option("--token") & value("token").set(p.token)) % "Store the given access token on the device" +
+                    option("--clear").set(p.clear) % "Clear the stored access token and any deployment state" +
+                    option("--wifi-only").set(p.wifi_only) % "Only store the WiFi credentials (requires --wifi-ssid)"
+                ).min(0).doc_non_optional(true) % "Operation (exactly one)" +
+                (
+                    (option("--org-token") & value("token").set(p.org_token)) % "Organisation token, for --create-identity" +
+                    (option("--description") & value("text").set(p.description)) % "Description of the device identity, for --create-identity" +
+                    (option("--device-name") & value("name").set(p.device_name)) % "Device name (default pico-<board id>)" +
+                    (option("--client-id") & value("uuid").set(p.client_id)) % "Raspberry Pi Connect client ID (default the SDK's)"
+                ).min(0).doc_non_optional(true) % "Operation Options" +
+                (
+                    (option("--wifi-ssid") & value("ssid").set(p.wifi_ssid)) % "WiFi network to store on the device before the operation (requires --wifi-password)" +
+                    (option("--wifi-password") & value("password").set(p.wifi_password)) % "WiFi password"
+                ).min(0).doc_non_optional(true) % "WiFi Credentials" +
+                (
+                    (option("--uart") & integer("uart").min_value(-1).max_value(1).set(p.uart)) % "UART for console output, or -1 for none (default 0)" +
+                    (option("--uart-tx") & integer("pin").min_value(-1).max_value(47).set(p.uart_tx)) % "UART TX pin (default 0)" +
+                    (option("--uart-rx") & integer("pin").min_value(-1).max_value(47).set(p.uart_rx)) % "UART RX pin (default 1)" +
+                    (option("--uart-baud") & integer("baud").min_value(1).set(p.uart_baud)) % "UART baud rate (default 115200)" +
+                    (option("--led") & integer("pin").min_value(-1).max_value(47).set(p.led)) % "LED pin to flash when done, or -1 for the wireless chip's LED (default -1)" +
+                    (option("--wl-reg-on") & integer("pin").min_value(0).max_value(47).set(p.wl_reg_on)) % "Wireless chip power pin (default 23)" +
+                    (option("--wl-data-out") & integer("pin").min_value(0).max_value(47).set(p.wl_data_out)) % "Wireless chip SPI data out pin (default 24)" +
+                    (option("--wl-data-in") & integer("pin").min_value(0).max_value(47).set(p.wl_data_in)) % "Wireless chip SPI data in pin (default 24)" +
+                    (option("--wl-host-wake") & integer("pin").min_value(0).max_value(47).set(p.wl_host_wake)) % "Wireless chip host wake pin (default 24)" +
+                    (option("--wl-clock") & integer("pin").min_value(0).max_value(47).set(p.wl_clock)) % "Wireless chip SPI clock pin (default 29)" +
+                    (option("--wl-cs") & integer("pin").min_value(0).max_value(47).set(p.wl_cs)) % "Wireless chip SPI chip select pin (default 25)"
+                ).min(0).doc_non_optional(true) % "Board Configuration (defaults are for a Pico 2 W)" +
+                (
+                    option("--hash").set(settings.seal.hash) % "Hash the executable" +
+                    option("--sign").set(settings.seal.sign) % "Sign the executable" +
+                    optional_untyped_file_selection_x("key", 0) % "Key file (.pem)"
+                ).min(0).doc_non_optional(true) % "Signing Configuration" +
+                device_selection % "Target device selection"
+        );
+    }
+
+    string get_doc() const override {
+        return "Provision the device for Raspberry Pi Connect, by running a provisioning binary on it from RAM. "
+               "Secrets are only written into the binary in RAM, never to flash. When done the device flashes its LED "
+               "(slowly on success, quickly on failure) and reboots to BOOTSEL; output is on its USB and UART consoles";
+    }
+};
+
+vector<std::shared_ptr<cmd>> provision_sub_commands {
+    std::shared_ptr<cmd>(new provision_connect_command()),
+};
+
+struct provision_command : public multi_cmd {
+    provision_command() : multi_cmd("provision", provision_sub_commands) {}
+    string get_doc() const override {
+        return "Commands related to provisioning devices";
+    }
+};
+#endif
+
+#if HAS_LIBUSB
 struct uf2_info_command : public cmd {
     uf2_info_command() : cmd("info") {}
     bool execute(device_map &devices) override;
@@ -1842,6 +1943,9 @@ vector<std::shared_ptr<cmd>> commands {
         std::shared_ptr<cmd>(new tbyb_command()),
     #if HAS_LIBUSB
         std::shared_ptr<cmd>(new bdev_command()),
+    #endif
+    #if HAS_LIBUSB
+        std::shared_ptr<cmd>(new provision_command()),
     #endif
 };
 
@@ -9962,6 +10066,128 @@ bool otp_permissions_command::execute(device_map &devices) {
     load_guts(con, signed_program);
 
     // todo: read back after reboot (requires lots of stuff)
+
+    return true;
+}
+
+bool provision_connect_command::execute(device_map &devices) {
+    auto &p = settings.provision;
+
+    const char *operation = nullptr;
+    int num_operations = 0;
+    for (auto &op : std::vector<std::pair<bool, const char *>>{
+            {p.create_identity, "create_identity"},
+            {p.identity_exchange, "identity_exchange"},
+            {!p.auth_key.empty(), "auth_key"},
+            {p.signin, "signin"},
+            {!p.token.empty(), "store_token"},
+            {p.clear, "clear"},
+            {p.wifi_only, "wifi"}}) {
+        if (op.first) {
+            operation = op.second;
+            num_operations++;
+        }
+    }
+    if (num_operations != 1) {
+        fail(ERROR_ARGS, "Exactly one of --create-identity, --identity-exchange, --auth-key, --signin, --token, --clear or --wifi-only must be specified");
+    }
+    if (p.create_identity && p.org_token.empty()) {
+        fail(ERROR_ARGS, "--create-identity requires --org-token");
+    }
+    if (p.wifi_ssid.empty() != p.wifi_password.empty()) {
+        fail(ERROR_ARGS, "--wifi-ssid and --wifi-password must be specified together");
+    }
+    if (p.wifi_only && p.wifi_ssid.empty()) {
+        fail(ERROR_ARGS, "--wifi-only requires --wifi-ssid");
+    }
+
+#if HAS_MBEDTLS
+    if (settings.seal.sign && settings.filenames[0].empty()) {
+        fail(ERROR_ARGS, "missing key file for signing");
+    }
+    if (!settings.filenames[0].empty() && get_file_type_idx(0) != filetype::pem) {
+        fail(ERROR_ARGS, "Can only read pem keys");
+    }
+#else
+    if (settings.seal.sign) fail(ERROR_NOT_POSSIBLE, "Cannot sign binaries without mbedtls");
+#endif
+
+    auto con = get_single_picoboot_cmd_compatible_device_connection("provision connect", devices, {PC_REBOOT2});
+
+    auto tmp = std::make_shared<std::stringstream>();
+    auto file = get_rpi_connect_provision();
+    *tmp << file->rdbuf();
+
+    auto program = get_iostream_memory_access<iostream_memory_access>(tmp, filetype::elf, true);
+    program.set_model(std::make_unique<model_rp2350>());
+
+    // {group, key, value} to configure; empty values keep the binary's defaults
+    std::vector<std::tuple<string, string, string>> config = {
+        {"provision", "operation", operation},
+        {"provision", "org_token", p.org_token},
+        {"provision", "auth_key", p.auth_key},
+        {"provision", "token", p.token},
+        {"provision", "description", p.description},
+        {"provision", "device_name", p.device_name},
+        {"provision", "client_id", p.client_id},
+        {"provision", "wifi_ssid", p.wifi_ssid},
+        {"provision", "wifi_password", p.wifi_password},
+    };
+    for (auto &i : std::vector<std::tuple<string, string, int>>{
+            {"uart_config", "uart", p.uart},
+            {"uart_config", "uart_tx", p.uart_tx},
+            {"uart_config", "uart_rx", p.uart_rx},
+            {"uart_config", "uart_baud", p.uart_baud},
+            {"led_config", "led", p.led},
+            {"cyw43_config", "wl_reg_on", p.wl_reg_on},
+            {"cyw43_config", "wl_data_out", p.wl_data_out},
+            {"cyw43_config", "wl_data_in", p.wl_data_in},
+            {"cyw43_config", "wl_host_wake", p.wl_host_wake},
+            {"cyw43_config", "wl_clock", p.wl_clock},
+            {"cyw43_config", "wl_cs", p.wl_cs}}) {
+        if (std::get<2>(i) != provision_unset) {
+            config.emplace_back(std::get<0>(i), std::get<1>(i), std::to_string(std::get<2>(i)));
+        }
+    }
+
+    // config_guts echoes each value, which would print the secrets
+    fos_ptr = fos_null_ptr;
+    try {
+        for (auto &c : config) {
+            if (std::get<2>(c).empty()) continue;
+            settings.config.group = std::get<0>(c);
+            settings.config.key = std::get<1>(c);
+            settings.config.value = std::get<2>(c);
+            config_guts(program);
+        }
+    } catch (...) {
+        fos_ptr = fos_base_ptr;
+        throw;
+    }
+    fos_ptr = fos_base_ptr;
+
+#if HAS_MBEDTLS
+    private_t private_key = {};
+    public_t public_key = {};
+    if (settings.seal.sign) read_keys(settings.filenames[0], &public_key, &private_key);
+
+    elf_file source_file(settings.verbose);
+    elf_file *elf = &source_file;
+    elf->read_file(tmp);
+    sign_guts_elf(elf, private_key, public_key, program.get_model());
+    auto out = std::make_shared<std::stringstream>();
+    elf->write(out);
+
+    auto signed_program = get_iostream_memory_access<iostream_memory_access>(out, filetype::elf, true);
+#else
+    auto signed_program = get_iostream_memory_access<iostream_memory_access>(tmp, filetype::elf, true);
+#endif
+
+    fos << "Provisioning operation: " << operation << "\n";
+    settings.load.execute = true;
+    load_guts(con, signed_program);
+    fos << "Provisioning output is on the device's USB and UART consoles. When done, its LED flashes "
+           "(slowly on success, quickly on failure) and it reboots to BOOTSEL.\n";
 
     return true;
 }
