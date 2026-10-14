@@ -105,7 +105,7 @@
                                 "enum": ["a", "owner" , "none"]
                             },
                             {
-                                "description": "Link Value",
+                                "description": "Link Value - negative values are relative to this partition (e.g. -1 links to the previous partition)",
                                 "type": "integer"
                             }
                         ]

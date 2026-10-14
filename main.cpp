@@ -8128,6 +8128,14 @@ bool partition_create_command::execute(device_map &devices) {
             } else {
                 fail(ERROR_INCOMPATIBLE, "Link type \"%s\" is not recognised\n", link_type.c_str());
             }
+            if (link_value < 0) {
+                // Negative link values are relative to this partition, e.g. -1 links to the previous partition
+                int link_offset = link_value;
+                link_value += (int)pt.partitions.size();
+                if (link_value < 0) {
+                    fail(ERROR_INCOMPATIBLE, "Partition %d link value %d is out of range - can't link before partition 0\n", (int)pt.partitions.size(), link_offset);
+                }
+            }
             new_p.flags |= (link_value << PICOBIN_PARTITION_FLAGS_LINK_VALUE_LSB) & PICOBIN_PARTITION_FLAGS_LINK_VALUE_BITS;
         }
         if (p.contains("name")) {
