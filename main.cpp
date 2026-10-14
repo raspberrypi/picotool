@@ -2608,35 +2608,36 @@ struct picoboot_memory_access : public memory_access {
                         break;
                     }
                 }
+                // Flash writes must be in whole pages, and erases in whole sectors, so
+                // expand to an aligned range, preserving the existing surrounding data
+                uint32_t alignment = do_erase ? FLASH_SECTOR_ERASE_SIZE : PAGE_SIZE;
+                range aligned_range(address & ~(alignment - 1),
+                                    (address + size + alignment - 1) & ~(alignment - 1));
+                assert(aligned_range.contains(address));
+                assert(aligned_range.contains(address + size - 1));
+
+                uint32_t pre_len = address - aligned_range.from;
+                uint32_t post_len = aligned_range.to - (address + size);
+                assert(pre_len + size + post_len == aligned_range.len());
+
+                // save data before the changing data
+                write_data.resize(pre_len);
+                if (pre_len) read(aligned_range.from, write_data.data(), write_data.size(), false);
+                // now add the data that is changing
+                write_data.insert(write_data.end(), buffer, buffer + size);
+                // save data after the changing data
+                write_data.resize(aligned_range.len());
+                if (post_len) read(address + size, write_data.data() + pre_len + size, post_len, false);
+
+                // Automatically erase flash, if needed
                 if (do_erase) {
-                    // Automatically erase flash, and make it aligned
-                    // we have to erase in whole pages
-                    range aligned_range(address & ~(FLASH_SECTOR_ERASE_SIZE - 1),
-                                        ((address + size) & ~(FLASH_SECTOR_ERASE_SIZE - 1)) + FLASH_SECTOR_ERASE_SIZE);
-                    assert(aligned_range.contains(address));
-                    assert(aligned_range.contains(address + size));
-
-                    uint32_t pre_len = address - aligned_range.from;
-                    uint32_t post_len = aligned_range.to - (address + size);
-                    assert(pre_len + size + post_len == aligned_range.len());
-
-                    // save data before the changing data
-                    write_data.resize(pre_len);
-                    if (pre_len) read(aligned_range.from, write_data.data(), write_data.size(), false);
-                    // now add the data that is changing
-                    write_data.insert(write_data.end(), buffer, buffer + size);
-                    // save data after the changing data
-                    write_data.resize(aligned_range.len());
-                    if (post_len) read(address + size, write_data.data() + pre_len + size, post_len, false);
-
-                    // Do the erase
                     connection.flash_erase(aligned_range.from, aligned_range.len());
-
-                    // Update what will now be written
-                    address = aligned_range.from;
-                    buffer = write_data.data();
-                    size = aligned_range.len();
                 }
+
+                // Update what will now be written
+                address = aligned_range.from;
+                buffer = write_data.data();
+                size = aligned_range.len();
             }
         }
         if (is_transfer_aligned(address, model) && is_transfer_aligned(address + size, model)) {
