@@ -166,7 +166,7 @@ void der_to_raw(signature_t *sig) {
         memcpy(r, sig->der + 4, 32);
     } else {
         memset(r, 0, sizeof(r));
-        memcpy(r + (32 - b2), sig->der + 4, (32 - b2));
+        memcpy(r + (32 - b2), sig->der + 4, b2);
     }
 
     unsigned char s[32];
@@ -176,7 +176,7 @@ void der_to_raw(signature_t *sig) {
         memcpy(s, sig->der + 6 + b2, 32);
     } else {
         memset(s, 0, sizeof(r));
-        memcpy(s + (32 - b3), sig->der + 6 + b2, (32 - b3));
+        memcpy(s + (32 - b3), sig->der + 6 + b2, b3);
     }
 
     memset(sig->bytes, 0, sizeof(sig->bytes));
