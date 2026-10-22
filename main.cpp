@@ -710,7 +710,7 @@ auto device_selection =
             .if_missing([] { return "missing bus number"; })) % "Filter devices by USB bus number" +
         (option("--address") & integer("addr").min_value(1).max_value(127).set(settings.address)
             .if_missing([] { return "missing address"; })) % "Filter devices by USB device address" +
-        (option("--vid") & integer("vid").set(settings.vid).min(1).if_missing([] { return "missing vid"; })) % "Filter by vendor id" +
+        (option("--vid") & integer("vid").set(settings.vid).if_missing([] { return "missing vid"; })) % "Filter by vendor id" +
         (option("--pid") & integer("pid").set(settings.pid)) % "Filter by product id" +
         (option("--ser") & value("ser").set(settings.ser)) % "Filter by serial number"
         + option("--rp2040").set(settings.force_rp2040) % "Assume the device is an RP2040 - this is only required when using a custom vid/pid with an RP2040 on Windows, and is ignored on other operating systems"
@@ -1813,7 +1813,7 @@ struct list_command : public cmd {
     }
 
     string get_doc() const override {
-        return "List all connected RP-series devices";
+        return "List all connected RP-series devices that picotool can detect";
     }
 };
 
@@ -4542,7 +4542,8 @@ void config_guts(memory_access &raw_access) {
 
 string missing_device_string(bool wasRetry, bool requires_rp2350 = false) {
     char b[256];
-    const char* device_name = requires_rp2350 ? "RP2350" : "RP-series";
+    const char* device_name = settings.target_debugprobe ? "DebugProbe" : requires_rp2350 ? "RP2350" : "RP-series";
+    const char* mode = settings.only_force ? "with a USB reset interface" : "in BOOTSEL mode";
     if (wasRetry) {
         strcpy(b, "Despite the reboot attempt, no ");
     } else {
@@ -4552,24 +4553,26 @@ string missing_device_string(bool wasRetry, bool requires_rp2350 = false) {
     int buf_len = b + sizeof(b) - buf;
     if (settings.address != -1) {
         if (settings.bus != -1) {
-            snprintf(buf, buf_len, "accessible %s device in BOOTSEL mode was found at bus %d, address %d.", device_name, settings.bus, settings.address);
+            snprintf(buf, buf_len, "accessible %s device %s was found at bus %d, address %d.", device_name, mode, settings.bus, settings.address);
         } else {
-            snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found with address %d.", device_name, settings.address);
+            snprintf(buf, buf_len, "accessible %s devices %s were found with address %d.", device_name, mode, settings.address);
         }
     } else if (settings.bus != -1) {
-        snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found on bus %d.", device_name, settings.bus);
+        snprintf(buf, buf_len, "accessible %s devices %s were found on bus %d.", device_name, mode, settings.bus);
+    } else if (settings.target_debugprobe) {
+        snprintf(buf, buf_len, "accessible %s devices %s were found.", device_name, mode);
     } else if (settings.vid > 0) {
         if (settings.pid != -1) {
-            snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found with vid %04x, pid %04x.", device_name, settings.vid, settings.pid);
+            snprintf(buf, buf_len, "accessible %s devices %s were found with vid %04x, pid %04x.", device_name, mode, settings.vid, settings.pid);
         } else {
-            snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found with vid %04x.", device_name, settings.vid);
+            snprintf(buf, buf_len, "accessible %s devices %s were found with vid %04x.", device_name, mode, settings.vid);
         }
     } else if (settings.pid != -1) {
-        snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found with pid %04x.", device_name, settings.pid);
+        snprintf(buf, buf_len, "accessible %s devices %s were found with pid %04x.", device_name, mode, settings.pid);
     } else if (!settings.ser.empty()) {
-        snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found with serial number %s.", device_name, settings.ser.c_str());
+        snprintf(buf, buf_len, "accessible %s devices %s were found with serial number %s.", device_name, mode, settings.ser.c_str());
     } else {
-        snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found.", device_name);
+        snprintf(buf, buf_len, "accessible %s devices %s were found.", device_name, mode);
     }
     return b;
 }
@@ -10255,7 +10258,7 @@ bool reboot_command::execute(device_map &devices) {
     return true;
 }
 
-static void print_device_info(device_map &devices, bool had_note=false, bool include_bootsel=false) {
+static void print_device_info(device_map &devices, bool had_note=false, bool listing=false) {
     auto printer = [&](enum picoboot_device_result r, const string &description) {
         if (!had_note && !devices[r].empty()) {
             fos << "\nbut:\n\n";
@@ -10273,7 +10276,7 @@ static void print_device_info(device_map &devices, bool had_note=false, bool inc
     } else if (settings.only_force) {
         printer(dr_vidpid_bootrom_ok,
                 " appears to already be in BOOTSEL mode, but --force-ignore-bootsel was passed so this is only targetting devices not already in BOOTSEL mode.");
-    } else if (include_bootsel) {
+    } else if (listing) {
         printer(dr_vidpid_bootrom_ok,
                 " appears to be in BOOTSEL mode.");
     }
@@ -10337,7 +10340,7 @@ bool list_command::execute(device_map &devices) {
         }
     }
 
-    fos << "Detected " << num_devices << " RP-series devices:\n\n";
+    fos << "Detected " << num_devices << (num_devices == 1 ? " device" : " devices") << (num_devices ? ":\n\n" : "\n");
     fos.first_column(2);
     fos.hanging_indent(4);
     fos.paragraph_spacing(1);
@@ -10419,16 +10422,6 @@ int main(int argc, char **argv) {
 #if HAS_LIBUSB
     libusb_context *ctx = nullptr;
 
-    if (settings.target_debugprobe) {
-        if (settings.vid >= 0 || settings.pid >= 0) fail(ERROR_ARGS, "Cannot pass --debugprobe along with --vid or --pid");
-        settings.vid = VENDOR_ID_RASPBERRY_PI;
-        settings.pid = PRODUCT_ID_DEBUGPROBE;
-        settings.only_force = true;
-    }
-
-    // save complicating the grammar
-    if (settings.force_no_reboot || settings.only_force) settings.force = true;
-
     struct libusb_device **devs = nullptr;
     device_map devices;
     vector<libusb_device_handle *> to_close;
@@ -10440,6 +10433,16 @@ int main(int argc, char **argv) {
         if (settings.reboot_usb && settings.reboot_app_specified) {
             fail(ERROR_ARGS, "Cannot specify both -u and -a reboot options");
         }
+
+        if (settings.target_debugprobe) {
+            if (settings.vid >= 0 || settings.pid >= 0) fail(ERROR_ARGS, "Cannot pass --debugprobe along with --vid or --pid");
+            settings.vid = VENDOR_ID_RASPBERRY_PI;
+            settings.pid = PRODUCT_ID_DEBUGPROBE;
+            settings.only_force = true;
+        }
+
+        // save complicating the grammar
+        if (settings.force_no_reboot || settings.only_force) settings.force = true;
 
         if (selected_cmd->get_device_support() != cmd::none) {
             if (libusb_init(&ctx)) {
@@ -10517,8 +10520,9 @@ int main(int argc, char **argv) {
                             break;
                         }
                     } else if (supported == cmd::device_support::one) {
-                        if (devices[dr_vidpid_bootrom_ok].size() > 1 ||
-                            (devices[dr_vidpid_bootrom_ok].empty() && devices[dr_vidpid_usb_reset].size() > 1)) {
+                        if (settings.only_force ? devices[dr_vidpid_usb_reset].size() > 1 :
+                            (devices[dr_vidpid_bootrom_ok].size() > 1 ||
+                             (devices[dr_vidpid_bootrom_ok].empty() && devices[dr_vidpid_usb_reset].size() > 1))) {
                             fail(ERROR_NOT_POSSIBLE, "Command requires a single RP-series device to be targeted.");
                         }
                         if (!devices[dr_vidpid_bootrom_ok].empty() && !settings.only_force) {

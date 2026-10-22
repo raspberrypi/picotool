@@ -57,7 +57,7 @@ COMMANDS:
     verify      Check that the device contents match those in the file.
     erase       Erase the program / memory stored in flash on the device.
     reboot      Reboot the device.
-    list        List all connected RP-series devices
+    list        List all connected RP-series devices that picotool can detect
     seal        Add final metadata to a binary, optionally including a hash and/or signature.
     encrypt     Encrypt the program.
     partition   Commands related to RP2350 Partition Tables.
@@ -544,12 +544,12 @@ OPTIONS:
 
 ## list
 
-`list` allows you to list all connected RP-series devices
+`list` allows you to list all connected RP-series devices that picotool can detect
 
 ```text
 $ picotool help list
 LIST:
-    List all connected RP-series devices
+    List all connected RP-series devices that picotool can detect
 
 SYNOPSIS:
     picotool list 
@@ -559,7 +559,7 @@ For example, with a DebugProbe and an RP2350 connected:
 
 ```text
 $ picotool list
-Detected 2 RP-series devices:
+Detected 2 devices:
 
   RP2350 device at bus 1, address 31 appears to have a USB reset interface, so consider -f (or
       -F) to force reboot in order to run the command.
@@ -573,7 +573,7 @@ Then after running `picotool reboot -f -u`:
 
 ```text
 $ picotool list
-Detected 2 RP-series devices:
+Detected 2 devices:
 
   RP2350 device at bus 1, address 33 appears to be in BOOTSEL mode.
 
@@ -586,7 +586,7 @@ And also running `picotool reboot --debugprobe -u`:
 
 ```text
 $ picotool list
-Detected 2 RP-series devices:
+Detected 2 devices:
 
   RP2040 device at bus 1, address 34 appears to be in BOOTSEL mode.
 

@@ -110,7 +110,8 @@ enum picoboot_device_result picoboot_open_device(libusb_device *device, libusb_d
             if (checking_for_debugprobe) {
                 // Special case - if you pass --debugprobe but there is an RP2040 in bootsel mode,
                 // treat that as a match so it returns dr_vidpid_bootrom_ok - it will not pick
-                // that anyway, 
+                // that anyway, as --debugprobe sets only_force so BOOTSEL devices are ignored,
+                // but this means it can be reported to the user in the no device found message
                 if (!match_vid || !(match_pid || desc.idProduct == PRODUCT_ID_RP2040_USBBOOT)) {
                     return dr_vidpid_unknown;
                 } else {
@@ -164,7 +165,7 @@ enum picoboot_device_result picoboot_open_device(libusb_device *device, libusb_d
                 return dr_vidpid_stdio_usb_cant_connect;
             } else if (res == dr_vidpid_debugprobe || checking_for_debugprobe) {
                 return dr_vidpid_debugprobe_cant_connect;
-            } else if (res = dr_vidpid_bootrom_ok) {
+            } else if (res == dr_vidpid_bootrom_ok) {
                 return dr_vidpid_bootrom_cant_connect;
             } else {
                 return dr_vidpid_cant_connect;

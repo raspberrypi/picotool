@@ -33,6 +33,8 @@ extern "C" {
 enum picoboot_device_result {
     // For these comments, selected vid/pid means either BOOTSEL vid/pid, stdio_usb vid/pid, or vid/pid was passed to picoboot_open_device
     // (e.g. by passing --vid, --pid, or --debugprobe)
+    //
+    // NOTE: the order of this enum matters
 
     // Devices that can be used by picotool
     dr_vidpid_bootrom_ok,               // selected vid/pid has a picoboot interface (i.e. device in BOOTSEL)
@@ -52,6 +54,7 @@ enum picoboot_device_result {
     // Special known pids that require extra detection (e.g. USB reset interface)
     dr_vidpid_debugprobe,               // debugprobe vid/pid, with a USB reset interface - only returned when not searching for debugprobe vid/pid
 
+    // Everything below here is never a target device
     // Other known pids for no device found messages
     dr_vidpid_micropython,              // micropython vid/pid
     dr_vidpid_circuitpython,            // circuitpython vid/pid
