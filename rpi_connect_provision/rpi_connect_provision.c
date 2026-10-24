@@ -62,14 +62,15 @@
 #include "mbedtls/ecp.h"
 #include "mbedtls/ctr_drbg.h"
 #include "mbedtls/entropy.h"
+#include "mbedtls/platform_util.h"
 
-#include "connect_crypto.h"
 #include "pico/binary_info.h"
 #include "pico/bootrom.h"
 #include "pico/cyw43_arch.h"
 #include "pico/cyw43_driver.h"
 #include "pico/ffs.h"
 #include "pico/rpi_connect.h"
+#include "pico/rpi_connect_identity.h"
 #include "pico/rpi_connect_ota.h"
 #include "pico/stdlib.h"
 #include "pico/unique_id.h"
@@ -224,17 +225,15 @@ static int store_token(const char *new_token) {
     return 0;
 }
 
-static int read_identity_key(unsigned char privkey[RPI_CONNECT_CRYPTO_P256_PRIVKEY_SIZE], bool create_if_empty) {
-    int ret = rpi_connect_ota_read_identity_key_otp(RPI_CONNECT_IDENTITY_OTP_ROW, privkey);
-    if (ret != 0) {
-        printf("Checking for existing key failed - rpi_connect_ota_read_identity_key_otp returned %d\n", ret);
-        return ret;
-    }
-    for (size_t i = 0; i < RPI_CONNECT_CRYPTO_P256_PRIVKEY_SIZE; i++) {
-        if (privkey[i] != 0) {
-            // Key is programmed
-            return 0;
-        }
+// Size of the raw P-256 private key written to OTP
+#define IDENTITY_PRIVKEY_SIZE 32
+
+// Make sure there is an identity key in OTP, generating one if create_if_empty is set.
+// Generating the key is the only time the private key is handled here; afterwards it is
+// only used via the rpi_connect_identity functions.
+static int ensure_identity_key(bool create_if_empty) {
+    if (rpi_connect_identity_key_available()) {
+        return 0;
     }
 
     if (!create_if_empty) {
@@ -244,6 +243,7 @@ static int read_identity_key(unsigned char privkey[RPI_CONNECT_CRYPTO_P256_PRIVK
 
     printf("No identity key in OTP - generating one\n");
 
+    unsigned char privkey[IDENTITY_PRIVKEY_SIZE];
     mbedtls_ecp_keypair key;
     mbedtls_ctr_drbg_context ctr_drbg;
     mbedtls_entropy_context entropy;
@@ -252,7 +252,7 @@ static int read_identity_key(unsigned char privkey[RPI_CONNECT_CRYPTO_P256_PRIVK
     mbedtls_ctr_drbg_init(&ctr_drbg);
     mbedtls_entropy_init(&entropy);
 
-    ret = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy, NULL, 0);
+    int ret = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy, NULL, 0);
     if (ret != 0) {
         printf("Seeding entropy failed -  mbedtls_ctr_drbg_seed returned %d\n", ret);
         goto cleanup;
@@ -263,13 +263,22 @@ static int read_identity_key(unsigned char privkey[RPI_CONNECT_CRYPTO_P256_PRIVK
         goto cleanup;
     }
 
-    ret = mbedtls_ecp_write_key(&key, privkey, RPI_CONNECT_CRYPTO_P256_PRIVKEY_SIZE);
+    ret = mbedtls_ecp_write_key(&key, privkey, sizeof(privkey));
     if (ret != 0) {
         printf("Reading key failed - mbedtls_ecp_write_key returned %d\n", ret);
         goto cleanup;
     }
 
+    printf("Private key generated - writing to OTP\n");
+    otp_cmd_t cmd;
+    cmd.flags = RPI_CONNECT_IDENTITY_OTP_ROW | OTP_CMD_ECC_BITS | OTP_CMD_WRITE_BITS;
+    ret = rom_func_otp_access(privkey, sizeof(privkey), cmd);
+    if (ret) {
+        printf("ECC Write failed - rom_func_otp_access returned %d\n", ret);
+    }
+
 cleanup:
+    mbedtls_platform_zeroize(privkey, sizeof(privkey));
     mbedtls_ecp_keypair_free(&key);
     mbedtls_ctr_drbg_free(&ctr_drbg);
     mbedtls_entropy_free(&entropy);
@@ -278,36 +287,22 @@ cleanup:
         return ret;
     }
 
-    printf("Private key generated - writing to OTP\n");
-    otp_cmd_t cmd;
-    cmd.flags = RPI_CONNECT_IDENTITY_OTP_ROW | OTP_CMD_ECC_BITS | OTP_CMD_WRITE_BITS;
-    ret = rom_func_otp_access(privkey, RPI_CONNECT_CRYPTO_P256_PRIVKEY_SIZE, cmd);
-    if (ret) {
-        printf("ECC Write failed - rom_func_otp_access returned %d\n", ret);
-        return ret;
+    // Check the key can now be read back out of OTP
+    if (!rpi_connect_identity_key_available()) {
+        printf("Identity key not found in OTP after writing it\n");
+        return -1;
     }
-
-    // Re-read key out of OTP and return
-    return rpi_connect_ota_read_identity_key_otp(RPI_CONNECT_IDENTITY_OTP_ROW, privkey);
+    return 0;
 }
 
 static int create_identity(void) {
-    unsigned char privkey[RPI_CONNECT_CRYPTO_P256_PRIVKEY_SIZE];
-    if (read_identity_key(privkey, true)) {
+    if (ensure_identity_key(true)) {
         return -1;
     }
 
-    // Registering the public key derived from the OTP private key makes this
+    // This registers the public key of the OTP identity key, which makes this
     // identity, by construction, one the device can later prove it owns.
-    char *pubkey_pem = rpi_connect_crypto_ecdsa_p256_pubkey_pem(privkey);
-    if (!pubkey_pem) {
-        printf("Failed to derive public key\n");
-        return -1;
-    }
-
-    char *id = rpi_connect_create_device_identity(org_token, privkey, pubkey_pem,
-                                                  description, device_name);
-    free(pubkey_pem);
+    char *id = rpi_connect_create_device_identity(org_token, description, device_name);
     if (!id) {
         printf("Failed to create device identity\n");
         return -1;
@@ -326,21 +321,13 @@ static int create_identity(void) {
 }
 
 static int identity_exchange(void) {
-    unsigned char privkey[RPI_CONNECT_CRYPTO_P256_PRIVKEY_SIZE];
-    if (read_identity_key(privkey, false)) {
-        return -1;
-    }
-
-    char *pubkey_pem = rpi_connect_crypto_ecdsa_p256_pubkey_pem(privkey);
-    if (!pubkey_pem) {
-        printf("Failed to derive public key\n");
+    if (ensure_identity_key(false)) {
         return -1;
     }
 
     char *device_id = NULL;
     char *new_token = rpi_connect_device_identity_exchange(
-        client_id, privkey, pubkey_pem, device_name, serial_number, &device_id);
-    free(pubkey_pem);
+        client_id, device_name, serial_number, &device_id);
     if (!new_token) {
         printf("Device identity exchange failed\n");
         free(device_id);
