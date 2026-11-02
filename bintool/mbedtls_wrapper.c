@@ -36,8 +36,6 @@ static void dump_pubkey(const char *title, mbedtls_ecdsa_context *key)
 #define dump_pubkey(...) ((void)0)
 #endif
 
-#define assert_or_return(assertion, retval) assert(assertion); if (!(assertion)) return retval;
-
 void mb_sha256_buffer(const uint8_t *data, size_t len, message_digest_t *digest_out) {
     mbedtls_sha256(data, len, digest_out->bytes, 0);
 }

@@ -695,7 +695,7 @@ OPTIONS:
 
 `reseal` allows you to modify the signature of a binary that has already been sealed with `seal`.
 
-This can be used for signing binaries without passing the private key to `picotool`, for example when using hardware security modules, or password-protected private keys. As with `seal`, your signing key must be for the _secp256k1_ curve, the public key must be in the PEM format, and the signature must be in the DER format.
+This can be used for signing binaries without passing the private key to `picotool`, for example when using hardware security modules, or password-protected private keys. As with `seal`, your signing key must be for the _secp256k1_ curve, the public key must be in the PEM or DER format, and the signature must be in the DER format.
 
 For an example, to generate a password-protected private key and corresponding public key, you could use the following commands:
 ```text

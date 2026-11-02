@@ -5820,7 +5820,10 @@ void output_otp_secure_boot(uint8_t idx, public_t public_key) {
             DEBUG_LOG("Found unused key index %d\n", key_idx);
             break;
         }
-        
+    }
+
+    if (key_idx >= 4) {
+        fail(ERROR_NOT_POSSIBLE, "All 4 bootkeys in %s are already used by other keys", settings.filenames[idx].c_str());
     }
 
     std::stringstream bootkey;
@@ -6200,7 +6203,11 @@ bool encrypt_command::execute(device_map &devices) {
         if (get_file_type_idx(5) != filetype::json) {
             fail(ERROR_ARGS, "Can only output OTP json");
         }
-        output_otp_secure_boot(5, public_key);
+        if (settings.seal.external_sign) {
+            fos << "Not writing bootkey to OTP JSON as external signing in use\n";
+        } else if (settings.seal.sign) {
+            output_otp_secure_boot(5, public_key);
+        }
         auto check_json_file = std::ifstream(settings.filenames[5]);
         json otp_json;
         if (check_json_file.good()) {
@@ -6330,6 +6337,9 @@ bool encrypt_command::execute(device_map &devices) {
         set_model_from_metadata(access);
         vector<uint8_t> bin;
         std::unique_ptr<block> last_block = find_last_block(access, bin);
+        if (last_block == nullptr) {
+            fail(ERROR_NOT_POSSIBLE, "Last block not found");
+        }
         std::shared_ptr<hash_value_item> hash_value = last_block->get_item<hash_value_item>();
         if(hash_value != nullptr) {
             if (!settings.filenames[4].empty()) {
@@ -6337,14 +6347,11 @@ bool encrypt_command::execute(device_map &devices) {
                 hash_out->write((const char *)hash_value->hash_bytes.data(), hash_value->hash_bytes.size());
                 hash_out->close();
             }
-            std::stringstream val;
-            for(uint8_t i : hash_value->hash_bytes) {
-                val << hex_string(i, 2, false, true);
-            }
-            if (settings.quiet) {
-                // Just print hash value
-                printf("%s\n", val.str().c_str());
-            } else {
+            if (!settings.quiet) {
+                std::stringstream val;
+                for(uint8_t i : hash_value->hash_bytes) {
+                    val << hex_string(i, 2, false, true);
+                }
                 fos.first_column(0);
                 fos.hanging_indent(0);
                 fos << "\nHash value for external signing: " << val.str() << "\n";
@@ -6361,7 +6368,8 @@ bool reseal_command::execute(device_map &devices) {
         fail(ERROR_ARGS, "Can only read der signatures");
     }
 
-    // pubkey is a special extension used by the SDK, to indicate a PEM or DER file
+    // pubkey is a special extension used by the SDK, to indicate a PEM or DER file,
+    // as read_keys doesn't look at the extension
     if (!(get_file_type_idx(2) == filetype::pem ||
         get_file_type_idx(2) == filetype::der ||
         get_file_type_idx(2) == filetype::pubkey
@@ -6379,6 +6387,9 @@ bool reseal_command::execute(device_map &devices) {
     sigfile->exceptions(std::iostream::failbit | std::iostream::badbit);
     sigfile->seekg(0, std::ios::end);
     signature.der_len = sigfile->tellg();
+    if (signature.der_len > sizeof(signature.der)) {
+        fail(ERROR_ARGS, "Signature file is too large to be a DER signature");
+    }
     sigfile->seekg(0, std::ios::beg);
     sigfile->read((char*)signature.der, signature.der_len);
     sigfile->close();
@@ -6407,6 +6418,9 @@ bool reseal_command::execute(device_map &devices) {
     std::shared_ptr<hash_value_item> hash_item = last_block->get_item<hash_value_item>();
     if (hash_item == nullptr) {
         fail(ERROR_NOT_POSSIBLE, "Last block does not contain a hash value item");
+    }
+    if (hash_item->hash_bytes.size() != sizeof(message_digest_t::bytes)) {
+        fail(ERROR_NOT_POSSIBLE, "Hash value item is not a full SHA-256 hash");
     }
     message_digest_t sha256;
     memcpy(sha256.bytes, hash_item->hash_bytes.data(), sizeof(sha256.bytes));
@@ -6563,7 +6577,11 @@ bool seal_command::execute(device_map &devices) {
     }
 
     if (settings.seal.sign && !settings.filenames[3].empty()) {
-        output_otp_secure_boot(3, public_key);
+        if (settings.seal.external_sign) {
+            fos << "Not writing bootkey to OTP JSON as external signing in use\n";
+        } else {
+            output_otp_secure_boot(3, public_key);
+        }
     }
 
     if (!settings.quiet) {
@@ -6579,6 +6597,9 @@ bool seal_command::execute(device_map &devices) {
         set_model_from_metadata(access);
         vector<uint8_t> bin;
         std::unique_ptr<block> last_block = find_last_block(access, bin);
+        if (last_block == nullptr) {
+            fail(ERROR_NOT_POSSIBLE, "Last block not found");
+        }
         std::shared_ptr<hash_value_item> hash_value = last_block->get_item<hash_value_item>();
         if(hash_value != nullptr) {
             if (!settings.filenames[2].empty()) {
