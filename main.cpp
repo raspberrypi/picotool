@@ -8051,9 +8051,9 @@ bool partition_create_command::execute(device_map &devices) {
             if (new_p.extra_families.size() > PICOBIN_PARTITION_MAX_EXTRA_FAMILIES) {
                 fail(ERROR_NOT_POSSIBLE, "Too many extra families - max permitted is %d", PICOBIN_PARTITION_MAX_EXTRA_FAMILIES);
             }
-            DEBUG_LOG("Num extra families %d %x\n", (int)new_p.extra_families.size(), (int)(new_p.extra_families.size() << PICOBIN_PARTITION_FLAGS_ACCEPTS_NUM_EXTRA_FAMILIES_LSB));
-            new_p.flags |= new_p.extra_families.size() << PICOBIN_PARTITION_FLAGS_ACCEPTS_NUM_EXTRA_FAMILIES_LSB;
         }
+        DEBUG_LOG("Num extra families %d %x\n", (int)new_p.extra_families.size(), (int)(new_p.extra_families.size() << PICOBIN_PARTITION_FLAGS_ACCEPTS_NUM_EXTRA_FAMILIES_LSB));
+        new_p.flags |= new_p.extra_families.size() << PICOBIN_PARTITION_FLAGS_ACCEPTS_NUM_EXTRA_FAMILIES_LSB;
         DEBUG_LOG("Permissions %08x\n", new_p.permissions);
         if (p.contains("link")) {
             string link_type = p["link"][0];
