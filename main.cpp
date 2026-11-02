@@ -414,43 +414,31 @@ using cli::integer;
 using cli::hex;
 using cli::value;
 
-// todo can we derive from hex?
-struct family_id : public cli::value_base<family_id> {
-    explicit family_id(string name) : value_base(std::move(name)) {}
+// a family ID is either one of the known family names, or a plain hex value
+struct family_id : public cli::integer_base<family_id, cli::hex_format> {
+    explicit family_id(string name) : integer_base(std::move(name)) {}
 
     template<typename T>
     family_id &set(T &t) {
-        string nm = "<" + name() + ">";
         // note we cannot capture "this"
-        on_action([&t, nm](string value) {
+        on_action([&t](string value) {
             std::transform(value.begin(), value.end(), value.begin(),
                 [](unsigned char c){ return std::tolower(c); });
             std::replace( value.begin(), value.end(), '_', '-');
             auto family_id = family_name_to_id.find(value);
             if (family_id != family_name_to_id.end()) {
                 t = family_id->second;
-            } else if (value.find("0x") == 0) {
-                value = value.substr(2);
-                size_t pos = 0;
-                long lvalue = std::numeric_limits<long>::max();
-                try {
-                    lvalue = std::stoul(value, &pos, 16);
-                    if (pos != value.length()) {
-                        return "Garbage after hex value: " + value.substr(pos);
-                    }
-                } catch (std::invalid_argument &) {
-                    return value + " is not a valid hex value";
-                } catch (std::out_of_range &) {
-                }
-                if (lvalue != (unsigned int) lvalue) {
-                    return value + " is not a valid 32 bit value";
-                }
-                t = (unsigned int) lvalue;
-            } else {
-                return value + " is not a valid family ID"
-                + "\n\nValid family IDs are: " + cli::join(family_names, ", ") + ", or hex strings starting with 0x";
+                return string("");
             }
-            return string("");
+            if (value.find("0x") == 0) {
+                unsigned int tmp = 0;
+                string err = parse_string(value, tmp);
+                if (!err.empty()) return err;
+                t = tmp;
+                return string("");
+            }
+            return value + " is not a valid family ID"
+            + "\n\nValid family IDs are: " + cli::join(family_names, ", ") + ", or hex strings starting with 0x";
         });
         return *this;
     }
@@ -1138,7 +1126,7 @@ struct load_command : public cmd {
     group get_cli() override {
         return (
             (
-                option("--ignore-partitions").set(settings.load.ignore_pt) % "When writing flash data, ignore the partition table and write to absolute space" +
+                option("--ignore-partitions").set(settings.load.ignore_pt) % "Ignore the partition table, and ignore family ID compatibility" +
                 (option("--family") &
                         family_id("family_id").set(settings.family_id)) % "Specify the family ID of the file to load" +
                 (option('p', "--partition") &
@@ -3280,27 +3268,38 @@ protected:
     }
 };
 
-uint32_t guess_flash_size(memory_access &access) {
+#if HAS_LIBUSB
+int guess_flash_size(memory_access &access) {
     assert(access.is_device());
-    // Check that flash is not erased (TODO should check for second stage)
-    auto first_two_pages = access.read_vector<uint8_t>(FLASH_START, 2 * PAGE_SIZE);
-    bool all_match = std::equal(first_two_pages.begin(),
-                                first_two_pages.begin() + PAGE_SIZE,
-                                first_two_pages.begin() + PAGE_SIZE);
-    if (all_match) {
-        return 0;
-    }
+    try {
+        // Check that flash is not erased (TODO should check for second stage)
+        auto first_two_pages = access.read_vector<uint8_t>(FLASH_START, 2 * PAGE_SIZE);
+        bool all_match = std::equal(first_two_pages.begin(),
+                                    first_two_pages.begin() + PAGE_SIZE,
+                                    first_two_pages.begin() + PAGE_SIZE);
+        if (all_match) {
+            return 0;
+        }
 
-    // Read at decreasing power-of-two addresses until we don't see the boot pages again
-    const int min_size = 16 * PAGE_SIZE;
-    const int max_size = 8 * 1024 * 1024;
-    int size;
-    for (size = max_size; size >= min_size; size >>= 1) {
-        auto new_pages = access.read_vector<uint8_t>(FLASH_START + size, 2 * PAGE_SIZE);
-        if (!std::equal(first_two_pages.begin(), first_two_pages.end(), new_pages.begin())) break;
+        // Read at decreasing power-of-two addresses until we don't see the boot pages again
+        const int min_size = 16 * PAGE_SIZE;
+        const int max_size = 8 * 1024 * 1024;
+        int size;
+        for (size = max_size; size >= min_size; size >>= 1) {
+            auto new_pages = access.read_vector<uint8_t>(FLASH_START + size, 2 * PAGE_SIZE);
+            if (!std::equal(first_two_pages.begin(), first_two_pages.end(), new_pages.begin())) break;
+        }
+        return size * 2;
+    } catch (picoboot::command_failure &e) {
+        if (e.get_code() == PICOBOOT_NOT_PERMITTED) {
+            // unable to guess flash size due to permission failure
+            return ERROR_NOT_POSSIBLE;
+        } else {
+            throw;
+        }
     }
-    return size * 2;
 }
+#endif
 
 // returns true if string is a hex string, and fills array with the values
 bool string_to_hex_array(const string& str, uint8_t *array, size_t size, const string& error_msg) {
@@ -3413,6 +3412,7 @@ uint32_t build_rmap_uf2(std::shared_ptr<std::iostream>file, range_map<size_t>& r
     uf2_block block;
     unsigned int pos = 0;
     uint32_t next_family_id = 0;
+    vector<uint32_t> family_ids = {};
     do {
         file->read((char*)&block, sizeof(uf2_block));
         if (file->fail()) {
@@ -3422,31 +3422,41 @@ uint32_t build_rmap_uf2(std::shared_ptr<std::iostream>file, range_map<size_t>& r
         if (block.magic_start0 == UF2_MAGIC_START0 && block.magic_start1 == UF2_MAGIC_START1 &&
             block.magic_end == UF2_MAGIC_END) {
             if (block.flags & UF2_FLAG_FAMILY_ID_PRESENT &&
-                !(block.flags & UF2_FLAG_NOT_MAIN_FLASH) && block.payload_size == PAGE_SIZE &&
-                (!family_id || block.file_size == family_id)) {
+                !(block.flags & UF2_FLAG_NOT_MAIN_FLASH) && block.payload_size == PAGE_SIZE) {
+                if(
+                    std::find(family_ids.begin(), family_ids.end(), block.file_size) == family_ids.end()
+            #if SUPPORT_RP2350_A2
+                    && !check_abs_block(block)
+            #endif
+                ) {
+                    // new family ID found
+                    family_ids.push_back(block.file_size);
+                    DEBUG_LOG("New family ID %s\n", family_name(block.file_size).c_str());
+                    if (
+                        std::find(family_ids.begin(), family_ids.end(), family_id) != family_ids.end()
+                        && std::find(family_ids.begin(), family_ids.end(), family_id) + 1 == std::find(family_ids.begin(), family_ids.end(), block.file_size)
+                    ) {
+                        DEBUG_LOG("This is next family ID %s\n", family_name(block.file_size).c_str());
+                        next_family_id = block.file_size;
+                    } else if (block.file_size == family_id) {
+                        DEBUG_LOG("This is selected family ID %s\n", family_name(block.file_size).c_str());
+                    }
+                }
+                if (!family_id || block.file_size == family_id) {
                 #if SUPPORT_RP2350_A2
-                // ignore the absolute block, but save the address
-                if (check_abs_block(block)) {
-                    DEBUG_LOG("Ignoring RP2350-E10 absolute block\n");
-                    settings.uf2.abs_block_loc = block.target_addr;
-                } else {
+                    // ignore the absolute block, but save the address
+                    if (check_abs_block(block)) {
+                        DEBUG_LOG("Ignoring RP2350-E10 absolute block\n");
+                        settings.uf2.abs_block_loc = block.target_addr;
+                    } else {
+                        rmap.insert(range(block.target_addr, block.target_addr + PAGE_SIZE), pos + offsetof(uf2_block, data[0]));
+                        family_id = block.file_size;
+                    }
+                #else
                     rmap.insert(range(block.target_addr, block.target_addr + PAGE_SIZE), pos + offsetof(uf2_block, data[0]));
                     family_id = block.file_size;
-                    next_family_id = 0;
+                #endif
                 }
-                #else
-                rmap.insert(range(block.target_addr, block.target_addr + PAGE_SIZE), pos + offsetof(uf2_block, data[0]));
-                family_id = block.file_size;
-                next_family_id = 0;
-                #endif
-            } else if (block.file_size != family_id && family_id && !next_family_id) {
-                #if SUPPORT_RP2350_A2
-                if (!check_abs_block(block)) {
-                #endif
-                    next_family_id = block.file_size;
-                #if SUPPORT_RP2350_A2
-                }
-                #endif
             }
         }
         pos += sizeof(uf2_block);
@@ -4334,22 +4344,18 @@ void info_guts(memory_access &raw_access, void *con, bool no_pt_loaded=false) {
                 select_group(device_info);
             }
 
-            try {
-                int32_t size_guess = guess_flash_size(raw_access);
-                if (size_guess > 0) {
-                    info_pair("flash size", std::to_string(size_guess/1024) + "K");
-                    if (model->chip() == rp2040) {
-                        uint64_t flash_id = 0;
-                        con->flash_id(flash_id);
-                        info_pair("flash id", hex_string(flash_id, 16, true, true));
-                    }
+            int size_guess = guess_flash_size(raw_access);
+            if (size_guess < 0) {
+                info_pair("flash size", "not determined due to access permissions");
+            } else if (size_guess > 0) {
+                info_pair("flash size", std::to_string(size_guess/1024) + "K");
+                if (model->chip() == rp2040) {
+                    uint64_t flash_id = 0;
+                    con->flash_id(flash_id);
+                    info_pair("flash id", hex_string(flash_id, 16, true, true));
                 }
-            } catch (picoboot::command_failure &e) {
-                if (e.get_code() == PICOBOOT_NOT_PERMITTED) {
-                    info_pair("flash size", "not determined due to access permissions");
-                } else {
-                    throw;
-                }
+            } else {
+                info_pair("flash size", "not determined due to erased start of flash");
             }
 
             // not sure how interesting this is given the chip revision which is correlated
@@ -5103,8 +5109,10 @@ bool save_command::execute(device_map &devices) {
             }
         }
     } else {
-        end = FLASH_START + guess_flash_size(raw_access);
-        if (end <= FLASH_START) {
+        int size_guess = guess_flash_size(raw_access);
+        if (size_guess > 0) {
+            end = FLASH_START + size_guess;
+        } else {
             fail(ERROR_NOT_POSSIBLE, "Cannot determine the flash size, so cannot save the entirety of flash, try --range.");
         }
     }
@@ -5279,8 +5287,10 @@ bool erase_command::execute(device_map &devices) {
             fail(ERROR_ARGS, "Erase range is invalid/empty");
         }
     } else {
-        end = FLASH_START + guess_flash_size(raw_access);
-        if (end <= FLASH_START) {
+        int size_guess = guess_flash_size(raw_access);
+        if (size_guess > 0) {
+            end = FLASH_START + size_guess;
+        } else {
             fail(ERROR_NOT_POSSIBLE, "Cannot determine the flash size, so cannot erase the entirety of flash, try --range.");
         }
     }
@@ -5392,10 +5402,10 @@ bool load_guts(picoboot::connection con, iostream_memory_access &file_access) {
         uint32_t flash_data_size = flash_max - flash_min;
         assert(flash_min >= FLASH_START);
         uint32_t flash_start_offset = flash_min - FLASH_START;
-        uint32_t size_guess = guess_flash_size(raw_access);
+        int size_guess = guess_flash_size(raw_access);
         if (size_guess > 0) {
             // Skip check when targeting PSRAM, which is anything above 0x11000000
-            if (flash_start_offset < FLASH_END_RP2040 && (flash_start_offset + flash_data_size) > size_guess) {
+            if (flash_min < FLASH_END_RP2040 && (flash_start_offset + flash_data_size) > size_guess) {
                 if (flash_start_offset) {
                     fail(ERROR_NOT_POSSIBLE, "File size 0x%x starting at 0x%x is too big to fit in flash size 0x%x", flash_data_size, flash_start_offset, size_guess);
                 } else {
@@ -5537,7 +5547,49 @@ bool load_guts(picoboot::connection con, iostream_memory_access &file_access) {
 bool load_command::execute(device_map &devices) {
     auto con = get_single_bootsel_device_connection(devices);
     picoboot_memory_access raw_access(con);
-    auto tmp_file_access = get_file_memory_access(0);
+    uint32_t next_id = 0;
+    vector<uint32_t> available_family_ids;
+    uint32_t file_family_id = 0;
+    uint32_t override_family_id = settings.family_id;
+    bool multi_family_uf2 = false;
+    auto tmp_file_access = get_file_memory_access(0, false, &next_id);
+    if (next_id) {
+        // UF2 file with multiple family IDs
+        multi_family_uf2 = true;
+        settings.family_id = 0;
+        next_id = get_family_id(0);
+        while (next_id) {
+            available_family_ids.push_back(next_id);
+            auto tmp_access = get_file_memory_access(0, false, &next_id);
+        }
+        if (override_family_id) {
+            if (std::find(available_family_ids.begin(), available_family_ids.end(), override_family_id) == available_family_ids.end()) {
+                fos << "WARNING: Requested family ID " << family_name(override_family_id) << " not found in UF2 file, ";
+                fos << "so loading the first family ID found in the UF2 file (" << family_name(available_family_ids[0]) << "), ";
+                fos << "into the location where family ID " << family_name(override_family_id) << " would normally go\n";
+                available_family_ids.resize(1);
+            } else {
+                available_family_ids.resize(1);
+                available_family_ids[0] = override_family_id;
+            }
+        }
+    } else {
+        // For anything else, just populate available_family_ids with the family ID from the file
+        uint32_t family_id = get_family_id(0);
+        available_family_ids.push_back(family_id);
+    }
+
+    if (multi_family_uf2){
+        // Default to the first available family
+        file_family_id = available_family_ids[0];
+
+        if (available_family_ids.size() > 1) {
+            vector<string> family_names = {};
+            for (auto family_id : available_family_ids) family_names.push_back(family_name(family_id));
+            fos << "UF2 file contains multiple family IDs: " << cli::join(family_names, ", ") << "\n";
+        }
+    }
+
     if (settings.load.partition >= 0) {
         auto partitions = get_partitions(con);
         if (!partitions) {
@@ -5553,30 +5605,54 @@ bool load_command::execute(device_map &devices) {
         settings.offset = start + FLASH_START;
         settings.offset_set = true;
         settings.partition_size = end - start;
-    } else if (!settings.load.ignore_pt && !settings.offset_set && tmp_file_access.get_binary_start() == FLASH_START) {
-        uint32_t family_id = get_family_id(0);
-        settings.family_id = family_id;
+    } else if (!settings.load.ignore_pt && !settings.offset_set) {
         uint32_t start;
         uint32_t end;
-        if (raw_access.get_model()->supports_partition_table()) {
-            if (get_target_partition(con, &start, &end)) {
-                settings.offset = start + FLASH_START;
-                settings.offset_set = true;
-                settings.partition_size = end - start;
+        bool accepted = false;
+        for (auto family_id : available_family_ids) {
+            settings.family_id = override_family_id ? override_family_id : family_id;
+            if (raw_access.get_model()->supports_partition_table() && tmp_file_access.get_binary_start() == FLASH_START) {
+                if (get_target_partition(con, &start, &end)) {
+                    settings.offset = start + FLASH_START;
+                    settings.offset_set = true;
+                    settings.partition_size = end - start;
+                    accepted = true;
+                    file_family_id = family_id;
+                    break;
+                }
             } else {
-                // Check if partition table is present, for correct error message
-                auto partitions = get_partitions(con);
-                if (!partitions) {
-                    fail(ERROR_NOT_POSSIBLE, "This file cannot be loaded onto a device with no partition table");
-                } else {
-                    fail(ERROR_NOT_POSSIBLE, "This file cannot be loaded into the partition table on the device");
+                // For UF2 files, check the family ID is supported by the model (either SRAM, or RP2040)
+                // Other files are automatically accepted unless the family ID has been overridden, 
+                // because the family ID is only a guess from get_access_model
+                if ((get_file_type() != filetype::uf2 && !override_family_id) || raw_access.get_model()->supports_family_id(settings.family_id)) {
+                    accepted = true;
+                    file_family_id = family_id;
+                    break;
                 }
             }
         }
+        if (!accepted) {
+            // Check if partition table is present, for correct error message
+            if (raw_access.get_model()->supports_partition_table() && tmp_file_access.get_binary_start() == FLASH_START) {
+                auto partitions = get_partitions(con);
+                if (!partitions) {
+                    fail(ERROR_NOT_POSSIBLE, "This file cannot be loaded onto an %s device with no partition table", raw_access.get_model()->name().c_str());
+                } else {
+                    fail(ERROR_NOT_POSSIBLE, "This file cannot be loaded into the partition table on the device");
+                }
+            } else {
+                fail(ERROR_NOT_POSSIBLE, "This file cannot be loaded onto an %s device", raw_access.get_model()->name().c_str());
+            }
+        }
     }
-    auto file_access = get_file_memory_access(0);
+
+    if (multi_family_uf2 && available_family_ids.size() > 1){
+        fos << "Loading family ID " << family_name(file_family_id) << "\n";
+    }
+
+    auto file_access = multi_family_uf2 ? get_file_memory_access(0, false, &file_family_id) : get_file_memory_access(0);
     if (settings.offset_set && get_file_type() != filetype::bin && raw_access.get_model()->chip() == rp2040) {
-        fail(ERROR_ARGS, "Offset only valid for BIN files");
+        fail(ERROR_ARGS, "On RP2040, offset is only valid for BIN files");
     }
     bool ret = load_guts(con, file_access);
     return ret;
