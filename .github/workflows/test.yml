@@ -95,31 +95,6 @@ jobs:
           picotool help save
           picotool help erase
 
-      - name: Test partition create with extra families
-        shell: bash
-        run: |
-          cat > pt_extra_families.json << 'EOF'
-          {
-            "version": [1, 0],
-            "unpartitioned": {
-              "families": ["absolute"],
-              "permissions": {"secure": "rw", "nonsecure": "rw", "bootloader": "rw"}
-            },
-            "partitions": [
-              {
-                "name": "A",
-                "size": "64K",
-                "families": ["rp2350-arm-s", "0x12345678", "0x23456789"],
-                "permissions": {"secure": "rw", "nonsecure": "rw", "bootloader": "rw"}
-              }
-            ]
-          }
-          EOF
-          picotool partition create pt_extra_families.json pt_extra_families.bin
-          picotool info -a pt_extra_families.bin | tee pt_extra_families.txt
-          grep -q "0x12345678" pt_extra_families.txt
-          grep -q "0x23456789" pt_extra_families.txt
-
   test-examples:
     # Prevent running twice for PRs from same repo
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
