@@ -46,7 +46,7 @@ enum picoboot_device_result {
     dr_vidpid_stdio_usb_no_reset,       // stdio_usb vid/pid, but no reset interface (e.g. PICO_ENABLE_USB_RESET_VIA_VENDOR_INTERFACE=0)
 
     // Devices failed to open (e.g. requires sudo)
-    dr_vidpid_bootrom_cant_connect,     // bootrom vid/pid
+    dr_vidpid_bootrom_cant_connect,     // bootrom vid/pid, or PICOBOOT interface could not be claimed
     dr_vidpid_debugprobe_cant_connect,  // debugprobe vid/pid
     dr_vidpid_stdio_usb_cant_connect,   // stdio_usb vid/pid
     dr_vidpid_cant_connect,             // custom vid/pid
@@ -68,7 +68,8 @@ enum picoboot_device_result {
 
 #if HAS_LIBUSB
 // note that vid and pid are filters, unless both are specified in which case a device with that VID and PID is allowed for RP2350
-enum picoboot_device_result picoboot_open_device(libusb_device *device, libusb_device_handle **dev_handle, chip_t *chip, int vid, int pid, const char* ser);
+// debugprobe should be set when targeting DebugProbes with --debugprobe, so RP2040s in BOOTSEL mode are also reported
+enum picoboot_device_result picoboot_open_device(libusb_device *device, libusb_device_handle **dev_handle, chip_t *chip, int vid, int pid, const char* ser, bool debugprobe);
 
 int picoboot_reset(libusb_device_handle *usb_device);
 int picoboot_cmd_status_verbose(libusb_device_handle *usb_device, struct picoboot_cmd_status *status,

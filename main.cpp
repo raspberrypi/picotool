@@ -4566,7 +4566,12 @@ string missing_device_string(bool wasRetry, bool requires_rp2350 = false) {
     } else if (settings.bus != -1) {
         snprintf(buf, buf_len, "accessible %s devices %s were found on bus %d.", device_name, mode, settings.bus);
     } else if (settings.target_debugprobe) {
-        snprintf(buf, buf_len, "accessible %s devices %s were found.", device_name, mode);
+        // vid/pid are set by --debugprobe, so aren't reported
+        if (!settings.ser.empty()) {
+            snprintf(buf, buf_len, "accessible %s devices %s were found with serial number %s.", device_name, mode, settings.ser.c_str());
+        } else {
+            snprintf(buf, buf_len, "accessible %s devices %s were found.", device_name, mode);
+        }
     } else if (settings.vid > 0) {
         if (settings.pid != -1) {
             snprintf(buf, buf_len, "accessible %s devices %s were found with vid %04x, pid %04x.", device_name, mode, settings.vid, settings.pid);
@@ -10345,8 +10350,8 @@ static void print_device_info(device_map &devices, bool had_note=false, bool lis
         }
     };
 
-    // Devices in BOOTSEL
-    if (settings.target_debugprobe) {
+    // Devices in BOOTSEL - only_force is cleared after the reboot, when BOOTSEL devices are being targeted
+    if (settings.only_force && settings.target_debugprobe) {
         printer(dr_vidpid_bootrom_ok,
                 " appears to already be in BOOTSEL mode, but --debugprobe was passed so this is only targetting DebugProbes not already in BOOTSEL mode.");
     } else if (settings.only_force) {
@@ -10501,6 +10506,8 @@ int main(int argc, char **argv) {
     struct libusb_device **devs = nullptr;
     device_map devices;
     vector<libusb_device_handle *> to_close;
+    // bus/address of devices already in BOOTSEL mode, which are still ignored after a --force-ignore-bootsel reboot
+    std::set<std::pair<int, int>> ignored_bootsel_devices;
 
     try {
         signal(SIGINT, cancelled);
@@ -10535,9 +10542,10 @@ int main(int argc, char **argv) {
                 for (libusb_device **dev = devs; *dev; dev++) {
                     if (settings.bus != -1 && settings.bus != libusb_get_bus_number(*dev)) continue;
                     if (settings.address != -1 && settings.address != libusb_get_device_address(*dev)) continue;
+                    if (ignored_bootsel_devices.count({libusb_get_bus_number(*dev), libusb_get_device_address(*dev)})) continue;
                     libusb_device_handle *handle = nullptr;
                     chip_t chip = unknown;
-                    auto result = picoboot_open_device(*dev, &handle, &chip, settings.vid, settings.pid, settings.ser.c_str());
+                    auto result = picoboot_open_device(*dev, &handle, &chip, settings.vid, settings.pid, settings.ser.c_str(), settings.target_debugprobe && settings.only_force);
                     if (handle) {
                         to_close.push_back(handle);
                     }
@@ -10629,24 +10637,27 @@ int main(int argc, char **argv) {
                             auto &to_reboot_handle = std::get<2>(devices[dr_vidpid_usb_reset][0]);
                             unsigned int disable_mask = 1;  // disable MSC interface
     #if defined(_WIN32)
-                            {
-                                struct libusb_device_descriptor desc;
-                                libusb_get_device_descriptor(to_reboot, &desc);
-                                if (to_reboot_chip == rp2040 || settings.force_rp2040) {
-                                    // the Zadig driver should be setup for the device in BOOTSEL mode with no interfaces disabled,  
-                                    // as all the interfaces are enabled when you plug it in while holding down the BOOTSEL button  
-                                    disable_mask = 0;
-                                    settings.force_rp2040 = true;
-                                }
+                            if (to_reboot_chip == rp2040 || settings.force_rp2040) {
+                                // the Zadig driver should be setup for the device in BOOTSEL mode with no interfaces disabled,
+                                // as all the interfaces are enabled when you plug it in while holding down the BOOTSEL button
+                                disable_mask = 0;
+                                settings.force_rp2040 = true;
                             }
     #endif
+                            if (settings.only_force) {
+                                // keep ignoring devices already in BOOTSEL mode, as the serial number may not be tracked below
+                                for (const auto &d : devices[dr_vidpid_bootrom_ok]) {
+                                    ignored_bootsel_devices.insert({libusb_get_bus_number(std::get<1>(d)), libusb_get_device_address(std::get<1>(d))});
+                                }
+                            }
                             if (settings.ser.empty() && to_reboot_handle) {
                                 // store USB serial number, to pick correct device after reboot
                                 struct libusb_device_descriptor desc;
                                 libusb_get_device_descriptor(to_reboot, &desc);
                                 char ser_str[128];
-                                libusb_get_string_descriptor_ascii(to_reboot_handle, desc.iSerialNumber, (unsigned char*)ser_str, sizeof(ser_str));
-                                if (strcmp(ser_str, "EEEEEEEEEEEEEEEE") != 0) {
+                                if (desc.iSerialNumber &&
+                                    libusb_get_string_descriptor_ascii(to_reboot_handle, desc.iSerialNumber, (unsigned char*)ser_str, sizeof(ser_str)) >= 0 &&
+                                    strcmp(ser_str, "EEEEEEEEEEEEEEEE") != 0) {
                                     // don't store EEs serial number, as that is an RP2040 running a no_flash binary
                                     settings.ser = ser_str;
                                     fos << "Tracking device serial number " << ser_str << " for reboot\n";
