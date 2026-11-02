@@ -40,15 +40,20 @@ int read_keys(const std::string &filename, public_t *public_key, private_t *priv
     int rc;
 
     mbedtls_pk_init(&pk_ctx);
-#if MBEDTLS_VERSION_MAJOR >= 3
-    // This rng is only used for blinding when reading the key file
-    // As this should only be done on a secure computer, blinding is not required, so it's fine to not actually seed it with any entropy
-    mbedtls_ctr_drbg_context ctr_drbg;
-    mbedtls_ctr_drbg_init(&ctr_drbg);
-    rc = mbedtls_pk_parse_keyfile(&pk_ctx, filename.c_str(), NULL, mbedtls_ctr_drbg_random, &ctr_drbg);
-#else
-    rc = mbedtls_pk_parse_keyfile(&pk_ctx, filename.c_str(), NULL);
-#endif
+    if (private_key == nullptr) {
+        // Only read public key
+        rc = mbedtls_pk_parse_public_keyfile(&pk_ctx, filename.c_str());
+    } else {
+    #if MBEDTLS_VERSION_MAJOR >= 3
+        // This rng is only used for blinding when reading the key file
+        // As this should only be done on a secure computer, blinding is not required, so it's fine to not actually seed it with any entropy
+        mbedtls_ctr_drbg_context ctr_drbg;
+        mbedtls_ctr_drbg_init(&ctr_drbg);
+        rc = mbedtls_pk_parse_keyfile(&pk_ctx, filename.c_str(), NULL, mbedtls_ctr_drbg_random, &ctr_drbg);
+    #else
+        rc = mbedtls_pk_parse_keyfile(&pk_ctx, filename.c_str(), NULL);
+    #endif
+    }
     if (rc != 0) {
         char error_string[128];
         mbedtls_strerror(rc, error_string, sizeof(error_string));
@@ -60,38 +65,12 @@ int read_keys(const std::string &filename, public_t *public_key, private_t *priv
     if (!keypair) {
         fail(ERROR_FORMAT, "Failed to parse key file %s", filename.c_str());
     }
-    mbedtls_mpi_write_binary(&keypair->d, reinterpret_cast<unsigned char *>(private_key), 32);
+    if (private_key != nullptr) {
+        mbedtls_mpi_write_binary(&keypair->d, reinterpret_cast<unsigned char *>(private_key), 32);
+    }
     mbedtls_mpi_write_binary(&keypair->Q.X, reinterpret_cast<unsigned char *>(public_key), 32);
     mbedtls_mpi_write_binary(&keypair->Q.Y, reinterpret_cast<unsigned char *>(public_key) + 32, 32);
     return 0;
-}
-#endif
-
-#define OTP_KEY_YAML_HEADER \
-"include:\n" \
-"  - otp/tc_images/base_chipinfo.yml\n" \
-"data:\n" \
-"  - crit1_secure_boot_enable: [crit, 1]\n" \
-"  - crit0_riscv_disable: [crit, 1]\n" \
-"  - crit0_arm_disable: [crit, 0]\n" \
-"  - BOOT_FLAGS0_SECURE_PARTITION_TABLE: [rbit3, 0]\n" \
-"  - BOOT_FLAGS0_DISABLE_AUTO_SWITCH_ARCH: [rbit3, 1]\n" \
-"  # - boot_temp_chicken_bit_opt_in_faster_sigcheck_rosc_div: [rbit3, 1]\n" \
-"  - boot_flags1_key_valid: [rbit3, 0b0001]\n" \
-
-
-#if HAS_MBEDTLS
-void write_otp_key_yaml(const std::string &filename, message_digest_t pub_sha256) {
-    std::ofstream out(filename, std::ios::out | std::ios::trunc);
-    out.exceptions(std::fstream::failbit | std::fstream::badbit);
-    out << std::string(OTP_KEY_YAML_HEADER);
-
-    // Print public key hash again in the format it is expected to appear in OTP
-    for (int i = 0; i < 16; ++i) {
-        char row[128];
-        snprintf(row, sizeof(row), "  - bootkey0_%-2d: [ecc, 0x%02x%02x]\n", i, pub_sha256.bytes[2 * i + 1], pub_sha256.bytes[2 * i]);
-        out << std::string(row);        
-    }
 }
 #endif
 
@@ -690,13 +669,21 @@ void hash_andor_sign_block(block *new_block, const public_t public_key, const pr
             e = rand();
         }
 
-        signature_t sig;
-        sign_sha256(entropy, sizeof(entropy), &sha256, &public_key, &private_key, &sig);
-        dumper("SIG", sig);
+        signature_t sig = {0};
 
-        uint32_t err = verify_signature_secp256k1(&sig, &public_key, &sha256);
-        if (err) {
-            fail(ERROR_VERIFICATION_FAILED, "Signature verification failed");
+        // Skip signing if keys are zero, as that is a binary for external signing
+        int public_zero = memcmp(&(public_key.bytes[0]), &(public_key.bytes[1]), sizeof(public_key.bytes) - 1);
+        int private_zero = memcmp(&(private_key.bytes[0]), &(private_key.bytes[1]), sizeof(private_key.bytes) - 1);
+        bool empty_keys = (public_zero == 0 && public_key.bytes[0] == 0 && private_zero == 0 && private_key.bytes[0] == 0);
+
+        if (!empty_keys) {
+            sign_sha256(entropy, sizeof(entropy), &sha256, &public_key, &private_key, &sig);
+            dumper("SIG", sig);
+
+            uint32_t err = verify_signature_secp256k1(&sig, &public_key, &sha256);
+            if (err) {
+                fail(ERROR_VERIFICATION_FAILED, "Signature verification failed");
+            }
         }
 
         std::shared_ptr<signature_item> signature = std::make_shared<signature_item>(PICOBIN_SIGNATURE_SECP256K1);
