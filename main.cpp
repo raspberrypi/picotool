@@ -10506,7 +10506,7 @@ int main(int argc, char **argv) {
     struct libusb_device **devs = nullptr;
     device_map devices;
     vector<libusb_device_handle *> to_close;
-    // bus/address of devices already in BOOTSEL mode, which are still ignored after a --force-ignore-bootsel reboot
+    // bus/address of devices already in BOOTSEL mode, which are still ignored after a forced reboot
     std::set<std::pair<int, int>> ignored_bootsel_devices;
 
     try {
@@ -10644,10 +10644,17 @@ int main(int argc, char **argv) {
                                 settings.force_rp2040 = true;
                             }
     #endif
-                            if (settings.only_force) {
-                                // keep ignoring devices already in BOOTSEL mode, as the serial number may not be tracked below
-                                for (const auto &d : devices[dr_vidpid_bootrom_ok]) {
-                                    ignored_bootsel_devices.insert({libusb_get_bus_number(std::get<1>(d)), libusb_get_device_address(std::get<1>(d))});
+                            // keep ignoring devices already in BOOTSEL mode, as the serial number may not be tracked below.
+                            // This includes ones excluded by the bus/address/vid/pid filters, as those filters are relaxed
+                            // after the reboot
+                            for (const auto &d : devices[dr_vidpid_bootrom_ok]) {
+                                ignored_bootsel_devices.insert({libusb_get_bus_number(std::get<1>(d)), libusb_get_device_address(std::get<1>(d))});
+                            }
+                            for (libusb_device **dev = devs; *dev; dev++) {
+                                struct libusb_device_descriptor desc;
+                                if (!libusb_get_device_descriptor(*dev, &desc) && desc.idVendor == VENDOR_ID_RASPBERRY_PI &&
+                                    (desc.idProduct == PRODUCT_ID_RP2040_USBBOOT || desc.idProduct == PRODUCT_ID_RP2350_USBBOOT)) {
+                                    ignored_bootsel_devices.insert({libusb_get_bus_number(*dev), libusb_get_device_address(*dev)});
                                 }
                             }
                             if (settings.ser.empty() && to_reboot_handle) {

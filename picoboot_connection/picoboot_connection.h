@@ -58,7 +58,7 @@ enum picoboot_device_result {
     // Other known pids for no device found messages
     dr_vidpid_micropython,              // micropython vid/pid
     dr_vidpid_circuitpython,            // circuitpython vid/pid
-    dr_vidpid_debugprobe_old,           // old debugprobe vid/pid (v1.0 and v1.0.1)
+    dr_vidpid_debugprobe_old,           // old picoprobe vid/pid (custom OpenOCD protocol, before the CMSIS-DAP releases)
 
     // Ignored devices
     dr_vidpid_unknown,                  // unknown device (e.g. no vid/pid/serial match)
