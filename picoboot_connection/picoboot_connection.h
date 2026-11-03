@@ -46,7 +46,8 @@ enum picoboot_device_result {
     dr_vidpid_stdio_usb_no_reset,       // stdio_usb vid/pid, but no reset interface (e.g. PICO_ENABLE_USB_RESET_VIA_VENDOR_INTERFACE=0)
 
     // Devices failed to open (e.g. requires sudo)
-    dr_vidpid_bootrom_cant_connect,     // bootrom vid/pid, or PICOBOOT interface could not be claimed
+    dr_vidpid_bootrom_cant_connect,     // bootrom vid/pid
+    dr_vidpid_bootrom_cant_claim,       // PICOBOOT interface could not be claimed (e.g. in use by another program)
     dr_vidpid_debugprobe_cant_connect,  // debugprobe vid/pid
     dr_vidpid_stdio_usb_cant_connect,   // stdio_usb vid/pid
     dr_vidpid_cant_connect,             // custom vid/pid

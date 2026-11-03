@@ -10400,6 +10400,8 @@ static void print_device_info(device_map &devices, bool had_note=false, bool lis
     printer(dr_vidpid_cant_connect,
             " was tried, but picotool was unable to connect.");
 #endif
+    printer(dr_vidpid_bootrom_cant_claim,
+            " appears to be in BOOTSEL mode, but picotool was unable to claim its PICOBOOT interface, which may be in use by another program.");
 
     // Other known pids
     printer(dr_vidpid_debugprobe,
@@ -10632,11 +10634,11 @@ int main(int argc, char **argv) {
                     if (selected_cmd->force_requires_pre_reboot()) {
                         if (!tries) {
                             // we reboot into BOOTSEL mode and disable MSC interface (the 1 here)
-                            auto to_reboot_chip = std::get<0>(devices[dr_vidpid_usb_reset][0]);
                             auto &to_reboot = std::get<1>(devices[dr_vidpid_usb_reset][0]);
                             auto &to_reboot_handle = std::get<2>(devices[dr_vidpid_usb_reset][0]);
                             unsigned int disable_mask = 1;  // disable MSC interface
     #if defined(_WIN32)
+                            auto to_reboot_chip = std::get<0>(devices[dr_vidpid_usb_reset][0]);
                             if (to_reboot_chip == rp2040 || settings.force_rp2040) {
                                 // the Zadig driver should be setup for the device in BOOTSEL mode with no interfaces disabled,
                                 // as all the interfaces are enabled when you plug it in while holding down the BOOTSEL button

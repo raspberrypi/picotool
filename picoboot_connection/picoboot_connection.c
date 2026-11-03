@@ -246,7 +246,7 @@ enum picoboot_device_result picoboot_open_device(libusb_device *device, libusb_d
                     // didn't check vid or ser, so treat as unknown
                     return dr_vidpid_unknown;
                 }
-                return dr_vidpid_bootrom_cant_connect;
+                return dr_vidpid_bootrom_cant_claim;
             }
         } else {
             if (verbose) output("Did not find PICOBOOT interface\n");
