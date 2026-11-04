@@ -181,20 +181,7 @@ static string hex_string(int64_t value, int width=8, bool prefix=true, bool uppe
     return ss.str();
 }
 
-std::array<std::array<string, 1>, 12> pin_functions_unknown{{
-    {""},
-    {""},
-    {""},
-    {""},
-    {""},
-    {""},
-    {""},
-    {""},
-    {""},
-    {""},
-    {""},
-    {""},
-}};
+std::array<std::array<string, 0>, 12> pin_functions_unknown{};
 
 std::array<std::array<string, 30>, 10> pin_functions_rp2040{{
     {"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""},
@@ -3080,7 +3067,7 @@ struct bi_visitor_base {
         for(unsigned int i=0; i<64; i++) {
             if (pin_mask & (1ull << i)) {
                 if (func != -1) {
-                    if (pin_functions[func][i].empty()) {
+                    if (i >= pin_functions[func].size() || pin_functions[func][i].empty()) {
                         std::stringstream sstream;
                         sstream << "Unknown pin function " << func;
                         pin(i, sstream.str());
