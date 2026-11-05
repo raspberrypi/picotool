@@ -5083,6 +5083,7 @@ bool save_command::execute(device_map &devices) {
     uint32_t binary_end = 0;
     binary_info_header hdr;
     uint32_t start = FLASH_START;
+    uint32_t part_size = 0;
 
     if (settings.save.partition >= 0) {
         auto partitions = get_partitions(con);
@@ -5094,7 +5095,8 @@ bool save_command::execute(device_map &devices) {
         }
         uint32_t part_start = (*partitions)[settings.save.partition].start;
         uint32_t part_end = (*partitions)[settings.save.partition].end;
-        end = FLASH_START + (part_end - part_start); // set for --all below
+        part_size = part_end - part_start;
+        end = FLASH_START + part_size; // set for --all below
         printf("Saving from partition %d:\n", settings.save.partition);
         printf("  %08x->%08x\n", part_start, part_end);
         used_access_ptr = std::make_shared<partition_memory_access>(*raw_access_ptr, part_start);
@@ -5153,6 +5155,9 @@ bool save_command::execute(device_map &devices) {
     enum memory_type t2 = get_memory_type(end, model);
     if (t1 != t2 || t1 == invalid || t1 == sram_unstriped) {
         fail(ERROR_NOT_POSSIBLE, "Save range crosses unmapped memory");
+    }
+    if (settings.save.partition >= 0 && t1 == flash && end > FLASH_START + part_size) {
+        fail(ERROR_NOT_POSSIBLE, "Save range %08x-%08x extends beyond the end of partition %d (size 0x%x)", start, end, settings.save.partition, part_size);
     }
     uint32_t size = end - start;
     uint32_t chunk_size = calculate_chunk_size(size);
@@ -7518,6 +7523,7 @@ bool verify_command::execute(device_map &devices) {
     auto con = get_single_bootsel_device_connection(devices);
     std::shared_ptr<memory_access> raw_access_ptr = std::make_shared<picoboot_memory_access>(con);
     auto used_access_ptr = raw_access_ptr;
+    uint32_t part_size = 0;
     model_t model = raw_access_ptr->get_model();
     if (settings.offset_set && get_file_type() != filetype::bin && model->chip() == rp2040) {
         fail(ERROR_ARGS, "Offset only valid for BIN files");
@@ -7533,6 +7539,7 @@ bool verify_command::execute(device_map &devices) {
         }
         uint32_t start = (*partitions)[settings.save.partition].start;
         uint32_t end = (*partitions)[settings.save.partition].end;
+        part_size = end - start;
         printf("Verifying partition %d:\n", settings.save.partition);
         printf("  %08x->%08x\n", start, end);
         used_access_ptr = std::make_shared<partition_memory_access>(*raw_access_ptr, start);
@@ -7544,9 +7551,6 @@ bool verify_command::execute(device_map &devices) {
         for(auto& range : ranges) {
             range.intersect(filter);
         }
-        for(auto& range : ranges) {
-            printf("From %08x -> %08x\n", range.from, range.to);
-        }
     }
     ranges.erase(std::remove_if(ranges.begin(), ranges.end(), std::mem_fn(&range::empty)), ranges.end());
     if (ranges.empty()) {
@@ -7557,6 +7561,8 @@ bool verify_command::execute(device_map &devices) {
             enum memory_type t2 = get_memory_type(mem_range.to, model);
             if (t1 != t2 || t1 == invalid || t1 == sram_unstriped) {
                 fail(ERROR_NOT_POSSIBLE, "invalid memory range for verification %08x-%08x", mem_range.from, mem_range.to);
+            } else if (settings.save.partition >= 0 && t1 == flash && mem_range.to > FLASH_START + part_size) {
+                fail(ERROR_NOT_POSSIBLE, "Verify range %08x-%08x extends beyond the end of partition %d (size 0x%x)", mem_range.from, mem_range.to, settings.save.partition, part_size);
             } else {
                 bool ok = true;
                 uint32_t pos = mem_range.from;
