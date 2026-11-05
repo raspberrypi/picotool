@@ -18,12 +18,14 @@ SYNOPSIS:
     picotool config [-s <key> <value>] [-g <group>] <filename> [-t <type>]
     picotool load [--ignore-partitions] [--family <family_id>] [-p <partition>] [-n] [-N] [-u]
                 [-v] [-x] <filename> [-t <type>] [-o <offset>] [device-selection]
-    picotool save [-p] [-v] [--family <family_id>] <filename> [-t <type>] [device-selection]
-    picotool save -a [-v] [--family <family_id>] <filename> [-t <type>] [device-selection]
-    picotool save -r <from> <to> [-v] [--family <family_id>] <filename> [-t <type>]
-                [device-selection]
+    picotool save [-p] [-v] [--family <family_id>] [--partition <partition>] <filename> [-t
+                <type>] [device-selection]
+    picotool save -a [-v] [--family <family_id>] [--partition <partition>] <filename> [-t
+                <type>] [device-selection]
+    picotool save -r <from> <to> [-v] [--family <family_id>] [--partition <partition>]
+                <filename> [-t <type>] [device-selection]
     picotool verify <filename> [-t <type>] [device-selection] [-r <from> <to>] [-o <offset>]
-                [device-selection]
+                [--partition <partition>] [device-selection]
     picotool erase [-a] [device-selection]
     picotool erase -p <partition> [device-selection]
     picotool erase -r <from> <to> [device-selection]
@@ -366,10 +368,12 @@ SAVE:
     Save the program / memory stored in flash on the device to a file.
 
 SYNOPSIS:
-    picotool save [-p] [-v] [--family <family_id>] <filename> [-t <type>] [device-selection]
-    picotool save -a [-v] [--family <family_id>] <filename> [-t <type>] [device-selection]
-    picotool save -r <from> <to> [-v] [--family <family_id>] <filename> [-t <type>]
-                [device-selection]
+    picotool save [-p] [-v] [--family <family_id>] [--partition <partition>] <filename> [-t
+                <type>] [device-selection]
+    picotool save -a [-v] [--family <family_id>] [--partition <partition>] <filename> [-t
+                <type>] [device-selection]
+    picotool save -r <from> <to> [-v] [--family <family_id>] [--partition <partition>]
+                <filename> [-t <type>] [device-selection]
 
 OPTIONS:
     Selection of data to save
@@ -386,6 +390,8 @@ OPTIONS:
             Verify the data was saved correctly
         --family <family_id>
             Specify the family ID to save the file as
+        --partition <partition>
+            Save from a numbered partition
     File to save to
         <filename>
             The file name
@@ -430,7 +436,8 @@ VERIFY:
     Check that the device contents match those in the file.
 
 SYNOPSIS:
-    picotool verify <filename> [-t <type>] [-r <from> <to>] [-o <offset>] [device-selection]
+    picotool verify <filename> [-t <type>] [-r <from> <to>] [-o <offset>] [--partition
+                <partition>] [device-selection]
 
 OPTIONS:
     The file to compare against
@@ -444,6 +451,8 @@ OPTIONS:
         -o, --offset <offset>
             Specify the load address (memory address; default 0x10000000) when comparing with a
             BIN file
+        --partition <partition>
+            Compare a numbered partition
     Target device selection
         See "picotool help device-selection" for available options
 ```
