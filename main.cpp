@@ -414,43 +414,31 @@ using cli::integer;
 using cli::hex;
 using cli::value;
 
-// todo can we derive from hex?
-struct family_id : public cli::value_base<family_id> {
-    explicit family_id(string name) : value_base(std::move(name)) {}
+// a family ID is either one of the known family names, or a plain hex value
+struct family_id : public cli::integer_base<family_id, cli::hex_format> {
+    explicit family_id(string name) : integer_base(std::move(name)) {}
 
     template<typename T>
     family_id &set(T &t) {
-        string nm = "<" + name() + ">";
         // note we cannot capture "this"
-        on_action([&t, nm](string value) {
+        on_action([&t](string value) {
             std::transform(value.begin(), value.end(), value.begin(),
                 [](unsigned char c){ return std::tolower(c); });
             std::replace( value.begin(), value.end(), '_', '-');
             auto family_id = family_name_to_id.find(value);
             if (family_id != family_name_to_id.end()) {
                 t = family_id->second;
-            } else if (value.find("0x") == 0) {
-                value = value.substr(2);
-                size_t pos = 0;
-                long lvalue = std::numeric_limits<long>::max();
-                try {
-                    lvalue = std::stoul(value, &pos, 16);
-                    if (pos != value.length()) {
-                        return "Garbage after hex value: " + value.substr(pos);
-                    }
-                } catch (std::invalid_argument &) {
-                    return value + " is not a valid hex value";
-                } catch (std::out_of_range &) {
-                }
-                if (lvalue != (unsigned int) lvalue) {
-                    return value + " is not a valid 32 bit value";
-                }
-                t = (unsigned int) lvalue;
-            } else {
-                return value + " is not a valid family ID"
-                + "\n\nValid family IDs are: " + cli::join(family_names, ", ") + ", or hex strings starting with 0x";
+                return string("");
             }
-            return string("");
+            if (value.find("0x") == 0) {
+                unsigned int tmp = 0;
+                string err = parse_string(value, tmp);
+                if (!err.empty()) return err;
+                t = tmp;
+                return string("");
+            }
+            return value + " is not a valid family ID"
+            + "\n\nValid family IDs are: " + cli::join(family_names, ", ") + ", or hex strings starting with 0x";
         });
         return *this;
     }
@@ -519,7 +507,7 @@ struct bdev_fs : public cli::value_base<bdev_fs> {
 struct cmd {
     explicit cmd(string name) : _name(std::move(name)) {}
     virtual ~cmd() = default;
-    enum device_support { none, one, zero_or_more };
+    enum device_support { none, one, zero_or_more, any };
     virtual group get_cli() = 0;
     virtual string get_doc() const = 0;
     virtual device_support get_device_support() { return one; }
@@ -562,6 +550,7 @@ struct _settings {
     int led=DEFAULT_BOOTSEL_LED;
     bool active_low=false;
     bool force_rp2040 = false;
+    bool target_debugprobe = false;
     uint32_t offset = 0;
     uint32_t from = 0;
     uint32_t to = 0;
@@ -573,6 +562,7 @@ struct _settings {
     int reboot_diagnostic_partition = BOOT_PARTITION_NONE;
     bool force = false;
     bool force_no_reboot = false;
+    bool only_force = false;
     string switch_cpu;
     uint32_t family_id = 0;
     model_t model = nullptr;
@@ -713,8 +703,10 @@ auto device_selection =
         (option("--pid") & integer("pid").set(settings.pid)) % "Filter by product id" +
         (option("--ser") & value("ser").set(settings.ser)) % "Filter by serial number"
         + option("--rp2040").set(settings.force_rp2040) % "Assume the device is an RP2040 - this is only required when using a custom vid/pid with an RP2040 on Windows, and is ignored on other operating systems"
+        + option("--debugprobe").set(settings.target_debugprobe) % "Force a DebugProbe device using firmware version >2.3.1 to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode"
         + option('f', "--force").set(settings.force) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be rebooted back to application mode" +
                 option('F', "--force-no-reboot").set(settings.force_no_reboot) % "Force a device not in BOOTSEL mode but running compatible code to reset so the command can be executed. After executing the command (unless the command itself is a 'reboot') the device will be left connected and accessible to picotool, but without the USB drive mounted"
+        + option("--force-ignore-bootsel").set(settings.only_force) % "Same as --force, but will ignore devices already in BOOTSEL mode"
         + (option("--bootsel-led") & integer("gpio").set(settings.led)) % 
         "Specify the GPIO for the BOOTSEL activity LED to flash (default "
     #if DEFAULT_BOOTSEL_LED < 0
@@ -724,7 +716,37 @@ auto device_selection =
     #endif
         ", ignored by RP2350A-A2 in Arm mode) - only applicable if this command reboots the device to BOOTSEL mode"
         + option("--bootsel-led-active-low").set(settings.active_low) % "The BOOTSEL activity LED is active low (ignored by RP2040 and RP2350-A4)"
-    ).min(0).doc_non_optional(true).collapse_synopsys("device-selection");
+    ).min(0).doc_non_optional(true).collapse_synopsys("device-selection").help_topic("device-selection");
+
+struct help_topic {
+    string title;
+    string doc;
+    group options; // optional, leave blank for topics without options
+};
+
+string family_id_help_text() {
+    return string("A family ID identifies the target chip and/or image type of a UF2 file, and is "
+           "accepted by the --family option of several commands.\n\n"
+           "Valid family IDs are: ") + cli::join(family_names, ", ") + ".\n\n"
+           "A family ID may also be given directly as a 32 bit hex value, e.g. 0x12345678.";
+}
+
+std::map<string, help_topic> help_topics {
+#if HAS_LIBUSB
+    { "device-selection", {
+        "Options for Target Device Selection and Rebooting",
+        "Options for selecting or filtering the target RP-series device(s), including rebooting devices to BOOTSEL mode first. "
+        "These options are accepted by most commands which target a device.\n\n"
+        "For the `-f/F` options, compatible code is defined as code which uses stdio_usb or the pico_usb_reset library, and which is still running. "
+        "See Forced Reboots in the README (https://github.com/raspberrypi/picotool#forced-reboots) for more information.",
+        group(device_selection).force_expand_help(true)
+    } },
+#endif
+    { "family-ids", {
+        "Valid Family IDs",
+        family_id_help_text()
+    } },
+};
 
 #define file_types_x(i)\
 (option ('t', "--type") & value("type").set(settings.file_types[i]))\
@@ -809,6 +831,14 @@ auto device_selection =
     named_file_types_x(types, i)\
 )
 
+#define named_option_typed_file_selection_x(name, option, i, types)\
+(\
+    option & value(name).with_exclusion_filter([](const string &value) {\
+            return value.find_first_of('-') == 0;\
+        }).set(settings.filenames[i]) % "The file name" +\
+    named_file_types_x(types, i)\
+)
+
 #define option_untyped_file_selection_x(option, i)\
 (\
     option & value("filename").with_exclusion_filter([](const string &value) {\
@@ -818,6 +848,10 @@ auto device_selection =
 
 auto file_types = (option ('t', "--type") & value("type").set(settings.file_types[0]))
             % "Specify file type (uf2 | elf | bin) explicitly, ignoring file extension";
+
+group as_section(const group &g) {
+    return group() + g;
+}
 
 auto file_selection =
         (
@@ -850,7 +884,7 @@ struct info_command : public cmd {
             ).min(0).doc_non_optional(true) % "Information to display" +
             (
             #if HAS_LIBUSB
-                device_selection % "To target one or more connected RP-series device(s) in BOOTSEL mode (the default)" |
+                device_selection % "To target one or more connected RP-series device(s) (the default)" |
             #endif
                 file_selection % "To target a file"
             ).major_group("TARGET SELECTION").min(0).doc_non_optional(true)
@@ -859,7 +893,7 @@ struct info_command : public cmd {
 
     string get_doc() const override {
         #if HAS_LIBUSB
-        return "Display information from the target device(s) or file.\nWithout any arguments, this will display basic information for all connected RP-series devices in BOOTSEL mode";
+        return "Display information from the target device(s) or file.\nWithout any arguments, this will display basic information for all connected RP-series devices in BOOTSEL mode.";
         #else
         return "Display information from the target file.";
         #endif
@@ -879,13 +913,13 @@ struct config_command : public cmd {
     group get_cli() override {
         return (
             (option('s', "--set") & (
-                value("key").set(settings.config.key) % "Variable name" +
-                value("value").set(settings.config.value) % "New value")
-            ).force_expand_help(true) +
+                value("key").set(settings.config.key) +
+                value("value").set(settings.config.value))
+            ) % "Set config variable name to new value" +
             (option('g', "--group") & value("group").set(settings.config.group)) % "Filter by feature group" + 
             (
             #if HAS_LIBUSB
-                device_selection % "To target one or more connected RP-series device(s) in BOOTSEL mode (the default)" |
+                device_selection % "To target one or more connected RP-series device(s) (the default)" |
             #endif
                 file_selection % "To target a file"
             ).major_group("TARGET SELECTION").min(0).doc_non_optional(true)
@@ -903,14 +937,14 @@ struct config_command : public cmd {
 
 #if HAS_LIBUSB
 auto bdev_base_options = (
-    (option('p', "--partition-number") % "Partition number to use as block device" &
-            integer("partition number").set(settings.bdev.partition_number) % "partition number").force_expand_help(true) +
-    (option("--partition-name") % "Partition name to use as block device" &
-            value("partition name").set(settings.bdev.partition_name) % "partition name").force_expand_help(true) +
-    (option("--partition-id") % "Partition ID to use as block device" &
-            integer("partition id").set(settings.bdev.partition_id) % "partition id").force_expand_help(true) +
-    (option("--filesystem") % "Specify filesystem to use" &
-            bdev_fs("fs").set(settings.bdev.fs) % "littlefs|fatfs").force_expand_help(true) +
+    (option('p', "--partition-number") &
+            integer("partition number").set(settings.bdev.partition_number)) % "Partition number to use as block device" +
+    (option("--partition-name") &
+            value("partition name").set(settings.bdev.partition_name)) % "Partition name to use as block device" +
+    (option("--partition-id") &
+            integer("partition id").set(settings.bdev.partition_id)) % "Partition ID to use as block device" +
+    (option("--filesystem") &
+            bdev_fs("fs").set(settings.bdev.fs)) % "Specify filesystem to use (littlefs|fatfs)" +
     (option("--force-formattable").set(settings.bdev.force_formattable) % "Allow formatting, even if the block device is not marked as fomattable") +
     (option("--force-writeable").set(settings.bdev.force_writeable) % "Allow writing, even if the block device is not marked as writeable")
 ).min(0).doc_non_optional(true) % "Block device options";
@@ -932,7 +966,7 @@ struct bdev_ls_command : public cmd {
     }
 
     string get_doc() const override {
-        return "List contents of the block device";
+        return "List contents of the block device.";
     }
 };
 
@@ -949,7 +983,7 @@ struct bdev_mkdir_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Create directory on the block device";
+        return "Create directory on the block device.";
     }
 };
 
@@ -967,7 +1001,7 @@ struct bdev_cp_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Copy file to/from the block device - use :filename to indicate files on the device (eg `cp main.py :main.py` to upload to the device)";
+        return "Copy file to/from the block device - use :filename to indicate files on the device (eg `cp main.py :main.py` to upload to the device).";
     }
 };
 
@@ -984,7 +1018,7 @@ struct bdev_rm_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Delete a file or an empty directory on the block device";
+        return "Delete a file or an empty directory on the block device.";
     }
 };
 
@@ -1001,7 +1035,7 @@ struct bdev_cat_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Print contents of file on the block device";
+        return "Print contents of file on the block device.";
     }
 };
 
@@ -1017,7 +1051,7 @@ struct bdev_format_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Format the block device";
+        return "Format the block device.";
     }
 };
 
@@ -1032,7 +1066,7 @@ vector<std::shared_ptr<cmd>> bdev_sub_commands {
 struct bdev_command : public multi_cmd {
     bdev_command() : multi_cmd("bdev", bdev_sub_commands) {}
     string get_doc() const override {
-        return "Commands related to embedded block devices";
+        return "Commands related to embedded block devices.";
     }
 };
 
@@ -1044,13 +1078,13 @@ struct verify_command : public cmd {
         return (
             file_selection % "The file to compare against" +
             (
-                (option('r', "--range").set(settings.range_set) % "Compare a sub range of memory only" &
-                    hex("from").set(settings.from) % "The lower address bound in hex" &
-                    hex("to").set(settings.to) % "The upper address bound in hex").force_expand_help(true) +
-                (option('o', "--offset").set(settings.offset_set) % "Specify the load address when comparing with a BIN file" &
-                    hex("offset").set(settings.offset) % "Load offset (memory address; default 0x10000000)").force_expand_help(true) +
-                (option("--partition") % "Compare a numbered partition" &
-                    integer("partition").set(settings.save.partition) % "partition to compare").force_expand_help(true)
+                (option('r', "--range").set(settings.range_set) &
+                    hex("from").set(settings.from) &
+                    hex("to").set(settings.to)) % "Compare a sub range of memory only (address bounds in hex)" +
+                (option('o', "--offset").set(settings.offset_set) &
+                    hex("offset").set(settings.offset)) % "Specify the load address (memory address; default 0x10000000) when comparing with a BIN file" +
+                (option("--partition") &
+                    integer("partition").set(settings.save.partition)) % "Compare a numbered partition"
             ).min(0).doc_non_optional(true) % "Address options" +
             device_selection % "Target device selection"
         );
@@ -1070,17 +1104,15 @@ struct save_command : public cmd {
             (
                 option('p', "--program") % "Save the installed program only. This is the default" |
                 option('a', "--all").doc_non_optional(true).set(settings.save.all) % "Save all of flash memory" |
-                (
-                    option('r', "--range").set(settings.range_set) % "Save a range of memory. Note that UF2s always store complete 256 byte-aligned blocks of 256 bytes, and the range is expanded accordingly" &
-                        hex("from").set(settings.from) % "The lower address bound in hex" &
-                        hex("to").set(settings.to) % "The upper address bound in hex"
-                ).min(0).doc_non_optional(true)
+                (option('r', "--range").synopsis_non_optional(true).set(settings.range_set) &
+                    hex("from").synopsis_non_optional(true).set(settings.from) &
+                    hex("to").synopsis_non_optional(true).set(settings.to)).synopsis_non_optional(true) % "Save a range of memory (address bounds in hex). Note that UF2s always store complete 256 byte-aligned blocks of 256 bytes, and the range is expanded accordingly."
             ).min(0).doc_non_optional(true).no_match_beats_error(false) % "Selection of data to save" +
             option('v', "--verify").set(settings.save.verify) % "Verify the data was saved correctly" +
-            (option("--family") % "Specify the family ID to save the file as" &
-                family_id("family_id").set(settings.family_id) % "family ID to save file as").force_expand_help(true) +
-            (option("--partition") % "Save from a numbered partition" &
-                integer("partition").set(settings.save.partition) % "partition to save").force_expand_help(true) +
+            (option("--family") &
+                family_id("family_id").set(settings.family_id)) % "Specify the family ID to save the file as" +
+            (option("--partition") &
+                integer("partition").set(settings.save.partition)) % "Save from a numbered partition" +
             ( // note this parenthesis seems to help with error messages for say save --foo
                 file_selection % "File to save to" +
                 device_selection % "Source device selection"
@@ -1099,22 +1131,22 @@ struct load_command : public cmd {
     group get_cli() override {
         return (
             (
-                option("--ignore-partitions").set(settings.load.ignore_pt) % "When writing flash data, ignore the partition table and write to absolute space" +
-                (option("--family") % "Specify the family ID of the file to load" &
-                        family_id("family_id").set(settings.family_id) % "family ID to use for load").force_expand_help(true) +
-                (option('p', "--partition") % "Specify the partition to load into" &
-                        integer("partition").set(settings.load.partition) % "partition to load into").force_expand_help(true) +
+                option("--ignore-partitions").set(settings.load.ignore_pt) % "Ignore the partition table, and ignore family ID compatibility" +
+                (option("--family") &
+                        family_id("family_id").set(settings.family_id)) % "Specify the family ID of the file to load" +
+                (option('p', "--partition") &
+                        integer("partition").set(settings.load.partition)) % "Specify the partition to load into" +
                 option('n', "--no-overwrite").set(settings.load.no_overwrite) % "When writing flash data, do not overwrite an existing program in flash. If picotool cannot determine the size/presence of the program in flash, the command fails" +
                 option('N', "--no-overwrite-unsafe").set(settings.load.no_overwrite_force) % "When writing flash data, do not overwrite an existing program in flash. If picotool cannot determine the size/presence of the program in flash, the load continues anyway" +
                 option('u', "--update").set(settings.load.update) % "Skip writing flash sectors that already contain identical data" +
                 option('v', "--verify").set(settings.load.verify) % "Verify the data was written correctly" +
                 option('x', "--execute").set(settings.load.execute) % "Perform a bootrom reboot to execute the downloaded file as a program after the load - either a flash update boot for binaries in flash, or a RAM image boot for other binaries "
-            ).min(0).doc_non_optional(true) % "Post load actions" +
+            ).min(0).doc_non_optional(true) % "Load options" +
             file_selection % "File to load from" +
-            (
-                option('o', "--offset").set(settings.offset_set) % "Specify the load address for a BIN file" &
-                     hex("offset").set(settings.offset) % "Load offset (memory address; default 0x10000000)"
-            ).force_expand_help(true) % "BIN file options" +
+            as_section(
+                (option('o', "--offset").set(settings.offset_set) &
+                     hex("offset").set(settings.offset)) % "Specify the load address for a BIN file (memory address; default 0x10000000)"
+            ).min(0).doc_non_optional(true) % "BIN file options" +
             device_selection % "Target device selection"
         );
     }
@@ -1132,18 +1164,14 @@ struct erase_command : public cmd {
         return (
             (
                 option('a', "--all") % "Erase all of flash memory. This is the default" |
-                (
-                    option('p', "--partition") % "Erase a partition" &
-                        integer("partition").set(settings.load.partition) % "Partition number to erase"
-                ).min(0).doc_non_optional(true) |
-                (
-                    option('r', "--range").set(settings.range_set) % "Erase a range of memory. Note that erases must be 4096 byte-aligned, so the range is expanded accordingly" &
-                        hex("from").set(settings.from) % "The lower address bound in hex" &
-                        hex("to").set(settings.to) % "The upper address bound in hex"
-                ).min(0).doc_non_optional(true)
+                (option('p', "--partition").synopsis_non_optional(true) &
+                    integer("partition").set(settings.load.partition)).synopsis_non_optional(true) % "Erase a partition" |
+                (option('r', "--range").synopsis_non_optional(true).set(settings.range_set) &
+                    hex("from").synopsis_non_optional(true).set(settings.from) &
+                    hex("to").synopsis_non_optional(true).set(settings.to)).synopsis_non_optional(true) % "Erase a range of memory (address bounds in hex). Note that erases must be 4096 byte-aligned, so the range is expanded accordingly."
             ).min(0).doc_non_optional(true).no_match_beats_error(false) % "Selection of data to erase" +
             ( // note this parenthesis seems to help with error messages for say erase --foo
-                device_selection % "Source device selection"
+                device_selection % "Target device selection"
             )
         );
     }
@@ -1167,9 +1195,9 @@ struct encrypt_command : public cmd {
             option("--fast-rosc").set(settings.encrypt.fast_rosc) % "Use ~180MHz ROSC configuration for embedded bootloader" +
             option("--use-mbedtls").set(settings.encrypt.use_mbedtls) % "Use MbedTLS implementation of embedded bootloader (faster but less secure)" +
             (
-                option("--otp-key-page").set(settings.encrypt.otp_key_page_set) % "Specify the OTP page storing the AES key (IV salt is stored on the next page)" &
-                    integer("page").set(settings.encrypt.otp_key_page) % "OTP page (default 29)"
-            ).force_expand_help(true) +
+                option("--otp-key-page").set(settings.encrypt.otp_key_page_set) &
+                    integer("page").set(settings.encrypt.otp_key_page)
+            ) % "Specify the OTP page storing the AES key (default 29; IV salt is stored on the next page)" +
             (
                 option("--hash").set(settings.seal.hash) % "Hash the encrypted file" +
                 option("--sign").set(settings.seal.sign) % "Sign the encrypted file" +
@@ -1177,10 +1205,10 @@ struct encrypt_command : public cmd {
                 option("--pin-xip-sram").set(settings.seal.pin_xip_sram) % "Pin XIP SRAM on load"
             ).min(0).doc_non_optional(true) % "Signing Configuration" +
             named_file_selection_x("infile", 0) % "File to load from" +
-            (
-                option('o', "--offset").set(settings.offset_set) % "Specify the load address for a BIN file" &
-                     hex("offset").set(settings.offset) % "Load offset (memory address; default 0x10000000)"
-            ).force_expand_help(true) % "BIN file options" +
+            as_section(
+                (option('o', "--offset").set(settings.offset_set) &
+                     hex("offset").set(settings.offset)) % "Specify the load address for a BIN file (memory address; default 0x10000000)"
+            ).min(0).doc_non_optional(true) % "BIN file options" +
             named_file_selection_x("outfile", 1) % "File to save to" +
             named_untyped_file_selection_x("aes_key", 2) % "AES Key Share or AES Key" +
             named_untyped_file_selection_x("iv_salt", 3) % "IV Salt" +
@@ -1211,10 +1239,10 @@ struct seal_command : public cmd {
                 option("--no-squash").set(settings.seal.no_squash) % "Don't squash segments in the ELF file"
             ).min(0).doc_non_optional(true) % "Configuration" +
             named_file_selection_x("infile", 0) % "File to load from" +
-            (
-                option('o', "--offset").set(settings.offset_set) % "Specify the load address for a BIN file" &
-                     hex("offset").set(settings.offset) % "Load offset (memory address; default 0x10000000)"
-            ).force_expand_help(true) % "BIN file options" +
+            as_section(
+                (option('o', "--offset").set(settings.offset_set) &
+                     hex("offset").set(settings.offset)) % "Specify the load address for a BIN file (memory address; default 0x10000000)"
+            ).min(0).doc_non_optional(true) % "BIN file options" +
             named_file_selection_x("outfile", 1) % "File to save to" +
             optional_untyped_file_selection_x("key", 2) % "Key file (.pem)" +
             optional_untyped_file_selection_x("otp", 3) % "JSON file to save OTP to (will edit existing file if it exists)" +
@@ -1292,20 +1320,17 @@ struct partition_create_command : public cmd {
                 named_untyped_file_selection_x("infile", 0) % "partition table JSON" +
                 (named_file_selection_x("outfile", 1) % "output file" +
                 (
-                    (option('o', "--offset").set(settings.offset_set) % "Specify the load address for UF2 file output" &
-                        hex("offset").set(settings.offset) % "Load offset (memory address; default 0x10000000)").force_expand_help(true) +
-                    (option("--family") % "Specify the family if for UF2 file output" &
-                        family_id("family_id").set(settings.family_id) % "family ID for UF2 (default absolute)").force_expand_help(true)
+                    (option('o', "--offset").set(settings.offset_set) &
+                        hex("offset").set(settings.offset)) % "Specify the load address for UF2 file output (memory address; default 0x10000000)" +
+                    (option("--family") &
+                        family_id("family_id").set(settings.family_id)) % "Specify the family id for UF2 file output (default absolute)"
                 ).min(0).force_expand_help(true) % "UF2 output options") +
-                optional_typed_file_selection_x("bootloader", 2, "elf") % "embed partition table into bootloader ELF" + 
+                optional_typed_file_selection_x("bootloader", 2, "elf") % "Embed partition table into bootloader ELF" + 
                 (
                 #if HAS_MBEDTLS
                     // todo why doesn't this set settings.partition.sign?
-                    ((option("--sign").set(settings.partition.sign) & value("keyfile").with_exclusion_filter([](const string &value) {
-                            return value.find_first_of('-') == 0;
-                        }).set(settings.filenames[3])) % "The file name" +
-                    named_file_types_x("pem", 3)) % "Sign the partition table" + 
-                    (option("--no-hash").clear(settings.partition.hash) % "Don't hash the partition table") + 
+                    named_option_typed_file_selection_x("keyfile", option("--sign").set(settings.partition.sign), 3, "pem") % "Sign the partition table with a PEM key" +
+                    (option("--no-hash").clear(settings.partition.hash) % "Don't hash the partition table") +
                 #endif
                     (option("--singleton").set(settings.partition.singleton) % "Singleton partition table") +
                     (option("--no-btstack-flash-bank").set(settings.partition.no_btstack_flash_bank) % "Don't check for compatibility with BTStack flash bank")
@@ -1320,7 +1345,7 @@ struct partition_create_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Create a partition table from json";
+        return "Create a partition table from json.";
     }
 };
 
@@ -1335,7 +1360,7 @@ vector<std::shared_ptr<cmd>> partition_sub_commands {
 struct partition_command : public multi_cmd {
     partition_command() : multi_cmd("partition", partition_sub_commands) {}
     string get_doc() const override {
-        return "Commands related to RP2350 Partition Tables";
+        return "Commands related to RP2350 Partition Tables.";
     }
 };
 
@@ -1368,7 +1393,7 @@ struct otp_list_command : public cmd {
     }
 
     string get_doc() const override {
-        return "List matching known registers/fields";
+        return "List matching known registers/fields.";
     }
 };
 #if HAS_LIBUSB
@@ -1407,7 +1432,7 @@ struct otp_get_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Get the value of one or more OTP registers/fields";
+        return "Get the value of one or more OTP registers/fields.";
     }
 };
 
@@ -1439,7 +1464,7 @@ struct otp_dump_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Dump entire OTP";
+        return "Dump entire OTP.";
     }
 };
 
@@ -1502,7 +1527,7 @@ struct otp_set_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Set the value of an OTP row/field";
+        return "Set the value of an OTP row/field.";
     }
 };
 
@@ -1526,7 +1551,7 @@ struct otp_permissions_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Set the OTP access permissions";
+        return "Set the OTP access permissions.";
     }
 };
 
@@ -1538,7 +1563,7 @@ struct otp_white_label_command : public cmd {
 
     group get_cli() override {
         return (
-                (
+                as_section(
                         (option('s', "--start_row") & integer("row").set(settings.otp.row)) % "Start row for white label struct (default 0x100) (note use 0x for hex)"
                 ).min(0).doc_non_optional(true) % "Row options" +
                 named_untyped_file_selection_x("filename", 0) % "JSON file with white labelling values" +
@@ -1547,7 +1572,7 @@ struct otp_white_label_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Set the white labelling values in OTP";
+        return "Set the white labelling values in OTP.";
     }
 };
 #endif
@@ -1568,13 +1593,14 @@ vector<std::shared_ptr<cmd>> otp_sub_commands {
 struct otp_command : public multi_cmd {
     otp_command() : multi_cmd("otp", otp_sub_commands) {}
     string get_doc() const override {
-        return "Commands related to the RP2350 OTP (One-Time-Programmable) Memory";
+        return "Commands related to the RP2350 OTP (One-Time-Programmable) memory.";
     }
 };
 
 #if HAS_LIBUSB
 struct uf2_info_command : public cmd {
     uf2_info_command() : cmd("info") {}
+    virtual bool requires_rp2350() const override { return true; }
     bool execute(device_map &devices) override;
 
     group get_cli() override {
@@ -1600,18 +1626,18 @@ struct uf2_convert_command : public cmd {
                 option("--verbose").set(settings.verbose) % "Print verbose output" +
                 named_file_selection_x("infile", 0) % "File to load from" +
                 named_typed_file_selection_x("outfile", 1, "uf2") % "File to save UF2 to" +
-                (
-                    option('o', "--offset").set(settings.offset_set) % "Specify the load address" &
-                        hex("offset").set(settings.offset) % "Load offset (memory address; default 0x10000000 for BIN file)"
-                ).force_expand_help(true) % "Packaging Options" + 
-                (
-                    option("--family") % "Specify the family ID" &
-                        family_id("family_id").set(settings.family_id) % "family ID for UF2"
-                ).force_expand_help(true) % "UF2 Family options" +
-                (
-                    option("--platform") % "Optional platform for memory-address validation" &
-                        platform_model("platform").set(settings.model) % "platform to use (eg rp2040, rp2350)"
-                ).force_expand_help(true) % "Platform options"
+                as_section(
+                    (option('o', "--offset").set(settings.offset_set) &
+                        hex("offset").set(settings.offset)) % "Specify the load address (memory address; default 0x10000000 for BIN file)"
+                ).min(0).doc_non_optional(true) % "Packaging Options" +
+                as_section(
+                    (option("--family") &
+                        family_id("family_id").set(settings.family_id)) % "Specify the family ID for UF2"
+                ).min(0).doc_non_optional(true) % "UF2 Family options" +
+                as_section(
+                    (option("--platform") &
+                        platform_model("platform").set(settings.model)) % "Optional platform for memory-address validation (eg rp2040, rp2350)"
+                ).min(0).doc_non_optional(true) % "Platform options"
             #if SUPPORT_RP2350_A2
                 + (
                     option("--abs-block").set(settings.uf2.abs_block) % "Add an absolute block" +
@@ -1638,18 +1664,18 @@ struct uf2_combine_command : public cmd {
                 named_typed_file_selection_x("infile1", 1, "uf2") % "First file to combine" +
                 named_typed_file_selection_x("infile2", 2, "uf2") % "Second file to combine" +
                 named_typed_file_selection_x("outfile", 0, "uf2") % "File to save output to" +
-                (
-                    option("--family") % "Specify the family ID" &
-                        family_id("family_id").set(settings.family_id) % "family ID for combined UF2 (defaults to first one)"
-                ).force_expand_help(true) % "UF2 Family options" +
-                (
-                    option("--offset").set(settings.uf2.offset_set) % "Offset second UF2 by amount" &
-                        hex("offset").set(settings.uf2.offset) % "offset amount (hexadecimal; default 0x0)"
-                ).force_expand_help(true) % "Offset options" +
-                (
-                    option("--partition").set(settings.uf2.partition_set) % "Place second UF2 in partition (first UF2 must contain a partition table)" &
-                        integer("partition").min_value(0).max_value(PARTITION_TABLE_MAX_PARTITIONS-1).set(settings.uf2.partition) % "partition number (default to 0)"
-                ).force_expand_help(true) % "Partition options"
+                as_section(
+                    (option("--family") &
+                        family_id("family_id").set(settings.family_id)) % "Specify the family ID for combined UF2 (defaults to first one)"
+                ).min(0).doc_non_optional(true) % "UF2 Family options" +
+                as_section(
+                    (option("--offset").set(settings.uf2.offset_set) &
+                        hex("offset").set(settings.uf2.offset)) % "Offset second UF2 by amount (hexadecimal; default 0x0)"
+                ).min(0).doc_non_optional(true) % "Offset options" +
+                as_section(
+                    (option("--partition").set(settings.uf2.partition_set) &
+                        integer("partition").min_value(0).max_value(PARTITION_TABLE_MAX_PARTITIONS-1).set(settings.uf2.partition)) % "Place second UF2 in partition (first UF2 must contain a partition table)"
+                ).min(0).doc_non_optional(true) % "Partition options"
             #if SUPPORT_RP2350_A2
                 + (
                     option("--abs-block").set(settings.uf2.abs_block) % "Add an absolute block" +
@@ -1675,7 +1701,7 @@ vector<std::shared_ptr<cmd>> uf2_sub_commands {
 struct uf2_command : public multi_cmd {
     uf2_command() : multi_cmd("uf2", uf2_sub_commands) {}
     string get_doc() const override {
-        return "Commands related to UF2 creation and status";
+        return "Commands related to UF2 creation and status.";
     }
 };
 
@@ -1715,7 +1741,7 @@ struct help_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Show general help or help for a specific command";
+        return "Show general help, or help for a specific command or topic.";
     }
 };
 
@@ -1762,11 +1788,28 @@ struct version_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Display picotool version";
+        return "Display picotool version.";
     }
 };
 
 #if HAS_LIBUSB
+struct list_command : public cmd {
+    list_command() : cmd("list") {}
+    bool execute(device_map &devices) override;
+
+    device_support get_device_support() override {
+        return device_support::any;
+    }
+
+    group get_cli() override {
+        return group();
+    }
+
+    string get_doc() const override {
+        return "List all connected RP-series devices that picotool can detect";
+    }
+};
+
 struct reboot_command : public cmd {
     bool quiet;
     reboot_command() : cmd("reboot") {}
@@ -1789,7 +1832,7 @@ struct reboot_command : public cmd {
     }
 
     string get_doc() const override {
-        return "Reboot the device";
+        return "Reboot the device.";
     }
 };
 auto reboot_cmd = std::shared_ptr<reboot_command>(new reboot_command());
@@ -1807,6 +1850,7 @@ vector<std::shared_ptr<cmd>> commands {
         std::shared_ptr<cmd>(new verify_command()),
         std::shared_ptr<cmd>(new erase_command()),
         reboot_cmd,
+        std::shared_ptr<cmd>(new list_command()),
     #endif
     #if HAS_MBEDTLS
         std::shared_ptr<cmd>(new seal_command()),
@@ -1859,18 +1903,60 @@ int parse(const int argc, char **argv) {
 
     int tab = 4;
     bool first = true;
-    auto section_header=[&](const string &name) {
+    auto section_header=[&](const string &name, bool upper = true) {
         fos.first_column(0);
         fos.hanging_indent(0);
         if (!first) fos.wrap_hard();
         first = false;
-        fos << (uppercase(name) + ":\n");
+        fos << ((upper ? uppercase(name) : name) + ":\n");
+    };
+    auto print_options_for=[&](const group &g) {
+        cli::option_map options;
+        g.get_option_help("", "", options);
+        for (const auto &major : options.contents.ordered_keys()) {
+            section_header(major.empty() ? "OPTIONS" : major);
+            bool first_opt = true;
+            for (const auto &minor : options.contents[major].ordered_keys()) {
+                fos.first_column(tab);
+                fos.hanging_indent(tab*2);
+                if (!minor.empty()) {
+                    fos << minor << "\n";
+                } else if (!first_opt) {
+                    fos << "Other\n";
+                }
+                first_opt = false;
+                for (const auto &opts : options.contents[major][minor]) {
+                    if (!opts.first.empty()) {
+                        fos.first_column(tab*2);
+                        fos.hanging_indent(0);
+                        fos << opts.first << "\n";
+                        fos.first_column(tab*3);
+                    } else {
+                        fos.first_column(tab*2);
+                    }
+                    fos.hanging_indent(0);
+                    fos << opts.second << "\n";
+                }
+            }
+        }
+    };
+    auto print_help_topic=[&](const help_topic &topic) {
+        section_header(topic.title, false);
+        fos.first_column(tab);
+        fos.hanging_indent(0);
+        fos << topic.doc << "\n";
+        print_options_for(topic.options);
+        fos.flush();
     };
     auto usage=[&]() {
         if (help_mode && selected_cmd) {
             section_header(help_mode_prefix + selected_cmd->name());
             fos.first_column(tab);
-            fos << selected_cmd->get_doc() << "\n";
+            fos << selected_cmd->get_doc();
+            if (selected_cmd->requires_rp2350()) {
+                fos << " (RP2350 only)";
+            }
+            fos << "\n";
         } else if (!selected_cmd && !no_global_header) {
             section_header(tool_name);
             fos.first_column(tab);
@@ -1936,6 +2022,12 @@ int parse(const int argc, char **argv) {
             s << "\n";
             fos << s.str();
         };
+        auto write_topic = [&](size_t max, const std::string& name, const help_topic& topic) {
+            fos.first_column(tab);
+            fos << name;
+            fos.first_column((int) (max + tab + 3));
+            fos << topic.title << "\n";
+        };
         if (!selected_cmd) {
             size_t max = 0;
             section_header("COMMANDS");
@@ -1944,6 +2036,16 @@ int parse(const int argc, char **argv) {
             }
             for (auto &cmd: commands) {
                 write_command(max, cmd->name(), cmd);
+            }
+            if (!help_topics.empty()) {
+                size_t topic_max = 0;
+                for (auto &topic: help_topics) {
+                    topic_max = std::max(topic.first.size(), topic_max);
+                }
+                section_header("TOPICS");
+                for (auto &topic: help_topics) {
+                    write_topic(topic_max, topic.first, topic.second);
+                }
             }
         } else if (selected_cmd->is_multi()) {
             section_header("SUB COMMANDS");
@@ -1980,36 +2082,17 @@ int parse(const int argc, char **argv) {
             fos << built_without_libusb_message;
             #endif
         } else {
-            cli::option_map options;
-            selected_cmd->get_cli().get_option_help("", "", options);
-            for (const auto &major : options.contents.ordered_keys()) {
-                section_header(major.empty() ? "OPTIONS" : major);
-                bool first = true;
-                for (const auto &minor : options.contents[major].ordered_keys()) {
-                    fos.first_column(tab);
-                    fos.hanging_indent(tab*2);
-                    if (!minor.empty()) {
-                        fos << minor << "\n";
-                    } else if (!first) {
-                        fos << "Other\n";
-                    }
-                    first = false;
-                    for (const auto &opts : options.contents[major][minor]) {
-                        fos.first_column(tab*2);
-                        fos.hanging_indent(0);
-                        fos << opts.first << "\n";
-                        fos.first_column(tab*3);
-                        fos.hanging_indent(0);
-                        fos << opts.second << "\n";
-                    }
-                }
-            }
+            print_options_for(selected_cmd->get_cli());
         }
-        if (!selected_cmd) {
+        if (!selected_cmd || selected_cmd->is_multi()) {
             fos.first_column(0);
             fos.hanging_indent(0);
             fos.wrap_hard();
-            fos << "Use \"picotool help <cmd>\" for more info\n";
+            if (selected_cmd) {
+                fos << "Use \"picotool help " << selected_cmd->name() << " <subcmd>\" for more info\n";
+            } else {
+                fos << "Use \"picotool help <cmd>\" or \"picotool help <topic>\" for more info\n";
+            }
             #if !HAS_LIBUSB
             if (!help_mode) {
                 fos << built_without_libusb_message;
@@ -2020,6 +2103,12 @@ int parse(const int argc, char **argv) {
     };
 
     auto args = cli::make_args(argc, argv);
+
+    // Check if the only argument is --version, if so replace it with version
+    if (args[0] == "--version" && args.size() == 1) {
+        printf("WARNING: Use \"picotool version\" instead of \"picotool --version\"\n");
+        args[0] = "version";
+    }
 
     // Check if any -h or --help argument was requested, if so insert the help subcommand before any
     // arguments, this will ensure the correct help gets printed automatically.
@@ -2084,6 +2173,12 @@ int parse(const int argc, char **argv) {
                 usage();
                 return 0;
             } else {
+                auto topic = help_topics.find(args[0]);
+                if (topic != help_topics.end()) {
+                    selected_cmd = nullptr;
+                    print_help_topic(topic->second);
+                    return 0;
+                }
                 selected_cmd = find_command(args[0]);
                 if (selected_cmd->is_multi() && args.size() > 1) {
                     help_mode_prefix = selected_cmd->name() + " ";
@@ -2542,35 +2637,36 @@ struct picoboot_memory_access : public memory_access {
                         break;
                     }
                 }
+                // Flash writes must be in whole pages, and erases in whole sectors, so
+                // expand to an aligned range, preserving the existing surrounding data
+                uint32_t alignment = do_erase ? FLASH_SECTOR_ERASE_SIZE : PAGE_SIZE;
+                range aligned_range(address & ~(alignment - 1),
+                                    (address + size + alignment - 1) & ~(alignment - 1));
+                assert(aligned_range.contains(address));
+                assert(aligned_range.contains(address + size - 1));
+
+                uint32_t pre_len = address - aligned_range.from;
+                uint32_t post_len = aligned_range.to - (address + size);
+                assert(pre_len + size + post_len == aligned_range.len());
+
+                // save data before the changing data
+                write_data.resize(pre_len);
+                if (pre_len) read(aligned_range.from, write_data.data(), write_data.size(), false);
+                // now add the data that is changing
+                write_data.insert(write_data.end(), buffer, buffer + size);
+                // save data after the changing data
+                write_data.resize(aligned_range.len());
+                if (post_len) read(address + size, write_data.data() + pre_len + size, post_len, false);
+
+                // Automatically erase flash, if needed
                 if (do_erase) {
-                    // Automatically erase flash, and make it aligned
-                    // we have to erase in whole pages
-                    range aligned_range(address & ~(FLASH_SECTOR_ERASE_SIZE - 1),
-                                        ((address + size) & ~(FLASH_SECTOR_ERASE_SIZE - 1)) + FLASH_SECTOR_ERASE_SIZE);
-                    assert(aligned_range.contains(address));
-                    assert(aligned_range.contains(address + size));
-
-                    uint32_t pre_len = address - aligned_range.from;
-                    uint32_t post_len = aligned_range.to - (address + size);
-                    assert(pre_len + size + post_len == aligned_range.len());
-
-                    // save data before the changing data
-                    write_data.resize(pre_len);
-                    if (pre_len) read(aligned_range.from, write_data.data(), write_data.size(), false);
-                    // now add the data that is changing
-                    write_data.insert(write_data.end(), buffer, buffer + size);
-                    // save data after the changing data
-                    write_data.resize(aligned_range.len());
-                    if (post_len) read(address + size, write_data.data() + pre_len + size, post_len, false);
-
-                    // Do the erase
                     connection.flash_erase(aligned_range.from, aligned_range.len());
-
-                    // Update what will now be written
-                    address = aligned_range.from;
-                    buffer = write_data.data();
-                    size = aligned_range.len();
                 }
+
+                // Update what will now be written
+                address = aligned_range.from;
+                buffer = write_data.data();
+                size = aligned_range.len();
             }
         }
         if (is_transfer_aligned(address, model) && is_transfer_aligned(address + size, model)) {
@@ -3180,27 +3276,38 @@ protected:
     }
 };
 
-uint32_t guess_flash_size(memory_access &access) {
+#if HAS_LIBUSB
+int guess_flash_size(memory_access &access) {
     assert(access.is_device());
-    // Check that flash is not erased (TODO should check for second stage)
-    auto first_two_pages = access.read_vector<uint8_t>(FLASH_START, 2 * PAGE_SIZE);
-    bool all_match = std::equal(first_two_pages.begin(),
-                                first_two_pages.begin() + PAGE_SIZE,
-                                first_two_pages.begin() + PAGE_SIZE);
-    if (all_match) {
-        return 0;
-    }
+    try {
+        // Check that flash is not erased (TODO should check for second stage)
+        auto first_two_pages = access.read_vector<uint8_t>(FLASH_START, 2 * PAGE_SIZE);
+        bool all_match = std::equal(first_two_pages.begin(),
+                                    first_two_pages.begin() + PAGE_SIZE,
+                                    first_two_pages.begin() + PAGE_SIZE);
+        if (all_match) {
+            return 0;
+        }
 
-    // Read at decreasing power-of-two addresses until we don't see the boot pages again
-    const int min_size = 16 * PAGE_SIZE;
-    const int max_size = 8 * 1024 * 1024;
-    int size;
-    for (size = max_size; size >= min_size; size >>= 1) {
-        auto new_pages = access.read_vector<uint8_t>(FLASH_START + size, 2 * PAGE_SIZE);
-        if (!std::equal(first_two_pages.begin(), first_two_pages.end(), new_pages.begin())) break;
+        // Read at decreasing power-of-two addresses until we don't see the boot pages again
+        const int min_size = 16 * PAGE_SIZE;
+        const int max_size = 8 * 1024 * 1024;
+        int size;
+        for (size = max_size; size >= min_size; size >>= 1) {
+            auto new_pages = access.read_vector<uint8_t>(FLASH_START + size, 2 * PAGE_SIZE);
+            if (!std::equal(first_two_pages.begin(), first_two_pages.end(), new_pages.begin())) break;
+        }
+        return size * 2;
+    } catch (picoboot::command_failure &e) {
+        if (e.get_code() == PICOBOOT_NOT_PERMITTED) {
+            // unable to guess flash size due to permission failure
+            return ERROR_NOT_POSSIBLE;
+        } else {
+            throw;
+        }
     }
-    return size * 2;
 }
+#endif
 
 // returns true if string is a hex string, and fills array with the values
 bool string_to_hex_array(const string& str, uint8_t *array, size_t size, const string& error_msg) {
@@ -3313,6 +3420,7 @@ uint32_t build_rmap_uf2(std::shared_ptr<std::iostream>file, range_map<size_t>& r
     uf2_block block;
     unsigned int pos = 0;
     uint32_t next_family_id = 0;
+    vector<uint32_t> family_ids = {};
     do {
         file->read((char*)&block, sizeof(uf2_block));
         if (file->fail()) {
@@ -3322,31 +3430,41 @@ uint32_t build_rmap_uf2(std::shared_ptr<std::iostream>file, range_map<size_t>& r
         if (block.magic_start0 == UF2_MAGIC_START0 && block.magic_start1 == UF2_MAGIC_START1 &&
             block.magic_end == UF2_MAGIC_END) {
             if (block.flags & UF2_FLAG_FAMILY_ID_PRESENT &&
-                !(block.flags & UF2_FLAG_NOT_MAIN_FLASH) && block.payload_size == PAGE_SIZE &&
-                (!family_id || block.file_size == family_id)) {
+                !(block.flags & UF2_FLAG_NOT_MAIN_FLASH) && block.payload_size == PAGE_SIZE) {
+                if(
+                    std::find(family_ids.begin(), family_ids.end(), block.file_size) == family_ids.end()
+            #if SUPPORT_RP2350_A2
+                    && !check_abs_block(block)
+            #endif
+                ) {
+                    // new family ID found
+                    family_ids.push_back(block.file_size);
+                    DEBUG_LOG("New family ID %s\n", family_name(block.file_size).c_str());
+                    if (
+                        std::find(family_ids.begin(), family_ids.end(), family_id) != family_ids.end()
+                        && std::find(family_ids.begin(), family_ids.end(), family_id) + 1 == std::find(family_ids.begin(), family_ids.end(), block.file_size)
+                    ) {
+                        DEBUG_LOG("This is next family ID %s\n", family_name(block.file_size).c_str());
+                        next_family_id = block.file_size;
+                    } else if (block.file_size == family_id) {
+                        DEBUG_LOG("This is selected family ID %s\n", family_name(block.file_size).c_str());
+                    }
+                }
+                if (!family_id || block.file_size == family_id) {
                 #if SUPPORT_RP2350_A2
-                // ignore the absolute block, but save the address
-                if (check_abs_block(block)) {
-                    DEBUG_LOG("Ignoring RP2350-E10 absolute block\n");
-                    settings.uf2.abs_block_loc = block.target_addr;
-                } else {
+                    // ignore the absolute block, but save the address
+                    if (check_abs_block(block)) {
+                        DEBUG_LOG("Ignoring RP2350-E10 absolute block\n");
+                        settings.uf2.abs_block_loc = block.target_addr;
+                    } else {
+                        rmap.insert(range(block.target_addr, block.target_addr + PAGE_SIZE), pos + offsetof(uf2_block, data[0]));
+                        family_id = block.file_size;
+                    }
+                #else
                     rmap.insert(range(block.target_addr, block.target_addr + PAGE_SIZE), pos + offsetof(uf2_block, data[0]));
                     family_id = block.file_size;
-                    next_family_id = 0;
+                #endif
                 }
-                #else
-                rmap.insert(range(block.target_addr, block.target_addr + PAGE_SIZE), pos + offsetof(uf2_block, data[0]));
-                family_id = block.file_size;
-                next_family_id = 0;
-                #endif
-            } else if (block.file_size != family_id && family_id && !next_family_id) {
-                #if SUPPORT_RP2350_A2
-                if (!check_abs_block(block)) {
-                #endif
-                    next_family_id = block.file_size;
-                #if SUPPORT_RP2350_A2
-                }
-                #endif
             }
         }
         pos += sizeof(uf2_block);
@@ -4234,22 +4352,18 @@ void info_guts(memory_access &raw_access, void *con, bool no_pt_loaded=false) {
                 select_group(device_info);
             }
 
-            try {
-                int32_t size_guess = guess_flash_size(raw_access);
-                if (size_guess > 0) {
-                    info_pair("flash size", std::to_string(size_guess/1024) + "K");
-                    if (model->chip() == rp2040) {
-                        uint64_t flash_id = 0;
-                        con->flash_id(flash_id);
-                        info_pair("flash id", hex_string(flash_id, 16, true, true));
-                    }
+            int size_guess = guess_flash_size(raw_access);
+            if (size_guess < 0) {
+                info_pair("flash size", "not determined due to access permissions");
+            } else if (size_guess > 0) {
+                info_pair("flash size", std::to_string(size_guess/1024) + "K");
+                if (model->chip() == rp2040) {
+                    uint64_t flash_id = 0;
+                    con->flash_id(flash_id);
+                    info_pair("flash id", hex_string(flash_id, 16, true, true));
                 }
-            } catch (picoboot::command_failure &e) {
-                if (e.get_code() == PICOBOOT_NOT_PERMITTED) {
-                    info_pair("flash size", "not determined due to access permissions");
-                } else {
-                    throw;
-                }
+            } else {
+                info_pair("flash size", "not determined due to erased start of flash");
             }
 
             // not sure how interesting this is given the chip revision which is correlated
@@ -4442,7 +4556,8 @@ void config_guts(memory_access &raw_access) {
 
 string missing_device_string(bool wasRetry, bool requires_rp2350 = false) {
     char b[256];
-    const char* device_name = requires_rp2350 ? "RP2350" : "RP-series";
+    const char* device_name = settings.target_debugprobe ? "DebugProbe" : requires_rp2350 ? "RP2350" : "RP-series";
+    const char* mode = settings.only_force ? "with a USB reset interface" : "in BOOTSEL mode";
     if (wasRetry) {
         strcpy(b, "Despite the reboot attempt, no ");
     } else {
@@ -4452,16 +4567,31 @@ string missing_device_string(bool wasRetry, bool requires_rp2350 = false) {
     int buf_len = b + sizeof(b) - buf;
     if (settings.address != -1) {
         if (settings.bus != -1) {
-            snprintf(buf, buf_len, "accessible %s device in BOOTSEL mode was found at bus %d, address %d.", device_name, settings.bus, settings.address);
+            snprintf(buf, buf_len, "accessible %s device %s was found at bus %d, address %d.", device_name, mode, settings.bus, settings.address);
         } else {
-            snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found with address %d.", device_name, settings.address);
+            snprintf(buf, buf_len, "accessible %s devices %s were found with address %d.", device_name, mode, settings.address);
         }
     } else if (settings.bus != -1) {
-        snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found on bus %d.", device_name, settings.bus);
+        snprintf(buf, buf_len, "accessible %s devices %s were found on bus %d.", device_name, mode, settings.bus);
+    } else if (settings.target_debugprobe) {
+        // vid/pid are set by --debugprobe, so aren't reported
+        if (!settings.ser.empty()) {
+            snprintf(buf, buf_len, "accessible %s devices %s were found with serial number %s.", device_name, mode, settings.ser.c_str());
+        } else {
+            snprintf(buf, buf_len, "accessible %s devices %s were found.", device_name, mode);
+        }
+    } else if (settings.vid > 0) {
+        if (settings.pid != -1) {
+            snprintf(buf, buf_len, "accessible %s devices %s were found with vid %04x, pid %04x.", device_name, mode, settings.vid, settings.pid);
+        } else {
+            snprintf(buf, buf_len, "accessible %s devices %s were found with vid %04x.", device_name, mode, settings.vid);
+        }
+    } else if (settings.pid != -1) {
+        snprintf(buf, buf_len, "accessible %s devices %s were found with pid %04x.", device_name, mode, settings.pid);
     } else if (!settings.ser.empty()) {
-        snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found with serial number %s.", device_name, settings.ser.c_str());
+        snprintf(buf, buf_len, "accessible %s devices %s were found with serial number %s.", device_name, mode, settings.ser.c_str());
     } else {
-        snprintf(buf, buf_len, "accessible %s devices in BOOTSEL mode were found.", device_name);
+        snprintf(buf, buf_len, "accessible %s devices %s were found.", device_name, mode);
     }
     return b;
 }
@@ -5010,8 +5140,10 @@ bool save_command::execute(device_map &devices) {
             }
         }
     } else if (end == 0) {
-        end = FLASH_START + guess_flash_size(*raw_access_ptr);
-        if (end <= FLASH_START) {
+        int size_guess = guess_flash_size(*raw_access_ptr);
+        if (size_guess > 0) {
+            end = FLASH_START + size_guess;
+        } else {
             fail(ERROR_NOT_POSSIBLE, "Cannot determine the flash size, so cannot save the entirety of flash, try --range.");
         }
     }
@@ -5186,8 +5318,10 @@ bool erase_command::execute(device_map &devices) {
             fail(ERROR_ARGS, "Erase range is invalid/empty");
         }
     } else {
-        end = FLASH_START + guess_flash_size(raw_access);
-        if (end <= FLASH_START) {
+        int size_guess = guess_flash_size(raw_access);
+        if (size_guess > 0) {
+            end = FLASH_START + size_guess;
+        } else {
             fail(ERROR_NOT_POSSIBLE, "Cannot determine the flash size, so cannot erase the entirety of flash, try --range.");
         }
     }
@@ -5299,10 +5433,10 @@ bool load_guts(picoboot::connection con, iostream_memory_access &file_access) {
         uint32_t flash_data_size = flash_max - flash_min;
         assert(flash_min >= FLASH_START);
         uint32_t flash_start_offset = flash_min - FLASH_START;
-        uint32_t size_guess = guess_flash_size(raw_access);
+        int size_guess = guess_flash_size(raw_access);
         if (size_guess > 0) {
             // Skip check when targeting PSRAM, which is anything above 0x11000000
-            if (flash_start_offset < FLASH_END_RP2040 && (flash_start_offset + flash_data_size) > size_guess) {
+            if (flash_min < FLASH_END_RP2040 && (flash_start_offset + flash_data_size) > size_guess) {
                 if (flash_start_offset) {
                     fail(ERROR_NOT_POSSIBLE, "File size 0x%x starting at 0x%x is too big to fit in flash size 0x%x", flash_data_size, flash_start_offset, size_guess);
                 } else {
@@ -5444,7 +5578,49 @@ bool load_guts(picoboot::connection con, iostream_memory_access &file_access) {
 bool load_command::execute(device_map &devices) {
     auto con = get_single_bootsel_device_connection(devices);
     picoboot_memory_access raw_access(con);
-    auto tmp_file_access = get_file_memory_access(0);
+    uint32_t next_id = 0;
+    vector<uint32_t> available_family_ids;
+    uint32_t file_family_id = 0;
+    uint32_t override_family_id = settings.family_id;
+    bool multi_family_uf2 = false;
+    auto tmp_file_access = get_file_memory_access(0, false, &next_id);
+    if (next_id) {
+        // UF2 file with multiple family IDs
+        multi_family_uf2 = true;
+        settings.family_id = 0;
+        next_id = get_family_id(0);
+        while (next_id) {
+            available_family_ids.push_back(next_id);
+            auto tmp_access = get_file_memory_access(0, false, &next_id);
+        }
+        if (override_family_id) {
+            if (std::find(available_family_ids.begin(), available_family_ids.end(), override_family_id) == available_family_ids.end()) {
+                fos << "WARNING: Requested family ID " << family_name(override_family_id) << " not found in UF2 file, ";
+                fos << "so loading the first family ID found in the UF2 file (" << family_name(available_family_ids[0]) << "), ";
+                fos << "into the location where family ID " << family_name(override_family_id) << " would normally go\n";
+                available_family_ids.resize(1);
+            } else {
+                available_family_ids.resize(1);
+                available_family_ids[0] = override_family_id;
+            }
+        }
+    } else {
+        // For anything else, just populate available_family_ids with the family ID from the file
+        uint32_t family_id = get_family_id(0);
+        available_family_ids.push_back(family_id);
+    }
+
+    if (multi_family_uf2){
+        // Default to the first available family
+        file_family_id = available_family_ids[0];
+
+        if (available_family_ids.size() > 1) {
+            vector<string> family_names = {};
+            for (auto family_id : available_family_ids) family_names.push_back(family_name(family_id));
+            fos << "UF2 file contains multiple family IDs: " << cli::join(family_names, ", ") << "\n";
+        }
+    }
+
     if (settings.load.partition >= 0) {
         auto partitions = get_partitions(con);
         if (!partitions) {
@@ -5460,30 +5636,54 @@ bool load_command::execute(device_map &devices) {
         settings.offset = start + FLASH_START;
         settings.offset_set = true;
         settings.partition_size = end - start;
-    } else if (!settings.load.ignore_pt && !settings.offset_set && tmp_file_access.get_binary_start() == FLASH_START) {
-        uint32_t family_id = get_family_id(0);
-        settings.family_id = family_id;
+    } else if (!settings.load.ignore_pt && !settings.offset_set) {
         uint32_t start;
         uint32_t end;
-        if (raw_access.get_model()->supports_partition_table()) {
-            if (get_target_partition(con, &start, &end)) {
-                settings.offset = start + FLASH_START;
-                settings.offset_set = true;
-                settings.partition_size = end - start;
+        bool accepted = false;
+        for (auto family_id : available_family_ids) {
+            settings.family_id = override_family_id ? override_family_id : family_id;
+            if (raw_access.get_model()->supports_partition_table() && tmp_file_access.get_binary_start() == FLASH_START) {
+                if (get_target_partition(con, &start, &end)) {
+                    settings.offset = start + FLASH_START;
+                    settings.offset_set = true;
+                    settings.partition_size = end - start;
+                    accepted = true;
+                    file_family_id = family_id;
+                    break;
+                }
             } else {
-                // Check if partition table is present, for correct error message
-                auto partitions = get_partitions(con);
-                if (!partitions) {
-                    fail(ERROR_NOT_POSSIBLE, "This file cannot be loaded onto a device with no partition table");
-                } else {
-                    fail(ERROR_NOT_POSSIBLE, "This file cannot be loaded into the partition table on the device");
+                // For UF2 files, check the family ID is supported by the model (either SRAM, or RP2040)
+                // Other files are automatically accepted unless the family ID has been overridden, 
+                // because the family ID is only a guess from get_access_model
+                if ((get_file_type() != filetype::uf2 && !override_family_id) || raw_access.get_model()->supports_family_id(settings.family_id)) {
+                    accepted = true;
+                    file_family_id = family_id;
+                    break;
                 }
             }
         }
+        if (!accepted) {
+            // Check if partition table is present, for correct error message
+            if (raw_access.get_model()->supports_partition_table() && tmp_file_access.get_binary_start() == FLASH_START) {
+                auto partitions = get_partitions(con);
+                if (!partitions) {
+                    fail(ERROR_NOT_POSSIBLE, "This file cannot be loaded onto an %s device with no partition table", raw_access.get_model()->name().c_str());
+                } else {
+                    fail(ERROR_NOT_POSSIBLE, "This file cannot be loaded into the partition table on the device");
+                }
+            } else {
+                fail(ERROR_NOT_POSSIBLE, "This file cannot be loaded onto an %s device", raw_access.get_model()->name().c_str());
+            }
+        }
     }
-    auto file_access = get_file_memory_access(0);
+
+    if (multi_family_uf2 && available_family_ids.size() > 1){
+        fos << "Loading family ID " << family_name(file_family_id) << "\n";
+    }
+
+    auto file_access = multi_family_uf2 ? get_file_memory_access(0, false, &file_family_id) : get_file_memory_access(0);
     if (settings.offset_set && get_file_type() != filetype::bin && raw_access.get_model()->chip() == rp2040) {
-        fail(ERROR_ARGS, "Offset only valid for BIN files");
+        fail(ERROR_ARGS, "On RP2040, offset is only valid for BIN files");
     }
     bool ret = load_guts(con, file_access);
     return ret;
@@ -7935,9 +8135,9 @@ bool partition_create_command::execute(device_map &devices) {
             if (new_p.extra_families.size() > PICOBIN_PARTITION_MAX_EXTRA_FAMILIES) {
                 fail(ERROR_NOT_POSSIBLE, "Too many extra families - max permitted is %d", PICOBIN_PARTITION_MAX_EXTRA_FAMILIES);
             }
-            DEBUG_LOG("Num extra families %d %x\n", (int)new_p.extra_families.size(), (int)(new_p.extra_families.size() << PICOBIN_PARTITION_FLAGS_ACCEPTS_NUM_EXTRA_FAMILIES_LSB));
-            new_p.flags |= new_p.extra_families.size() << PICOBIN_PARTITION_FLAGS_ACCEPTS_NUM_EXTRA_FAMILIES_LSB;
         }
+        DEBUG_LOG("Num extra families %d %x\n", (int)new_p.extra_families.size(), (int)(new_p.extra_families.size() << PICOBIN_PARTITION_FLAGS_ACCEPTS_NUM_EXTRA_FAMILIES_LSB));
+        new_p.flags |= new_p.extra_families.size() << PICOBIN_PARTITION_FLAGS_ACCEPTS_NUM_EXTRA_FAMILIES_LSB;
         DEBUG_LOG("Permissions %08x\n", new_p.permissions);
         if (p.contains("link")) {
             string link_type = p["link"][0];
@@ -10106,8 +10306,8 @@ bool reboot_command::execute(device_map &devices) {
         if (!settings.switch_cpu.empty()) {
             fail(ERROR_ARGS, "--cpu may not be specified for forced reboot");
         }
-        selected_chip = std::get<0>(devices[dr_vidpid_stdio_usb][0]);
-        reboot_device(std::get<1>(devices[dr_vidpid_stdio_usb][0]), std::get<2>(devices[dr_vidpid_stdio_usb][0]), settings.reboot_usb);
+        selected_chip = std::get<0>(devices[dr_vidpid_usb_reset][0]);
+        reboot_device(std::get<1>(devices[dr_vidpid_usb_reset][0]), std::get<2>(devices[dr_vidpid_usb_reset][0]), settings.reboot_usb);
         if (!quiet) {
             if (settings.reboot_usb) {
                 std::cout << "The device was asked to reboot into BOOTSEL mode.\n";
@@ -10184,6 +10384,100 @@ bool reboot_command::execute(device_map &devices) {
     }
     return true;
 }
+
+static void print_device_info(device_map &devices, bool had_note=false, bool listing=false) {
+    auto printer = [&](enum picoboot_device_result r, const string &description) {
+        if (!had_note && !devices[r].empty()) {
+            fos << "\nbut:\n\n";
+            had_note = true;
+        }
+        for (auto d : devices[r]) {
+            fos << bus_device_string(std::get<1>(d), std::get<0>(d)) << description << "\n";
+        }
+    };
+
+    // Devices in BOOTSEL - only_force is cleared after the reboot, when BOOTSEL devices are being targeted
+    if (settings.only_force && settings.target_debugprobe) {
+        printer(dr_vidpid_bootrom_ok,
+                " appears to already be in BOOTSEL mode, but --debugprobe was passed so this is only targetting DebugProbes not already in BOOTSEL mode.");
+    } else if (settings.only_force) {
+        printer(dr_vidpid_bootrom_ok,
+                " appears to already be in BOOTSEL mode, but --force-ignore-bootsel was passed so this is only targetting devices not already in BOOTSEL mode.");
+    } else if (listing) {
+        printer(dr_vidpid_bootrom_ok,
+                " appears to be in BOOTSEL mode.");
+    }
+
+    // Devices missing required interfaces, so cannot be used by picotool
+    if (settings.vid != 0) { // if vid=0, vid/pid filtering is skipped, so this is returned for every accessible device (e.g. every USB device with sudo)
+        printer(dr_vidpid_bootrom_no_interface,
+                " was tried, but it does not have a PICOBOOT interface.");
+    }
+    printer(dr_vidpid_debugprobe_no_reset,
+            " appears to be a DebugProbe without a USB reset interface, so must be manually put into BOOTSEL mode.");
+    printer(dr_vidpid_stdio_usb_no_reset,
+            " appears to have a USB serial connection, but it does not have a USB reset interface so must be manually put into BOOTSEL mode.");
+    if (selected_cmd->force_requires_pre_reboot()) {
+        printer(dr_vidpid_usb_reset,
+                " appears to have a USB reset interface, so consider -f (or -F) to force reboot in order to run the command.");
+    } else {
+        // special case message for what is actually just reboot (the only command that doesn't require reboot first)
+        printer(dr_vidpid_usb_reset,
+                " appears to have a USB reset interface, so consider -f to force the reboot.");
+    }
+
+    // Devices failed to open (e.g. requires sudo)
+#if defined(__linux__) || defined(__APPLE__)
+    printer(dr_vidpid_bootrom_cant_connect,
+            " appears to be in BOOTSEL mode, but picotool was unable to connect. Maybe try 'sudo' or check your permissions.");
+    printer(dr_vidpid_stdio_usb_cant_connect,
+            " appears to have a USB serial connection, but picotool was unable to connect. Maybe try 'sudo' or check your permissions.");
+    printer(dr_vidpid_debugprobe_cant_connect,
+            " appears to be a DebugProbe, but picotool was unable to connect. Maybe try 'sudo' or check your permissions.");
+    printer(dr_vidpid_cant_connect,
+            " was tried, but picotool was unable to connect. Maybe try 'sudo' or check your permissions.");
+#else
+    printer(dr_vidpid_bootrom_cant_connect,
+            " appears to be in BOOTSEL mode, but picotool was unable to connect. You may need to install a driver via Zadig. See Zadig in the README (https://github.com/raspberrypi/picotool#zadig) for more information");
+    printer(dr_vidpid_stdio_usb_cant_connect,
+            " appears to have a USB serial connection, but picotool was unable to connect.");
+    printer(dr_vidpid_debugprobe_cant_connect,
+            " appears to be a DebugProbe, but picotool was unable to connect.");
+    printer(dr_vidpid_cant_connect,
+            " was tried, but picotool was unable to connect.");
+#endif
+    printer(dr_vidpid_bootrom_cant_claim,
+            " appears to be in BOOTSEL mode, but picotool was unable to claim its PICOBOOT interface, which may be in use by another program.");
+
+    // Other known pids
+    printer(dr_vidpid_debugprobe,
+            " appears to be a DebugProbe with a USB reset interface, so consider --debugprobe to force reboot it in order to run the command.");
+    printer(dr_vidpid_micropython,
+            " appears to be running MicroPython, so must be manually put into BOOTSEL mode.");
+    printer(dr_vidpid_circuitpython,
+            " appears to be running CircuitPython, so must be manually put into BOOTSEL mode.");
+    printer(dr_vidpid_debugprobe_old,
+            " appears to be a DebugProbe running old firmware - you should manually put it into BOOTSEL mode and update the firmware (https://github.com/raspberrypi/debugprobe/releases).");
+}
+
+bool list_command::execute(device_map &devices) {
+    int num_devices = 0;
+
+    for (auto devs = devices.begin(); devs != devices.end(); devs++) {
+        if (devs->first != dr_vidpid_unknown) {
+            num_devices += devs->second.size();
+        }
+    }
+
+    fos << "Detected " << num_devices << (num_devices == 1 ? " device" : " devices") << (num_devices ? ":\n\n" : "\n");
+    fos.first_column(2);
+    fos.hanging_indent(4);
+    fos.paragraph_spacing(1);
+    fos.min_paragraph_lines_for_spacing(1);
+    print_device_info(devices, true, true);
+
+    return false;
+}
 #endif
 
 #if defined(_WIN32)
@@ -10257,12 +10551,11 @@ int main(int argc, char **argv) {
 #if HAS_LIBUSB
     libusb_context *ctx = nullptr;
 
-    // save complicating the grammar
-    if (settings.force_no_reboot) settings.force = true;
-
     struct libusb_device **devs = nullptr;
     device_map devices;
     vector<libusb_device_handle *> to_close;
+    // bus/address of devices already in BOOTSEL mode, which are still ignored after a forced reboot
+    std::set<std::pair<int, int>> ignored_bootsel_devices;
 
     try {
         signal(SIGINT, cancelled);
@@ -10271,6 +10564,16 @@ int main(int argc, char **argv) {
         if (settings.reboot_usb && settings.reboot_app_specified) {
             fail(ERROR_ARGS, "Cannot specify both -u and -a reboot options");
         }
+
+        if (settings.target_debugprobe) {
+            if (settings.vid >= 0 || settings.pid >= 0) fail(ERROR_ARGS, "Cannot pass --debugprobe along with --vid or --pid");
+            settings.vid = VENDOR_ID_RASPBERRY_PI;
+            settings.pid = PRODUCT_ID_DEBUGPROBE;
+            settings.only_force = true;
+        }
+
+        // save complicating the grammar
+        if (settings.force_no_reboot || settings.only_force) settings.force = true;
 
         if (selected_cmd->get_device_support() != cmd::none) {
             if (libusb_init(&ctx)) {
@@ -10287,9 +10590,10 @@ int main(int argc, char **argv) {
                 for (libusb_device **dev = devs; *dev; dev++) {
                     if (settings.bus != -1 && settings.bus != libusb_get_bus_number(*dev)) continue;
                     if (settings.address != -1 && settings.address != libusb_get_device_address(*dev)) continue;
+                    if (ignored_bootsel_devices.count({libusb_get_bus_number(*dev), libusb_get_device_address(*dev)})) continue;
                     libusb_device_handle *handle = nullptr;
                     chip_t chip = unknown;
-                    auto result = picoboot_open_device(*dev, &handle, &chip, settings.vid, settings.pid, settings.ser.c_str());
+                    auto result = picoboot_open_device(*dev, &handle, &chip, settings.vid, settings.pid, settings.ser.c_str(), settings.target_debugprobe && settings.only_force);
                     if (handle) {
                         to_close.push_back(handle);
                     }
@@ -10307,13 +10611,22 @@ int main(int argc, char **argv) {
                 }
             }
             auto supported = selected_cmd->get_device_support();
+            bool bootsel_not_found = devices[dr_vidpid_bootrom_ok].empty();
+            bool usb_reset_not_found = devices[dr_vidpid_usb_reset].empty();
+            bool no_device_found = false;
+            if (settings.only_force) {
+                no_device_found = usb_reset_not_found;
+            } else if (settings.force) {
+                no_device_found = usb_reset_not_found && bootsel_not_found;
+            } else {
+                no_device_found = bootsel_not_found;
+            }
             switch (supported) {
                 case cmd::device_support::zero_or_more:
                     if (!settings.filenames[0].empty()) break;
                     // fall thru
                 case cmd::device_support::one:
-                    if (devices[dr_vidpid_bootrom_ok].empty() &&
-                        (!settings.force || devices[dr_vidpid_stdio_usb].empty())) {
+                    if (no_device_found) {
                         if (tries == 0 || tries == MAX_REBOOT_TRIES) {
                             if (tries) {
                                 fos << "\n\n";
@@ -10326,98 +10639,80 @@ int main(int argc, char **argv) {
                                     fos << " You may need to install a driver via Zadig. See Zadig in the README (https://github.com/raspberrypi/picotool#zadig) for more information.";
                                 }
 #endif
-                                fos << " It is possible the device is not responding, and will have to be manually entered into BOOTSEL mode.\n";
+                                fos << " It is possible the device is not responding, and will have to be manually put into BOOTSEL mode.\n";
                                 had_note = true; // suppress "but:" in this case
                             }
                             fos << "\n";
                             fos.first_column(0);
                             fos.hanging_indent(4);
-                            auto printer = [&](enum picoboot_device_result r, const string &description) {
-                                if (!had_note && !devices[r].empty()) {
-                                    fos << "\nbut:\n\n";
-                                    had_note = true;
-                                }
-                                for (auto d : devices[r]) {
-                                    fos << bus_device_string(std::get<1>(d), std::get<0>(d)) << description << "\n";
-                                }
-                            };
-    #if defined(__linux__) || defined(__APPLE__)
-                            printer(dr_vidpid_bootrom_cant_connect,
-                                    " appears to be in BOOTSEL mode, but picotool was unable to connect. Maybe try 'sudo' or check your permissions.");
-                            printer(dr_vidpid_stdio_usb_cant_connect,
-                                    " appears to have a USB serial connection, but picotool was unable to connect. Maybe try 'sudo' or check your permissions.");
-    #else
-                            printer(dr_vidpid_bootrom_cant_connect,
-                                    " appears to be in BOOTSEL mode, but picotool was unable to connect. You may need to install a driver via Zadig. See Zadig in the README (https://github.com/raspberrypi/picotool#zadig) for more information");
-                            printer(dr_vidpid_stdio_usb_cant_connect,
-                                    " appears to have a USB serial connection, but picotool was unable to connect.");
-    #endif
-                            printer(dr_vidpid_picoprobe,
-                                    " appears to be an RP-series PicoProbe device not in BOOTSEL mode.");
-                            printer(dr_vidpid_micropython,
-                                    " appears to be an RP-series MicroPython device not in BOOTSEL mode.");
-                            if (selected_cmd->force_requires_pre_reboot()) {
-                                printer(dr_vidpid_stdio_usb,
-                                        " appears to have a USB serial connection, so consider -f (or -F) to force reboot in order to run the command.");
-                            } else {
-                                // special case message for what is actually just reboot (the only command that doesn't require reboot first)
-                                printer(dr_vidpid_stdio_usb,
-                                        " appears to have a USB serial connection, so consider -f to force the reboot.");
-                            }
+                            print_device_info(devices, had_note);
                             rc = ERROR_NO_DEVICE;
                         } else {
                             // waiting for rebooted device to show up
                             break;
                         }
                     } else if (supported == cmd::device_support::one) {
-                        if (devices[dr_vidpid_bootrom_ok].size() > 1 ||
-                            (devices[dr_vidpid_bootrom_ok].empty() && devices[dr_vidpid_stdio_usb].size() > 1)) {
+                        if (settings.only_force ? devices[dr_vidpid_usb_reset].size() > 1 :
+                            (devices[dr_vidpid_bootrom_ok].size() > 1 ||
+                             (devices[dr_vidpid_bootrom_ok].empty() && devices[dr_vidpid_usb_reset].size() > 1))) {
                             fail(ERROR_NOT_POSSIBLE, "Command requires a single RP-series device to be targeted.");
                         }
-                        if (!devices[dr_vidpid_bootrom_ok].empty()) {
+                        if (!devices[dr_vidpid_bootrom_ok].empty() && !settings.only_force) {
                             settings.force = false; // we have a device, so we're not forcing
                         }
-                    } else if (supported == cmd::device_support::zero_or_more && settings.force && !devices[dr_vidpid_bootrom_ok].empty()) {
+                    } else if (supported == cmd::device_support::zero_or_more && settings.force && !devices[dr_vidpid_bootrom_ok].empty() && !settings.only_force) {
                         // we have usable devices, so lets use them without force
                         settings.force = false;
                     }
                     fos.first_column(0);
                     fos.hanging_indent(0);
                     break;
+                case cmd::device_support::any:
                 default:
                     break;
             }
             if (!rc) {
                 if (settings.force && ctx) { // actually ctx should never be null as we are targeting device if force is set, but still
-                    if (devices[dr_vidpid_stdio_usb].size() != 1 && !tries) {
+                    if (devices[dr_vidpid_usb_reset].size() != 1 && !tries) {
                         fail(ERROR_NOT_POSSIBLE,
                              "Forced command requires a single rebootable RP-series device to be targeted.");
                     }
                     if (selected_cmd->force_requires_pre_reboot()) {
                         if (!tries) {
                             // we reboot into BOOTSEL mode and disable MSC interface (the 1 here)
-                            auto &to_reboot = std::get<1>(devices[dr_vidpid_stdio_usb][0]);
-                            auto &to_reboot_handle = std::get<2>(devices[dr_vidpid_stdio_usb][0]);
+                            auto &to_reboot = std::get<1>(devices[dr_vidpid_usb_reset][0]);
+                            auto &to_reboot_handle = std::get<2>(devices[dr_vidpid_usb_reset][0]);
                             unsigned int disable_mask = 1;  // disable MSC interface
     #if defined(_WIN32)
-                            {
-                                struct libusb_device_descriptor desc;
-                                libusb_get_device_descriptor(to_reboot, &desc);
-                                if (desc.idProduct == PRODUCT_ID_RP2040_STDIO_USB || settings.force_rp2040) {
-                                    // the Zadig driver should be setup for the device in BOOTSEL mode with no interfaces disabled,  
-                                    // as all the interfaces are enabled when you plug it in while holding down the BOOTSEL button  
-                                    disable_mask = 0;
-                                    settings.force_rp2040 = true;
-                                }
+                            auto to_reboot_chip = std::get<0>(devices[dr_vidpid_usb_reset][0]);
+                            if (to_reboot_chip == rp2040 || settings.force_rp2040) {
+                                // the Zadig driver should be setup for the device in BOOTSEL mode with no interfaces disabled,
+                                // as all the interfaces are enabled when you plug it in while holding down the BOOTSEL button
+                                disable_mask = 0;
+                                settings.force_rp2040 = true;
                             }
     #endif
+                            // keep ignoring devices already in BOOTSEL mode, as the serial number may not be tracked below.
+                            // This includes ones excluded by the bus/address/vid/pid filters, as those filters are relaxed
+                            // after the reboot
+                            for (const auto &d : devices[dr_vidpid_bootrom_ok]) {
+                                ignored_bootsel_devices.insert({libusb_get_bus_number(std::get<1>(d)), libusb_get_device_address(std::get<1>(d))});
+                            }
+                            for (libusb_device **dev = devs; *dev; dev++) {
+                                struct libusb_device_descriptor desc;
+                                if (!libusb_get_device_descriptor(*dev, &desc) && desc.idVendor == VENDOR_ID_RASPBERRY_PI &&
+                                    (desc.idProduct == PRODUCT_ID_RP2040_USBBOOT || desc.idProduct == PRODUCT_ID_RP2350_USBBOOT)) {
+                                    ignored_bootsel_devices.insert({libusb_get_bus_number(*dev), libusb_get_device_address(*dev)});
+                                }
+                            }
                             if (settings.ser.empty() && to_reboot_handle) {
                                 // store USB serial number, to pick correct device after reboot
                                 struct libusb_device_descriptor desc;
                                 libusb_get_device_descriptor(to_reboot, &desc);
                                 char ser_str[128];
-                                libusb_get_string_descriptor_ascii(to_reboot_handle, desc.iSerialNumber, (unsigned char*)ser_str, sizeof(ser_str));
-                                if (strcmp(ser_str, "EEEEEEEEEEEEEEEE") != 0) {
+                                if (desc.iSerialNumber &&
+                                    libusb_get_string_descriptor_ascii(to_reboot_handle, desc.iSerialNumber, (unsigned char*)ser_str, sizeof(ser_str)) >= 0 &&
+                                    strcmp(ser_str, "EEEEEEEEEEEEEEEE") != 0) {
                                     // don't store EEs serial number, as that is an RP2040 running a no_flash binary
                                     settings.ser = ser_str;
                                     fos << "Tracking device serial number " << ser_str << " for reboot\n";
@@ -10445,6 +10740,8 @@ int main(int argc, char **argv) {
                         // again is to assume it has the same serial number.
                         settings.address = -1;
                         settings.bus = -1;
+                        // also clear only_force, as the device should now be rebooting to BOOTSEL mode
+                        settings.only_force = false;
                         if (settings.pid != -1 || settings.vid != -1) {
                             // vid/pid filtering was enabled, but may change in BOOTSEL mode, so needs to be disabled
                             if (settings.ser.empty()) {
