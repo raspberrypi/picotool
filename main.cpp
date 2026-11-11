@@ -632,6 +632,7 @@ struct _settings {
     struct {
         bool all = false;
         bool verify = false;
+        int partition = -1;
     } save;
 
     struct {
@@ -1068,7 +1069,9 @@ struct verify_command : public cmd {
                     hex("from").set(settings.from) &
                     hex("to").set(settings.to)) % "Compare a sub range of memory only (address bounds in hex)" +
                 (option('o', "--offset").set(settings.offset_set) &
-                    hex("offset").set(settings.offset)) % "Specify the load address (memory address; default 0x10000000) when comparing with a BIN file"
+                    hex("offset").set(settings.offset)) % "Specify the load address (memory address; default 0x10000000) when comparing with a BIN file" +
+                (option("--partition") &
+                    integer("partition").set(settings.save.partition)) % "Compare a numbered partition (addresses are relative to the partition start)"
             ).min(0).doc_non_optional(true) % "Address options" +
             device_selection % "Target device selection"
         );
@@ -1095,6 +1098,8 @@ struct save_command : public cmd {
             option('v', "--verify").set(settings.save.verify) % "Verify the data was saved correctly" +
             (option("--family") &
                 family_id("family_id").set(settings.family_id)) % "Specify the family ID to save the file as" +
+            (option("--partition") &
+                integer("partition").set(settings.save.partition)) % "Save from a numbered partition (addresses are relative to the partition start)" +
             ( // note this parenthesis seems to help with error messages for say save --foo
                 file_selection % "File to save to" +
                 device_selection % "Source device selection"
@@ -2232,6 +2237,8 @@ struct memory_access {
     virtual bool is_device() { return false; }
 
     virtual uint32_t get_binary_start() = 0;
+    
+    virtual void clear_cache() {}
 
     uint32_t read_int(uint32_t addr, bool zero_fill = false) {
         assert(!(addr & 3u));
@@ -3716,13 +3723,19 @@ string str_permissions(unsigned int p) {
     return ss.str();
 }
 
+void insert_default_family_ids(uint32_t flags_and_permissions, vector<uint32_t> &family_ids) {
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_ABSOLUTE_BITS) family_ids.push_back(ABSOLUTE_FAMILY_ID);
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2040_BITS) family_ids.push_back(RP2040_FAMILY_ID);
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_S_BITS) family_ids.push_back(RP2350_ARM_S_FAMILY_ID);
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_NS_BITS) family_ids.push_back(RP2350_ARM_NS_FAMILY_ID);
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_RISCV_BITS) family_ids.push_back(RP2350_RISCV_FAMILY_ID);
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_DATA_BITS) family_ids.push_back(DATA_FAMILY_ID);
+}
+
 void insert_default_families(uint32_t flags_and_permissions, vector<std::string> &family_names) {
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_ABSOLUTE_BITS) family_names.emplace_back(family_name(ABSOLUTE_FAMILY_ID));
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2040_BITS) family_names.emplace_back(family_name(RP2040_FAMILY_ID));
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_S_BITS) family_names.emplace_back(family_name(RP2350_ARM_S_FAMILY_ID));
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_NS_BITS) family_names.emplace_back(family_name(RP2350_ARM_NS_FAMILY_ID));
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_RISCV_BITS) family_names.emplace_back(family_name(RP2350_RISCV_FAMILY_ID));
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_DATA_BITS) family_names.emplace_back(family_name(DATA_FAMILY_ID));
+    vector<uint32_t> family_ids;
+    insert_default_family_ids(flags_and_permissions, family_ids);
+    for (auto family_id : family_ids) family_names.emplace_back(family_name(family_id));
 }
 
 static chip_t image_type_exe_chip_to_chip(uint image_type_exe_chip) {
@@ -4796,6 +4809,24 @@ std::shared_ptr<vector<partition_details>> get_partitions(picoboot::connection &
     auto pi = get_partition_info(con);
     return pi ? std::get<1>(*pi) : nullptr;
 }
+
+partition_details get_partition(picoboot::connection &con, int partition) {
+    auto partitions = get_partitions(con);
+    if (!partitions) {
+        fail(ERROR_NOT_POSSIBLE, "There is no partition table on the device");
+    }
+    if (partition >= partitions->size()) {
+        fail(ERROR_NOT_POSSIBLE, "There are only %d partitions on the device", partitions->size());
+    }
+    return (*partitions)[partition];
+}
+
+vector<uint32_t> get_partition_family_ids(const partition_details &partition) {
+    vector<uint32_t> family_ids;
+    insert_default_family_ids(partition.flags_and_permissions, family_ids);
+    family_ids.insert(family_ids.end(), partition.extra_families.begin(), partition.extra_families.end());
+    return family_ids;
+}
 #endif
 
 bool config_command::execute(device_map &devices) {
@@ -5056,12 +5087,28 @@ vector<range> get_coalesced_ranges(iostream_memory_access &file_access, model_t 
 
 bool save_command::execute(device_map &devices) {
     auto con = get_single_bootsel_device_connection(devices);
-    picoboot_memory_access raw_access(con);
+    std::shared_ptr<memory_access> raw_access_ptr = std::make_shared<picoboot_memory_access>(con);
+    auto used_access_ptr = raw_access_ptr;
 
     uint32_t end = 0;
     uint32_t binary_end = 0;
     binary_info_header hdr;
     uint32_t start = FLASH_START;
+    uint32_t part_size = 0;
+    vector<uint32_t> part_family_ids;
+
+    if (settings.save.partition >= 0) {
+        auto partition = get_partition(con, settings.save.partition);
+        part_family_ids = get_partition_family_ids(partition);
+        uint32_t part_start = partition.start;
+        uint32_t part_end = partition.end;
+        part_size = part_end - part_start;
+        end = FLASH_START + part_size; // set for --all below
+        printf("Saving from partition %d:\n", settings.save.partition);
+        printf("  %08x->%08x\n", part_start, part_end);
+        used_access_ptr = std::make_shared<partition_memory_access>(*raw_access_ptr, part_start);
+    }
+
     if (!settings.save.all) {
         if (settings.range_set) {
             if (get_file_type() == filetype::uf2) {
@@ -5078,8 +5125,8 @@ bool save_command::execute(device_map &devices) {
                 fail(ERROR_ARGS, "Save range is invalid/empty");
             }
         } else {
-            if (find_binary_info(raw_access, hdr)) {
-                auto access = remapped_memory_access(raw_access, hdr.reverse_copy_mapping);
+            if (find_binary_info(*used_access_ptr, hdr)) {
+                auto access = remapped_memory_access(*used_access_ptr, hdr.reverse_copy_mapping);
                 auto visitor = bi_visitor{};
                 visitor.id_and_int([&](int tag, uint32_t id, uint32_t value) {
                     if (tag != BINARY_INFO_TAG_RASPBERRY_PI)
@@ -5090,7 +5137,7 @@ bool save_command::execute(device_map &devices) {
             }
             end = binary_end;
             vector<uint8_t> bin;
-            std::unique_ptr<block> last_block = find_last_block(raw_access, bin);
+            std::unique_ptr<block> last_block = find_last_block(*used_access_ptr, bin);
             if (last_block != nullptr) {
                 uint32_t new_end = last_block->physical_addr + (last_block->to_words().size())*4;
                 DEBUG_LOG("Adjusting end to max of %x %x\n", end, new_end);
@@ -5101,8 +5148,8 @@ bool save_command::execute(device_map &devices) {
                      "Cannot determine the binary size, so cannot save the program only, try --all.");
             }
         }
-    } else {
-        int size_guess = guess_flash_size(raw_access);
+    } else if (end == 0) {
+        int size_guess = guess_flash_size(*raw_access_ptr);
         if (size_guess > 0) {
             end = FLASH_START + size_guess;
         } else {
@@ -5110,11 +5157,14 @@ bool save_command::execute(device_map &devices) {
         }
     }
 
-    model_t model = raw_access.get_model();
+    model_t model = used_access_ptr->get_model();
     enum memory_type t1 = get_memory_type(start , model);
     enum memory_type t2 = get_memory_type(end, model);
     if (t1 != t2 || t1 == invalid || t1 == sram_unstriped) {
         fail(ERROR_NOT_POSSIBLE, "Save range crosses unmapped memory");
+    }
+    if (settings.save.partition >= 0 && t1 == flash && end > FLASH_START + part_size) {
+        fail(ERROR_NOT_POSSIBLE, "Save range %08x-%08x extends beyond the end of partition %d (size 0x%x)", start, end, settings.save.partition, part_size);
     }
     uint32_t size = end - start;
     uint32_t chunk_size = calculate_chunk_size(size);
@@ -5143,7 +5193,14 @@ bool save_command::execute(device_map &devices) {
             block.flags = UF2_FLAG_FAMILY_ID_PRESENT;
             block.payload_size = PAGE_SIZE;
             block.num_blocks = (size + PAGE_SIZE - 1)/PAGE_SIZE;
-            block.file_size = settings.family_id ? settings.family_id : get_access_model(raw_access)->family_id();
+            if (settings.family_id) {
+                block.file_size = settings.family_id;
+            } else if (part_family_ids.size() == 1) {
+                // only one UF2 family is accepted in this partition, so use that
+                block.file_size = part_family_ids[0];
+            } else {
+                block.file_size = get_access_model(*used_access_ptr)->family_id();
+            }
             block.magic_end = UF2_MAGIC_END;
             writer256 = [&](FILE *out, const uint8_t *buffer, unsigned int size, unsigned int offset) {
                 static_assert(512 == sizeof(block), "");
@@ -5169,7 +5226,7 @@ bool save_command::execute(device_map &devices) {
                 for (uint32_t addr = start; addr < end; addr += chunk_size) {
                     bar.progress(addr-start, end-start);
                     uint32_t this_chunk_size = std::min(chunk_size, end - addr);
-                    raw_access.read_into_vector(addr, this_chunk_size, buf);
+                    used_access_ptr->read_into_vector(addr, this_chunk_size, buf);
                     uint32_t remaining_size = this_chunk_size;
                     while (remaining_size) {
                         uint32_t this_size = std::min(PAGE_SIZE, remaining_size);
@@ -5189,9 +5246,9 @@ bool save_command::execute(device_map &devices) {
     }
 
     if (settings.save.verify) {
-        raw_access.clear_cache();
+        raw_access_ptr->clear_cache();
         auto file_access = get_file_memory_access(0);
-        model_t model = raw_access.get_model();
+        model_t model = raw_access_ptr->get_model();
         auto ranges = get_coalesced_ranges(file_access, model);
         for (auto mem_range : ranges) {
             enum memory_type type = get_memory_type(mem_range.from, model);
@@ -5207,7 +5264,7 @@ bool save_command::execute(device_map &devices) {
                     // mean that the verification will fail if those holes are not filled with zeros
                     // on the device
                     file_access.read_into_vector(base, this_batch, file_buf, true);
-                    raw_access.read_into_vector(base, this_batch, device_buf);
+                    used_access_ptr->read_into_vector(base, this_batch, device_buf);
                     assert(file_buf.size() == device_buf.size());
                     for (unsigned int i = 0; i < this_batch; i++) {
                         if (file_buf[i] != device_buf[i]) {
@@ -5247,20 +5304,14 @@ bool erase_command::execute(device_map &devices) {
     binary_info_header hdr;
     uint32_t start = FLASH_START;
     if (settings.load.partition >= 0) {
-        auto partitions = get_partitions(con);
-        if (!partitions) {
-            fail(ERROR_NOT_POSSIBLE, "There is no partition table on the device");
-        }
-        if (settings.load.partition >= partitions->size()) {
-            fail(ERROR_NOT_POSSIBLE, "There are only %d partitions on the device", partitions->size());
-        }
+        auto partition = get_partition(con, settings.load.partition);
         size_t tmp;
-        tmp = (*partitions)[settings.load.partition].start;
+        tmp = partition.start;
         if (tmp > UINT32_MAX) {
             fail(ERROR_NOT_POSSIBLE, "Partition start address is too large");
         }
         start = tmp;
-        tmp = (*partitions)[settings.load.partition].end;
+        tmp = partition.end;
         if (tmp > UINT32_MAX) {
             fail(ERROR_NOT_POSSIBLE, "Partition end address is too large");
         }
@@ -5584,15 +5635,9 @@ bool load_command::execute(device_map &devices) {
     }
 
     if (settings.load.partition >= 0) {
-        auto partitions = get_partitions(con);
-        if (!partitions) {
-            fail(ERROR_NOT_POSSIBLE, "There is no partition table on the device");
-        }
-        if (settings.load.partition >= partitions->size()) {
-            fail(ERROR_NOT_POSSIBLE, "There are only %d partitions on the device", partitions->size());
-        }
-        uint32_t start = (*partitions)[settings.load.partition].start;
-        uint32_t end = (*partitions)[settings.load.partition].end;
+        auto partition = get_partition(con, settings.load.partition);
+        uint32_t start = partition.start;
+        uint32_t end = partition.end;
         printf("Downloading into partition %d:\n", settings.load.partition);
         printf("  %08x->%08x\n", start, end);
         settings.offset = start + FLASH_START;
@@ -7478,11 +7523,24 @@ bool bdev_format_command::execute(device_map &devices) {
 bool verify_command::execute(device_map &devices) {
     auto file_access = get_file_memory_access(0);
     auto con = get_single_bootsel_device_connection(devices);
-    picoboot_memory_access raw_access(con);
-    model_t model = raw_access.get_model();
+    std::shared_ptr<memory_access> raw_access_ptr = std::make_shared<picoboot_memory_access>(con);
+    auto used_access_ptr = raw_access_ptr;
+    uint32_t part_size = 0;
+    model_t model = raw_access_ptr->get_model();
     if (settings.offset_set && get_file_type() != filetype::bin && model->chip() == rp2040) {
         fail(ERROR_ARGS, "Offset only valid for BIN files");
     }
+
+    if (settings.save.partition >= 0) {
+        auto partition = get_partition(con, settings.save.partition);
+        uint32_t start = partition.start;
+        uint32_t end = partition.end;
+        part_size = end - start;
+        printf("Verifying partition %d:\n", settings.save.partition);
+        printf("  %08x->%08x\n", start, end);
+        used_access_ptr = std::make_shared<partition_memory_access>(*raw_access_ptr, start);
+    }
+
     auto ranges = get_coalesced_ranges(file_access, model);
     if (settings.range_set) {
         range filter(settings.from, settings.to);
@@ -7499,6 +7557,8 @@ bool verify_command::execute(device_map &devices) {
             enum memory_type t2 = get_memory_type(mem_range.to, model);
             if (t1 != t2 || t1 == invalid || t1 == sram_unstriped) {
                 fail(ERROR_NOT_POSSIBLE, "invalid memory range for verification %08x-%08x", mem_range.from, mem_range.to);
+            } else if (settings.save.partition >= 0 && t1 == flash && mem_range.to > FLASH_START + part_size) {
+                fail(ERROR_NOT_POSSIBLE, "Verify range %08x-%08x extends beyond the end of partition %d (size 0x%x)", mem_range.from, mem_range.to, settings.save.partition, part_size);
             } else {
                 bool ok = true;
                 uint32_t pos = mem_range.from;
@@ -7513,7 +7573,7 @@ bool verify_command::execute(device_map &devices) {
                         // mean that the verification will fail if those holes are not filled with zeros
                         // on the device
                         file_access.read_into_vector(base, this_batch, file_buf, true);
-                        raw_access.read_into_vector(base, this_batch, device_buf);
+                        used_access_ptr->read_into_vector(base, this_batch, device_buf);
                         assert(file_buf.size() == device_buf.size());
                         for(unsigned int i=0;i<this_batch;i++) {
                             if (file_buf[i] != device_buf[i]) {
@@ -7539,7 +7599,7 @@ bool verify_command::execute(device_map &devices) {
                     vector<uint8_t> file_buf;
                     vector<uint8_t> device_buf;
                     file_access.read_into_vector(valid.from, valid.to - valid.from, file_buf);
-                    raw_access.read_into_vector(valid.from, valid.to - valid.from, device_buf);
+                    used_access_ptr->read_into_vector(valid.from, valid.to - valid.from, device_buf);
                     assert(file_buf.size() == device_buf.size());
                     for(unsigned int l=0;l<3;l++, display_from+=16) {
                         range this_range(display_from, display_from + 16);
