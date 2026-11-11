@@ -116,6 +116,13 @@ if(EXISTS "${PICO_MBEDTLS_PATH}/${MBEDTLS_TEST_PATH}")
             timing.c
             version.c
             version_features.c
+            # TLS client, for the Raspberry Pi Connect API
+            net_sockets.c
+            ssl_ciphersuites.c
+            ssl_msg.c
+            ssl_tls.c
+            x509.c
+            x509_crt.c
         )
         if (MBEDTLS_VERSION_MAJOR EQUAL 2)
             list(APPEND src_crypto
@@ -126,12 +133,15 @@ if(EXISTS "${PICO_MBEDTLS_PATH}/${MBEDTLS_TEST_PATH}")
                 md4.c
                 psa_crypto_driver_wrappers.c
                 rsa_internal.c xtea.c
+                ssl_cli.c
             )
         elseif (MBEDTLS_VERSION_MAJOR EQUAL 3)
             list(APPEND src_crypto
                 bignum_core.c
                 rsa_alt_helpers.c
                 pk_ecc.c
+                ssl_client.c
+                ssl_tls12_client.c
             )
         endif()
         list(TRANSFORM src_crypto PREPEND ${PICO_MBEDTLS_PATH}/library/)

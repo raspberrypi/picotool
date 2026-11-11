@@ -2264,17 +2264,21 @@ PROVISION CONNECT:
     RAM. Secrets are only written into the binary in RAM, never to flash. When done the device
     flashes its LED (slowly on success, quickly on failure) and reboots to BOOTSEL; output is
     on its USB and UART consoles. The device must have a partition table with an FFS partition,
-    and a WiFi firmware partition containing the firmware
+    and a WiFi firmware partition containing the firmware. 
+
+    With --host-networking, --auth-key and --signin can be run from this computer instead, and
+    print out the access token. These only require a device in BOOTSEL, so do not require any
+    partition table on the device.
 
 SYNOPSIS:
     picotool provision connect [--create-identity] [--identity-exchange] [--auth-key <key>]
                 [--signin] [--token <token>] [--clear] [--wifi-only] [--org-token <token>]
-                [--description <text>] [--device-name <name>] [--client-id <uuid>] [--wifi-ssid
-                <ssid>] [--wifi-password <password>] [--board <name>] [--uart <uart>]
-                [--uart-tx <pin>] [--uart-rx <pin>] [--uart-baud <baud>] [--led <pin>]
-                [--wl-reg-on <pin>] [--wl-data-out <pin>] [--wl-data-in <pin>] [--wl-host-wake
-                <pin>] [--wl-clock <pin>] [--wl-cs <pin>] [--hash] [--sign] [<key>]
-                [device-selection]
+                [--description <text>] [--device-name <name>] [--client-id <uuid>]
+                [--host-networking] [--wifi-ssid <ssid>] [--wifi-password <password>] [--board
+                <name>] [--uart <uart>] [--uart-tx <pin>] [--uart-rx <pin>] [--uart-baud
+                <baud>] [--led <pin>] [--wl-reg-on <pin>] [--wl-data-out <pin>] [--wl-data-in
+                <pin>] [--wl-host-wake <pin>] [--wl-clock <pin>] [--wl-cs <pin>] [--hash]
+                [--sign] [<key>] [device-selection]
 
 OPTIONS:
     Operation (exactly one)
@@ -2304,6 +2308,9 @@ OPTIONS:
             Device name (default pico-<board id>)
         --client-id <uuid>
             Raspberry Pi Connect client ID (default the SDK's)
+        --host-networking
+            Make the requests from this computer instead of the device, and print the access
+            token instead of storing it
     WiFi Credentials
         --wifi-ssid <ssid>
             WiFi network to store on the device before the operation (requires --wifi-password)
