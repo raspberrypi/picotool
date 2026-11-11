@@ -391,7 +391,7 @@ OPTIONS:
         --family <family_id>
             Specify the family ID to save the file as
         --partition <partition>
-            Save from a numbered partition
+            Save from a numbered partition (addresses are relative to the partition start)
     File to save to
         <filename>
             The file name
@@ -452,7 +452,7 @@ OPTIONS:
             Specify the load address (memory address; default 0x10000000) when comparing with a
             BIN file
         --partition <partition>
-            Compare a numbered partition
+            Compare a numbered partition (addresses are relative to the partition start)
     Target device selection
         See "picotool help device-selection" for available options
 ```

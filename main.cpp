@@ -1084,7 +1084,7 @@ struct verify_command : public cmd {
                 (option('o', "--offset").set(settings.offset_set) &
                     hex("offset").set(settings.offset)) % "Specify the load address (memory address; default 0x10000000) when comparing with a BIN file" +
                 (option("--partition") &
-                    integer("partition").set(settings.save.partition)) % "Compare a numbered partition"
+                    integer("partition").set(settings.save.partition)) % "Compare a numbered partition (addresses are relative to the partition start)"
             ).min(0).doc_non_optional(true) % "Address options" +
             device_selection % "Target device selection"
         );
@@ -1112,7 +1112,7 @@ struct save_command : public cmd {
             (option("--family") &
                 family_id("family_id").set(settings.family_id)) % "Specify the family ID to save the file as" +
             (option("--partition") &
-                integer("partition").set(settings.save.partition)) % "Save from a numbered partition" +
+                integer("partition").set(settings.save.partition)) % "Save from a numbered partition (addresses are relative to the partition start)" +
             ( // note this parenthesis seems to help with error messages for say save --foo
                 file_selection % "File to save to" +
                 device_selection % "Source device selection"
@@ -4816,6 +4816,30 @@ std::shared_ptr<vector<partition_details>> get_partitions(picoboot::connection &
     auto pi = get_partition_info(con);
     return pi ? std::get<1>(*pi) : nullptr;
 }
+
+partition_details get_partition(picoboot::connection &con, int partition) {
+    auto partitions = get_partitions(con);
+    if (!partitions) {
+        fail(ERROR_NOT_POSSIBLE, "There is no partition table on the device");
+    }
+    if (partition >= partitions->size()) {
+        fail(ERROR_NOT_POSSIBLE, "There are only %d partitions on the device", partitions->size());
+    }
+    return (*partitions)[partition];
+}
+
+vector<uint32_t> get_partition_family_ids(const partition_details &partition) {
+    vector<uint32_t> family_ids;
+    uint32_t flags = partition.flags_and_permissions;
+    if (flags & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_ABSOLUTE_BITS) family_ids.push_back(ABSOLUTE_FAMILY_ID);
+    if (flags & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2040_BITS) family_ids.push_back(RP2040_FAMILY_ID);
+    if (flags & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_S_BITS) family_ids.push_back(RP2350_ARM_S_FAMILY_ID);
+    if (flags & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_NS_BITS) family_ids.push_back(RP2350_ARM_NS_FAMILY_ID);
+    if (flags & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_RISCV_BITS) family_ids.push_back(RP2350_RISCV_FAMILY_ID);
+    if (flags & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_DATA_BITS) family_ids.push_back(DATA_FAMILY_ID);
+    family_ids.insert(family_ids.end(), partition.extra_families.begin(), partition.extra_families.end());
+    return family_ids;
+}
 #endif
 
 bool config_command::execute(device_map &devices) {
@@ -5084,17 +5108,13 @@ bool save_command::execute(device_map &devices) {
     binary_info_header hdr;
     uint32_t start = FLASH_START;
     uint32_t part_size = 0;
+    vector<uint32_t> part_family_ids;
 
     if (settings.save.partition >= 0) {
-        auto partitions = get_partitions(con);
-        if (!partitions) {
-            fail(ERROR_NOT_POSSIBLE, "There is no partition table on the device");
-        }
-        if (settings.save.partition >= partitions->size()) {
-            fail(ERROR_NOT_POSSIBLE, "There are only %d partitions on the device", partitions->size());
-        }
-        uint32_t part_start = (*partitions)[settings.save.partition].start;
-        uint32_t part_end = (*partitions)[settings.save.partition].end;
+        auto partition = get_partition(con, settings.save.partition);
+        part_family_ids = get_partition_family_ids(partition);
+        uint32_t part_start = partition.start;
+        uint32_t part_end = partition.end;
         part_size = part_end - part_start;
         end = FLASH_START + part_size; // set for --all below
         printf("Saving from partition %d:\n", settings.save.partition);
@@ -5186,7 +5206,14 @@ bool save_command::execute(device_map &devices) {
             block.flags = UF2_FLAG_FAMILY_ID_PRESENT;
             block.payload_size = PAGE_SIZE;
             block.num_blocks = (size + PAGE_SIZE - 1)/PAGE_SIZE;
-            block.file_size = settings.family_id ? settings.family_id : get_access_model(*used_access_ptr)->family_id();
+            if (settings.family_id) {
+                block.file_size = settings.family_id;
+            } else if (part_family_ids.size() == 1) {
+                // only one UF2 family is accepted in this partition, so use that
+                block.file_size = part_family_ids[0];
+            } else {
+                block.file_size = get_access_model(*used_access_ptr)->family_id();
+            }
             block.magic_end = UF2_MAGIC_END;
             writer256 = [&](FILE *out, const uint8_t *buffer, unsigned int size, unsigned int offset) {
                 static_assert(512 == sizeof(block), "");
@@ -5290,20 +5317,14 @@ bool erase_command::execute(device_map &devices) {
     binary_info_header hdr;
     uint32_t start = FLASH_START;
     if (settings.load.partition >= 0) {
-        auto partitions = get_partitions(con);
-        if (!partitions) {
-            fail(ERROR_NOT_POSSIBLE, "There is no partition table on the device");
-        }
-        if (settings.load.partition >= partitions->size()) {
-            fail(ERROR_NOT_POSSIBLE, "There are only %d partitions on the device", partitions->size());
-        }
+        auto partition = get_partition(con, settings.load.partition);
         size_t tmp;
-        tmp = (*partitions)[settings.load.partition].start;
+        tmp = partition.start;
         if (tmp > UINT32_MAX) {
             fail(ERROR_NOT_POSSIBLE, "Partition start address is too large");
         }
         start = tmp;
-        tmp = (*partitions)[settings.load.partition].end;
+        tmp = partition.end;
         if (tmp > UINT32_MAX) {
             fail(ERROR_NOT_POSSIBLE, "Partition end address is too large");
         }
@@ -5627,15 +5648,9 @@ bool load_command::execute(device_map &devices) {
     }
 
     if (settings.load.partition >= 0) {
-        auto partitions = get_partitions(con);
-        if (!partitions) {
-            fail(ERROR_NOT_POSSIBLE, "There is no partition table on the device");
-        }
-        if (settings.load.partition >= partitions->size()) {
-            fail(ERROR_NOT_POSSIBLE, "There are only %d partitions on the device", partitions->size());
-        }
-        uint32_t start = (*partitions)[settings.load.partition].start;
-        uint32_t end = (*partitions)[settings.load.partition].end;
+        auto partition = get_partition(con, settings.load.partition);
+        uint32_t start = partition.start;
+        uint32_t end = partition.end;
         printf("Downloading into partition %d:\n", settings.load.partition);
         printf("  %08x->%08x\n", start, end);
         settings.offset = start + FLASH_START;
@@ -7530,15 +7545,9 @@ bool verify_command::execute(device_map &devices) {
     }
 
     if (settings.save.partition >= 0) {
-        auto partitions = get_partitions(con);
-        if (!partitions) {
-            fail(ERROR_NOT_POSSIBLE, "There is no partition table on the device");
-        }
-        if (settings.save.partition >= partitions->size()) {
-            fail(ERROR_NOT_POSSIBLE, "There are only %d partitions on the device", partitions->size());
-        }
-        uint32_t start = (*partitions)[settings.save.partition].start;
-        uint32_t end = (*partitions)[settings.save.partition].end;
+        auto partition = get_partition(con, settings.save.partition);
+        uint32_t start = partition.start;
+        uint32_t end = partition.end;
         part_size = end - start;
         printf("Verifying partition %d:\n", settings.save.partition);
         printf("  %08x->%08x\n", start, end);
