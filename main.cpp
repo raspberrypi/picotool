@@ -3736,13 +3736,19 @@ string str_permissions(unsigned int p) {
     return ss.str();
 }
 
+void insert_default_family_ids(uint32_t flags_and_permissions, vector<uint32_t> &family_ids) {
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_ABSOLUTE_BITS) family_ids.push_back(ABSOLUTE_FAMILY_ID);
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2040_BITS) family_ids.push_back(RP2040_FAMILY_ID);
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_S_BITS) family_ids.push_back(RP2350_ARM_S_FAMILY_ID);
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_NS_BITS) family_ids.push_back(RP2350_ARM_NS_FAMILY_ID);
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_RISCV_BITS) family_ids.push_back(RP2350_RISCV_FAMILY_ID);
+    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_DATA_BITS) family_ids.push_back(DATA_FAMILY_ID);
+}
+
 void insert_default_families(uint32_t flags_and_permissions, vector<std::string> &family_names) {
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_ABSOLUTE_BITS) family_names.emplace_back(family_name(ABSOLUTE_FAMILY_ID));
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2040_BITS) family_names.emplace_back(family_name(RP2040_FAMILY_ID));
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_S_BITS) family_names.emplace_back(family_name(RP2350_ARM_S_FAMILY_ID));
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_NS_BITS) family_names.emplace_back(family_name(RP2350_ARM_NS_FAMILY_ID));
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_RISCV_BITS) family_names.emplace_back(family_name(RP2350_RISCV_FAMILY_ID));
-    if (flags_and_permissions & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_DATA_BITS) family_names.emplace_back(family_name(DATA_FAMILY_ID));
+    vector<uint32_t> family_ids;
+    insert_default_family_ids(flags_and_permissions, family_ids);
+    for (auto family_id : family_ids) family_names.emplace_back(family_name(family_id));
 }
 
 static chip_t image_type_exe_chip_to_chip(uint image_type_exe_chip) {
@@ -4830,13 +4836,7 @@ partition_details get_partition(picoboot::connection &con, int partition) {
 
 vector<uint32_t> get_partition_family_ids(const partition_details &partition) {
     vector<uint32_t> family_ids;
-    uint32_t flags = partition.flags_and_permissions;
-    if (flags & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_ABSOLUTE_BITS) family_ids.push_back(ABSOLUTE_FAMILY_ID);
-    if (flags & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2040_BITS) family_ids.push_back(RP2040_FAMILY_ID);
-    if (flags & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_S_BITS) family_ids.push_back(RP2350_ARM_S_FAMILY_ID);
-    if (flags & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_ARM_NS_BITS) family_ids.push_back(RP2350_ARM_NS_FAMILY_ID);
-    if (flags & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_RP2350_RISCV_BITS) family_ids.push_back(RP2350_RISCV_FAMILY_ID);
-    if (flags & PICOBIN_PARTITION_FLAGS_ACCEPTS_DEFAULT_FAMILY_DATA_BITS) family_ids.push_back(DATA_FAMILY_ID);
+    insert_default_family_ids(partition.flags_and_permissions, family_ids);
     family_ids.insert(family_ids.end(), partition.extra_families.begin(), partition.extra_families.end());
     return family_ids;
 }
