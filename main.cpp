@@ -10104,8 +10104,6 @@ static const provision_board provision_boards[] = {
 #include "provision_boards.h"
 };
 
-void cancelled(int);
-
 bool provision_connect_command::execute(device_map &devices) {
     auto &p = settings.provision;
 
@@ -10200,8 +10198,14 @@ bool provision_connect_command::execute(device_map &devices) {
         // blocking socket call, so just note the signal while on the network
         static volatile sig_atomic_t host_cancelled = 0;
         auto note_cancel = [](int) { host_cancelled = 1; };
-        signal(SIGINT, note_cancel);
-        signal(SIGTERM, note_cancel);
+        struct restore_signals {
+            void (*int_handler)(int);
+            void (*term_handler)(int);
+            ~restore_signals() {
+                signal(SIGINT, int_handler);
+                signal(SIGTERM, term_handler);
+            }
+        } restore = {signal(SIGINT, note_cancel), signal(SIGTERM, note_cancel)};
         string token;
         try {
             if (p.signin) {
@@ -10214,14 +10218,8 @@ bool provision_connect_command::execute(device_map &devices) {
             }
         } catch (failure_error &) {
             // An interrupted request fails, which is down to the cancel
-            if (!host_cancelled) {
-                signal(SIGINT, cancelled);
-                signal(SIGTERM, cancelled);
-                throw;
-            }
+            if (!host_cancelled) throw;
         }
-        signal(SIGINT, cancelled);
-        signal(SIGTERM, cancelled);
         if (host_cancelled) throw cancelled_exception();
         fos << "Access token: " << token << "\n";
         fos << "Store it on the device with: picotool provision connect --token <token>\n";
