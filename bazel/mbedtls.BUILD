@@ -13,7 +13,7 @@ cc_library(
     ),
     includes = ["include"],
     linkopts = select({
-        "@rules_cc//cc/compiler:msvc-cl": ["-DEFAULTLIB:AdvAPI32.Lib"],
+        "@rules_cc//cc/compiler:msvc-cl": ["-DEFAULTLIB:AdvAPI32.Lib", "-DEFAULTLIB:Ws2_32.Lib"],
         "//conditions:default": [],
     }),
     deps = ["@picotool//lib:mbedtls_config"],

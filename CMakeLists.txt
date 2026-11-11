@@ -342,7 +342,7 @@ add_executable(picotool
     main.cpp)
 add_dependencies(picotool embedded_data_no_libusb)
 if (NOT PICOTOOL_NO_LIBUSB)
-    target_sources(picotool PRIVATE get_xip_ram_perms.cpp get_rpi_connect_provision.cpp)
+    target_sources(picotool PRIVATE get_xip_ram_perms.cpp get_rpi_connect_provision.cpp rpi_connect_api.cpp)
     add_dependencies(picotool generate_otp_header generate_provision_boards embedded_data)
 endif()
 set(PROJECT_VERSION 2.3.2-develop)

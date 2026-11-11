@@ -133,6 +133,8 @@ cc_binary(
         "otp.cpp",
         "otp.h",
         "provision_boards.h",
+        "rpi_connect_api.cpp",
+        "rpi_connect_api.h",
     ] + select({
         # MSVC can't handle long strings, so use this manually generated
         # header instead.
@@ -180,6 +182,7 @@ cc_binary(
         "//lib/littlefs",
         "//lib/oofatfs:fatfs",
         "@libusb",
+        "@mbedtls",
         "@pico-sdk//src/common/boot_picobin_headers",
         "@pico-sdk//src/common/boot_picoboot_headers",
         "@pico-sdk//src/common/boot_uf2_headers",

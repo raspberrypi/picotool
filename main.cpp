@@ -39,6 +39,9 @@
     #include "picoboot_connection_cxx.h"
     #include "get_xip_ram_perms.h"
     #include "get_rpi_connect_provision.h"
+    #if HAS_MBEDTLS
+        #include "rpi_connect_api.h"
+    #endif
     #include "lfs.h"
     #include "ff.h"
     #include "diskio.h"
@@ -721,6 +724,7 @@ struct _settings {
         bool signin = false;
         bool clear = false;
         bool wifi_only = false;
+        bool host_networking = false;
         string auth_key;
         string token;
         string org_token;
@@ -1655,7 +1659,8 @@ struct provision_connect_command : public cmd {
                     (option("--org-token") & value("token").set(p.org_token)) % "Organisation token, for --create-identity" +
                     (option("--description") & value("text").set(p.description)) % "Description of the device identity, for --create-identity" +
                     (option("--device-name") & value("name").set(p.device_name)) % "Device name (default pico-<board id>)" +
-                    (option("--client-id") & value("uuid").set(p.client_id)) % "Raspberry Pi Connect client ID (default the SDK's)"
+                    (option("--client-id") & value("uuid").set(p.client_id)) % "Raspberry Pi Connect client ID (default the SDK's)" +
+                    option("--host-networking").set(p.host_networking) % "Make the --auth-key or --signin requests from this computer instead of the device, and print the access token instead of storing it. Only the device's board ID is read from it"
                 ).min(0).doc_non_optional(true) % "Operation Options" +
                 (
                     (option("--wifi-ssid") & value("ssid").set(p.wifi_ssid)) % "WiFi network to store on the device before the operation (requires --wifi-password)" +
@@ -1686,6 +1691,7 @@ struct provision_connect_command : public cmd {
 
     string get_doc() const override {
         return "Provision the device for Raspberry Pi Connect, by running a provisioning binary on it from RAM. "
+               "With --host-networking, --auth-key and --signin run from this computer instead, and print the access token for --token. "
                "Secrets are only written into the binary in RAM, never to flash. When done the device flashes its LED "
                "(slowly on success, quickly on failure) and reboots to BOOTSEL; output is on its USB and UART consoles. "
                "The device must have a partition table with an FFS partition, and a WiFi firmware partition containing the firmware";
@@ -10097,6 +10103,8 @@ static const provision_board provision_boards[] = {
 #include "provision_boards.h"
 };
 
+void cancelled(int);
+
 bool provision_connect_command::execute(device_map &devices) {
     auto &p = settings.provision;
 
@@ -10146,6 +10154,17 @@ bool provision_connect_command::execute(device_map &devices) {
     if (p.wifi_only && p.wifi_ssid.empty()) {
         fail(ERROR_ARGS, "--wifi-only requires --wifi-ssid");
     }
+    if (p.host_networking) {
+        if (p.auth_key.empty() && !p.signin) {
+            fail(ERROR_ARGS, "--host-networking only supports --auth-key and --signin");
+        }
+        if (!p.wifi_ssid.empty()) {
+            fail(ERROR_ARGS, "--host-networking does not store WiFi credentials, as it only reads the board ID from the device");
+        }
+#if !HAS_MBEDTLS
+        fail(ERROR_NOT_POSSIBLE, "--host-networking needs picotool to be built with mbedtls");
+#endif
+    }
 
 #if HAS_MBEDTLS
     if (settings.seal.sign && settings.filenames[0].empty()) {
@@ -10158,7 +10177,56 @@ bool provision_connect_command::execute(device_map &devices) {
     if (settings.seal.sign) fail(ERROR_NOT_POSSIBLE, "Cannot sign binaries without mbedtls");
 #endif
 
-    auto con = get_single_picoboot_cmd_compatible_device_connection("provision connect", devices, {PC_REBOOT2});
+    auto con = get_single_picoboot_cmd_compatible_device_connection("provision connect", devices, {PC_REBOOT2, PC_GET_INFO});
+
+#if HAS_MBEDTLS
+    if (p.host_networking) {
+        // The chip ID is what pico_get_unique_board_id_string returns on RP2350
+        struct picoboot_get_info_cmd info_cmd;
+        info_cmd.bType = PICOBOOT_GET_INFO_SYS;
+        info_cmd.dParams[0] = SYS_INFO_CHIP_INFO;
+        uint32_t word_buf[8] = {};
+        con.get_info(&info_cmd, (uint8_t *)word_buf, sizeof(word_buf));
+        if (!(word_buf[1] & SYS_INFO_CHIP_INFO)) {
+            fail(ERROR_NOT_POSSIBLE, "Could not read the board ID from the device");
+        }
+        string board_id = hex_string(word_buf[3] | (uint64_t)word_buf[4] << 32, 16, false, true);
+        string device_name = p.device_name.empty() ? "pico-" + board_id : p.device_name;
+        string client_id = p.client_id.empty() ? rpi_connect_api::default_client_id : p.client_id;
+        fos << "Board ID: " << board_id << "\n";
+
+        // The usual handler throws, which cannot unwind out of a sleep or a
+        // blocking socket call, so just note the signal while on the network
+        static volatile sig_atomic_t host_cancelled = 0;
+        auto note_cancel = [](int) { host_cancelled = 1; };
+        signal(SIGINT, note_cancel);
+        signal(SIGTERM, note_cancel);
+        string token;
+        try {
+            if (p.signin) {
+                token = rpi_connect_api::signin(client_id, board_id, [](const string &url, const string &code) {
+                    fos << "Visit " << url << " in your browser and enter the user code " << code << "\n";
+                    fos.flush();
+                }, [] { return host_cancelled != 0; });
+            } else {
+                token = rpi_connect_api::auth_key_exchange(p.auth_key, board_id, device_name, client_id);
+            }
+        } catch (failure_error &) {
+            // An interrupted request fails, which is down to the cancel
+            if (!host_cancelled) {
+                signal(SIGINT, cancelled);
+                signal(SIGTERM, cancelled);
+                throw;
+            }
+        }
+        signal(SIGINT, cancelled);
+        signal(SIGTERM, cancelled);
+        if (host_cancelled) throw cancelled_exception();
+        fos << "Access token: " << token << "\n";
+        fos << "Store it on the device with: picotool provision connect --token <token>\n";
+        return false;
+    }
+#endif
 
     // The binary runs from RAM, but keeps its state in the FFS partition, and
     // loads the wireless chip's firmware from its partition(s)
