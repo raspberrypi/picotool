@@ -2261,12 +2261,14 @@ Provision a device for use with Raspberry Pi Connect.
 $ picotool help provision connect
 PROVISION CONNECT:
     Provision the device for Raspberry Pi Connect, by running a provisioning binary on it from
-    RAM. With --host-networking, --auth-key and --signin run from this computer instead, and
-    print the access token for --token. Secrets are only written into the binary in RAM, never
-    to flash. When done the device flashes its LED (slowly on success, quickly on failure) and
-    reboots to BOOTSEL; output is on its USB and UART consoles. The device must have a
-    partition table with an FFS partition, and a WiFi firmware partition containing the
-    firmware
+    RAM. Secrets are only written into the binary in RAM, never to flash. When done the device
+    flashes its LED (slowly on success, quickly on failure) and reboots to BOOTSEL; output is
+    on its USB and UART consoles. The device must have a partition table with an FFS partition,
+    and a WiFi firmware partition containing the firmware. 
+
+    With --host-networking, --auth-key and --signin can be run from this computer instead, and
+    print out the access token. These only require a device in BOOTSEL, so do not require any
+    partition table on the device.
 
 SYNOPSIS:
     picotool provision connect [--create-identity] [--identity-exchange] [--auth-key <key>]
@@ -2307,9 +2309,8 @@ OPTIONS:
         --client-id <uuid>
             Raspberry Pi Connect client ID (default the SDK's)
         --host-networking
-            Make the --auth-key or --signin requests from this computer instead of the device,
-            and print the access token instead of storing it. Only the device's board ID is
-            read from it
+            Make the requests from this computer instead of the device, and print the access
+            token instead of storing it
     WiFi Credentials
         --wifi-ssid <ssid>
             WiFi network to store on the device before the operation (requires --wifi-password)
