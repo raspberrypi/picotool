@@ -660,6 +660,12 @@ const elf32_ph_entry& elf_file::append_segment(uint32_t vaddr, uint32_t paddr, u
     ph_entries.push_back(ph);
     eh.ph_num++;
 
+    // GNU ld puts the program header table immediately after the ELF header,
+    // but other linkers don't (IAR ILINK puts it at the end of the file,
+    // after the section data). Move it to the GNU location so that the
+    // following reshuffle logic works in all cases.
+    eh.ph_offset = sizeof(eh);
+
     // There's normally space between the end of the program header table and the start of data to
     // squeeze in another program header. If not, shuffle everything by 4K;
     uint32_t lso = lowest_section_offset();
